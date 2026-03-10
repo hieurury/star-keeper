@@ -1,0 +1,61 @@
+/* ── Game Font ── */
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap');
+
+/* ── Design Tokens ── */
+:root {
+  --font-pixel: 'Chakra Petch', sans-serif;
+
+  --color-bg:           #050a18;
+  --color-panel:        #0d1b2e;
+  --color-panel-light:  #152236;
+  --color-panel-dark:   #070f1c;
+
+  --color-border:       #1e3650;
+  --color-border-dark:  #0a1828;
+
+  --color-accent:       #00cfff;
+  --color-accent-light: #33ddff;
+  --color-accent-dark:  #007fa8;
+
+  --color-text:         #d4eaf5;
+  --color-text-dim:     #5a8aaa;
+
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  image-rendering: pixelated;
+}
+
+/* ── Reset ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+/* ── Scrollbar (pixel style) ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--color-panel-dark); }
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border: 1px solid var(--color-border-dark);
+}
