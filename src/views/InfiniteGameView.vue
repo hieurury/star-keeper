@@ -131,9 +131,20 @@ onBeforeRouteLeave(() => {
 
 onMounted(() => {
   window.addEventListener('beforeunload', handleBeforeUnload)
+  // Request fullscreen on mobile to hide browser bars
+  if (isTouchDevice) {
+    const el = document.documentElement as any
+    const req = el.requestFullscreen ?? el.webkitRequestFullscreen ?? el.mozRequestFullScreen
+    if (req) req.call(el).catch(() => {})
+  }
 })
 
-onUnmounted(() => window.removeEventListener('beforeunload', handleBeforeUnload))
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+  // Exit fullscreen when leaving game
+  const exit = (document as any).exitFullscreen ?? (document as any).webkitExitFullscreen
+  if (exit && document.fullscreenElement) exit.call(document).catch(() => {})
+})
 
 // Show in-game tour the first time the game starts
 watch(() => game.isPlaying, (val) => {
@@ -217,11 +228,12 @@ watch(() => game.isPlaying, (val) => {
 <style scoped>
 .game-view {
   width: 100%;
-  min-height: 100dvh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--color-bg);
   align-items: center;
+  overflow: hidden;
 }
 
 /* Top bar */
