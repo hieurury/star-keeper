@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useGameStore, ALL_CARD_DEFS, type CardDef } from '../stores/gameStore'
 import PixelButton from '../components/ui/PixelButton.vue'
 import PixelPanel from '../components/ui/PixelPanel.vue'
+import TourOverlay, { type TourStep } from '../components/ui/TourOverlay.vue'
 import { PhCoins, PhDiamond, PhTrophy, PhSword, PhShield, PhCrown } from '@phosphor-icons/vue'
 
 const router = useRouter()
@@ -15,6 +16,59 @@ const showProfileSheet = ref(false)
 const showShipsPanel = ref(false)
 const showCorePanel = ref(false)
 const selectedCard = ref<CardDef | null>(null)
+const showComingSoon = ref(false)
+const showTourPrompt = ref(false)
+const showTour = ref(false)
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    title: '✈ Xin Chào, Phi Công!',
+    desc: 'Bạn đang ghé thăm lần đầu tiên! Hãy để chúng tôi giới thiệu nhanh các tính năng chính.',
+  },
+  {
+    target: 'profile',
+    title: 'Hồ Sơ Phi Công',
+    desc: 'Nhấn vào đây để tuỳ chỉnh tên, avatar và tên chiến cơ của bạn.',
+  },
+  {
+    target: 'currency',
+    title: 'Tiền Tệ',
+    desc: 'Vàng (🪙) kiếm được sau mỗi ván, dùng để mua nâng cấp vĩnh viễn.\nRuby (💎) là tiền tệ cao cấp cho vật phẩm đặc biệt sau này.',
+  },
+  {
+    target: 'stats-panel',
+    title: 'Tiến Độ',
+    desc: 'Theo dõi cấp độ tài khoản, vàng tích lũy và kỷ lục điểm cao nhất của bạn tại đây.',
+  },
+  {
+    target: 'ships-btn',
+    title: 'Phi Cơ',
+    desc: 'Xem thông số và kỹ năng đặc biệt của phi cơ. Các chiến cơ mới sẽ được mở khoá trong tương lai.',
+  },
+  {
+    target: 'core-btn',
+    title: 'Lõi Sao — Thẻ Kỹ Năng',
+    desc: 'Khi lên cấp trong game, bạn chọn 1 trong 3 thẻ ngẫu nhiên. Có 3 loại: Tấn Công, Hỗ Trợ và Tối Thượng cực mạnh.',
+  },
+  {
+    target: 'play-btn',
+    title: 'Sẵn Sàng Chiến Đấu!',
+    desc: 'Di chuyển: kéo chuột (PC) hoặc chạm và trượt (Mobile).\nKỹ năng: chuột phải (PC) hoặc chạm đôi (Mobile).\n\nTiêu diệt kẻ địch, lên cấp và trở thành huyền thoại!',
+  },
+]
+
+function dismissTourPrompt() {
+  showTourPrompt.value = false
+  localStorage.setItem('hasTakenTour', '1')
+}
+function startTour() {
+  showTourPrompt.value = false
+  showTour.value = true
+}
+function onTourDone() {
+  showTour.value = false
+  localStorage.setItem('hasTakenTour', '1')
+}
 
 const attackCards = ALL_CARD_DEFS.filter(c => c.type === 'attack')
 const supportCards = ALL_CARD_DEFS.filter(c => c.type === 'support')
@@ -35,6 +89,9 @@ const starKeeperStats = [
 
 onMounted(() => {
   game.loadProgress()
+  if (!localStorage.getItem('hasTakenTour')) {
+    showTourPrompt.value = true
+  }
 })
 
 function startGame() {
@@ -96,14 +153,14 @@ function onShipNameKey(e: KeyboardEvent) {
 
     <!-- Top profile bar -->
     <div class="home__topbar">
-      <button class="profile-btn" @click="openProfileSheet">
+      <button class="profile-btn" data-tour="profile" @click="openProfileSheet">
         <div class="profile-avatar">{{ AVATARS[game.avatarId] }}</div>
         <div class="profile-info">
           <div class="profile-name">{{ game.username }}</div>
           <div class="profile-ship">{{ game.shipName }}</div>
         </div>
       </button>
-      <div class="currency-display">
+      <div class="currency-display" data-tour="currency">
         <div class="gold-display">
           <span class="gold-icon"><PhCoins weight="fill" :size="16" /></span>
           <span class="gold-amount">{{ game.playerCoins }}</span>
@@ -126,6 +183,7 @@ function onShipNameKey(e: KeyboardEvent) {
       </div>
 
       <!-- Player Stats -->
+      <div data-tour="stats-panel">
       <PixelPanel title="Tiến Độ">
         <div class="stats-grid">
           <div class="stat-item">
@@ -133,7 +191,7 @@ function onShipNameKey(e: KeyboardEvent) {
             <span class="stat-value">{{ game.accountLevel }}</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label"><Coins :size="11" style="vertical-align:middle;margin-right:2px"/> Vàng</span>
+            <span class="stat-label"><PhCoins weight="fill" :size="11" style="vertical-align:middle;margin-right:2px"/> Vàng</span>
             <span class="stat-value coin">{{ game.playerCoins }}</span>
           </div>
           <div class="stat-item">
@@ -154,13 +212,14 @@ function onShipNameKey(e: KeyboardEvent) {
           <div class="ach-summary__count">{{ game.unlockedAchievements.length }} / 12 mở khóa</div>
         </div>
       </PixelPanel>
+      </div>
 
       <!-- Menu buttons -->
       <div class="home__menu">
-        <PixelButton label="▶ Bắt Đầu" size="lg" @click="startGame" />
-        <PixelButton label="Phi Cơ" variant="secondary" size="md" @click="showShipsPanel = true" />
-        <PixelButton label="Nâng Cấp" variant="secondary" size="md" @click="() => {}" />
-        <PixelButton label="Lõi Sao" variant="secondary" size="md" @click="showCorePanel = true" />
+        <PixelButton label="▶ Bắt Đầu" size="lg" data-tour="play-btn" @click="startGame" />
+        <PixelButton label="Phi Cơ" variant="secondary" size="md" data-tour="ships-btn" @click="showShipsPanel = true" />
+        <PixelButton label="Nâng Cấp" variant="secondary" size="md" @click="showComingSoon = true" />
+        <PixelButton label="Lõi Sao" variant="secondary" size="md" data-tour="core-btn" @click="showCorePanel = true" />
       </div>
 
       <!-- Version -->
@@ -386,6 +445,36 @@ function onShipNameKey(e: KeyboardEvent) {
         </div>
       </div>
     </Transition>
+
+    <!-- Coming Soon modal -->
+    <Transition name="sheet">
+      <div v-if="showComingSoon" class="sheet-overlay" @click.self="showComingSoon = false">
+        <div class="modal-dialog">
+          <div class="modal-dialog__icon">🔧</div>
+          <div class="modal-dialog__title">SẮP RA MẮT</div>
+          <div class="modal-dialog__desc">Tính năng này đang được phát triển và sẽ có mặt trong phiên bản tới!</div>
+          <PixelButton label="✓ Đã Hiểu" size="md" @click="showComingSoon = false" />
+        </div>
+      </div>
+    </Transition>
+
+    <!-- First-visit tour prompt -->
+    <Transition name="sheet">
+      <div v-if="showTourPrompt" class="sheet-overlay" @click.self="dismissTourPrompt">
+        <div class="modal-dialog">
+          <div class="modal-dialog__icon">✈</div>
+          <div class="modal-dialog__title">XIN CHÀO, PHI CÔNG!</div>
+          <div class="modal-dialog__desc">Đây là lần đầu bạn ghé thăm. Bạn có muốn xem hướng dẫn cách chơi không?</div>
+          <div class="modal-dialog__actions">
+            <PixelButton label="Bỏ Qua" variant="secondary" size="md" @click="dismissTourPrompt" />
+            <PixelButton label="Xem Ngay ›" size="md" @click="startTour" />
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Onboarding spotlight tour -->
+    <TourOverlay v-if="showTour" :steps="TOUR_STEPS" @done="onTourDone" />
   </div>
 </template>
 
@@ -1053,5 +1142,42 @@ function onShipNameKey(e: KeyboardEvent) {
   font-family: var(--font-pixel);
   font-size: 8px;
   color: var(--color-text-dim);
+}
+
+/* ─── Modal dialog (Coming Soon / Tour Prompt) ────────────────────────────── */
+.modal-dialog {
+  width: 300px;
+  max-width: 90vw;
+  background: var(--color-panel);
+  border: 3px solid var(--color-border);
+  box-shadow: 5px 5px 0 rgba(0,0,0,0.5);
+  padding: 28px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.modal-dialog__icon {
+  font-size: 32px;
+  line-height: 1;
+}
+.modal-dialog__title {
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  color: var(--color-accent);
+  letter-spacing: 1px;
+}
+.modal-dialog__desc {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 12px;
+  color: var(--color-text-dim);
+  line-height: 1.7;
+}
+.modal-dialog__actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 </style>

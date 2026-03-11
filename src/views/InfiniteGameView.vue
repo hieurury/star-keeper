@@ -5,6 +5,7 @@ import { useGameStore } from '../stores/gameStore'
 import GameCanvas from '../components/game/GameCanvas.vue'
 import GameHUD from '../components/game/GameHUD.vue'
 import PixelButton from '../components/ui/PixelButton.vue'
+import TourOverlay, { type TourStep } from '../components/ui/TourOverlay.vue'
 
 const router = useRouter()
 const game = useGameStore()
@@ -17,6 +18,64 @@ watch(() => game.isPlaying, (val) => { if (val) isInitializing.value = false }, 
 const showExitWarning = ref(false)
 const exitConfirmed = ref(false)
 let pausedForDialog = false
+
+const showGameTour = ref(false)
+
+const isTouchDevice = 'ontouchstart' in window
+
+const GAME_TOUR_STEPS: TourStep[] = [
+  {
+    title: '✈ THÀNH CHIẾN ĐẤU!',
+    desc: 'Hãy làm quen với màn hình chiến đấu trong vài giây.',
+  },
+  {
+    target: 'hud-hp',
+    title: 'Máu (HP)',
+    desc: 'Thanh máu hiện tại của phi cơ. Khi về 0 — game over. Tránh đạn và không để kẻ địch đâm thẳng.',
+  },
+  {
+    target: 'hud-score',
+    title: 'Điểm Số',
+    desc: 'Mỗi kẻ địch tiêu diệt cộng điểm. Boss cho nhiều điểm hơn. Phá kỷ lục cao nhất để được ghi danh!',
+  },
+  {
+    target: 'hud-enemies',
+    title: 'Tiến Độ Stage',
+    desc: 'Thanh này cho biết bạn đã tiêu diệt bao nhiêu kẻ địch. Diệt hết để qua stage mới với kế địch mạnh hơn.',
+  },
+  {
+    target: 'hud-exp',
+    title: 'Kinh Nghiệm (EXP)',
+    desc: 'Khi lên cấp, bạn được chọn 1 trong 3 thẻ kỹ năng ngẫu nhiên. Kết hợp đúng thẻ sẽ mở khóa được thẻ TỐI THƯỢNG cực mạnh!',
+  },
+  {
+    target: 'hud-skill',
+    title: 'Kỹ Năng — Sóng Tầm Nhiệt',
+    desc: (isTouchDevice
+      ? 'Chạm đôi (2× TAP) màn hình để kích hoạt.'
+      : 'Nhấn chuột phải (RMB) để kích hoạt.'
+    ) + '\n\nGiải phóng sóng nhiệt hủy diệt toàn màn hình và phá sạch đạn kẻ địch. Hồi chiêu 30 giây.',
+  },
+  {
+    target: 'game-bar',
+    title: 'Dừng / Tiếp Tục',
+    desc: 'Nhấn nút Dừng để tạm nghỉ. Trong màn hình dừng bạn có thể xem các thẻ kỹ năng đang có và thoát về trang chủ.',
+  },
+  {
+    title: 'SẸN SÀNG!',
+    desc: 'Di chuyển: ' + (isTouchDevice ? 'chạm và trượt ngón tay' : 'kéo chuột') + '\nKỹ năng: ' + (isTouchDevice ? 'chạm đôi' : 'chuột phải') + '\n\nTiêu diệt kẻ địch, lên cấp, tồn tại càng lâu càng tốt. Chúc mừng chiến đấu! ⚡',
+  },
+]
+
+function startGameTour() {
+  game.isPaused = true
+  showGameTour.value = true
+}
+function onGameTourDone() {
+  showGameTour.value = false
+  game.isPaused = false
+  localStorage.setItem('hasSeenGameTour', '1')
+}
 
 function goHome() {
   game.endGame()
@@ -70,14 +129,25 @@ onBeforeRouteLeave(() => {
   }
 })
 
-onMounted(() => window.addEventListener('beforeunload', handleBeforeUnload))
+onMounted(() => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
 onUnmounted(() => window.removeEventListener('beforeunload', handleBeforeUnload))
+
+// Show in-game tour the first time the game starts
+watch(() => game.isPlaying, (val) => {
+  if (val && !localStorage.getItem('hasSeenGameTour')) {
+    // Small delay so the canvas finishes intro animation first
+    setTimeout(startGameTour, 1800)
+  }
+}, { once: true })
 </script>
 
 <template>
   <div class="game-view">
     <!-- Top control bar -->
-    <div class="game-view__bar">
+    <div class="game-view__bar" data-tour="game-bar">
       <div class="game-view__bar-title">CHẾO VÔ TẪN</div>
       <PixelButton
         :label="game.isPaused ? '&#9654; Tiếp' : '&#9208; Dừng'"
@@ -90,7 +160,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', handleBeforeUnload)
     <!-- Game area -->
     <div class="game-view__area">
       <GameCanvas />
-      <GameHUD @request-go-home="requestGoHome" />
+      <GameHUD @request-go-home="requestGoHome" @request-tour="startGameTour" :tour-active="showGameTour" />
 
       <!-- Game over menu (slides up after 2s death sequence) -->
       <Transition name="gameover">
@@ -138,6 +208,9 @@ onUnmounted(() => window.removeEventListener('beforeunload', handleBeforeUnload)
         </div>
       </div>
     </div>
+
+    <!-- In-game spotlight tour -->
+    <TourOverlay v-if="showGameTour" :steps="GAME_TOUR_STEPS" @done="onGameTourDone" />
   </div>
 </template>
 

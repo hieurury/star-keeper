@@ -9,7 +9,8 @@ const game = useGameStore()
 
 const isTouchDevice = 'ontouchstart' in window
 
-const emit = defineEmits<{ requestGoHome: [] }>()
+const props = defineProps<{ tourActive?: boolean }>()
+const emit = defineEmits<{ requestGoHome: []; requestTour: [] }>()
 
 function cardTypeLabel(type: CardType): string {
   return { attack: 'TẤN CÔNG', support: 'HỖ TRỢ', ultimate: 'TỐI THƯỢNG' }[type]
@@ -32,9 +33,9 @@ watch(() => game.isSkillReady, (ready) => {
 <template>
   <div class="hud">
     <!-- Top bar -->
-    <div class="hud__top">
+    <div class="hud__top" data-tour="hud-top">
       <!-- HP bar -->
-      <div class="hud__hp">
+      <div class="hud__hp" data-tour="hud-hp">
         <div class="hud__hp-label">HP</div>
         <div class="hud__hp-track">
           <div
@@ -49,7 +50,7 @@ watch(() => game.isSkillReady, (ready) => {
         <div class="hud__hp-num">{{ game.playerHp }}/{{ game.playerMaxHp }}</div>
       </div>
 
-      <div class="hud__score">
+      <div class="hud__score" data-tour="hud-score">
         <span class="hud__score-label">SCORE</span>
         <span class="hud__score-value">{{ game.currentScore }}</span>
       </div>
@@ -57,7 +58,7 @@ watch(() => game.isSkillReady, (ready) => {
         <span class="hud__stage-label">STAGE</span>
         <span class="hud__stage-value">{{ game.currentStage }}</span>
       </div>
-      <div class="hud__enemies">
+      <div class="hud__enemies" data-tour="hud-enemies">
         <span class="hud__enemies-label">TIÊU DIỆT</span>
         <div class="hud__enemies-track">
           <div class="hud__enemies-fill" :style="{ width: game.stageProgress + '%' }" />
@@ -67,7 +68,7 @@ watch(() => game.isSkillReady, (ready) => {
     </div>
 
     <!-- EXP bar (below top bar) -->
-    <div class="hud__exp-row">
+    <div class="hud__exp-row" data-tour="hud-exp">
       <span class="hud__exp-label">LV{{ game.playerLevel }}</span>
       <div class="hud__exp-track">
         <div class="hud__exp-fill" :style="{ width: game.expPercent + '%' }" />
@@ -76,7 +77,7 @@ watch(() => game.isSkillReady, (ready) => {
     </div>
 
     <!-- Pause overlay -->
-    <div v-if="game.isPaused && !game.isLevelUpPending" class="hud__pause-overlay">
+    <div v-if="game.isPaused && !game.isLevelUpPending && !props.tourActive" class="hud__pause-overlay">
       <div class="hud__pause-box">
         <div class="hud__pause-title">PAUSE</div>
         <div class="hud__pause-score">Score: {{ game.currentScore }}</div>
@@ -84,6 +85,7 @@ watch(() => game.isSkillReady, (ready) => {
           <button class="hud__pause-btn hud__pause-btn--resume" @click="game.pauseGame()">&#9654; TIỌ TỤC</button>
           <button class="hud__pause-btn hud__pause-btn--menu" @click="emit('requestGoHome')">&#9664; MENU</button>
         </div>
+        <button class="hud__pause-btn hud__pause-btn--help" @click="emit('requestTour')">? HƯỠNG DẪN</button>
         <!-- Active card collection -->
         <div v-if="Object.keys(game.activeCards).length > 0" class="hud__pause-cards">
           <div class="hud__pause-cards-title">THẺ KỸ NĂNG</div>
@@ -155,6 +157,7 @@ watch(() => game.isSkillReady, (ready) => {
     <div
       v-if="game.isPlaying && !game.isLevelUpPending"
       class="hud__skill-wrap"
+      data-tour="hud-skill"
     >
       <div
         class="hud__skill-btn"
@@ -328,6 +331,8 @@ watch(() => game.isSkillReady, (ready) => {
 .hud__pause-btn:hover { opacity: 0.8; }
 .hud__pause-btn--resume { background: #0a1a0f; border-color: #44ff88; color: #44ff88; }
 .hud__pause-btn--menu   { background: #1a0a0a; border-color: #ff6644; color: #ff9977; }
+.hud__pause-btn--help   { background: none; border: none; color: #445566; font-size: 9px; margin-top: 2px; padding: 4px 0; width: 100%; box-shadow: none; }
+.hud__pause-btn--help:hover { color: #7799bb; }
 .hud__pause-cards {
   margin-top: 14px;
   text-align: left;
