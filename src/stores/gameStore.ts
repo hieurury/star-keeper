@@ -1,6 +1,204 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+// ─── Card System ──────────────────────────────────────────────────────────────
+export type CardType = 'attack' | 'support' | 'ultimate'
+
+export interface CardLevelDef {
+  desc: string
+}
+
+export interface CardDef {
+  id: string
+  name: string
+  type: CardType
+  icon: string
+  maxLevel: number
+  levels: CardLevelDef[]         // index 0 = lv1 desc, etc.
+  requiresAttackId?: string      // ultimate: required attack card (must be max level)
+  requiresSupportId?: string     // ultimate: required support card (any level)
+}
+
+export interface CardStats {
+  missileLaunchers: number
+  missileSpeedMult: number
+  missileDamageMult: number
+  missileAOE: boolean
+  missileIntervalFrames: number
+  interstellarMissile: boolean
+  cdReductionPct: number
+  shieldCooldownSec: number
+  shieldLives: number
+  shieldHealOnBreak: number
+  expRangeBonus: number
+  vampireHitHeal: number
+  vampireKillHeal: number
+  plasmaBolt: boolean
+  plasmaBoltDmgMult: number
+  plasmaBoltIntervalFrames: number
+  plasmaBoltCount: number
+  clusterBomb: boolean
+  clusterBombDmgMult: number
+  clusterBombIntervalFrames: number
+  clusterBombDouble: boolean
+  laserSweep: boolean
+  laserSweepDmgMult: number
+  laserSweepIntervalFrames: number
+  laserSweepDouble: boolean
+  // Kho Vũ Khí (Arsenal)
+  arsenalBulletBonus: number
+  arsenalFireRatePct: number
+  arsenalDamagePct: number
+  bulletPierceOnKill: boolean
+  // Tân Tiến Sức Mạnh
+  damageBonusPct: number
+  // Tia Hủy Diệt (ultimate)
+  plasmaClearsBullets: boolean
+  // Từ Trường Tĩnh Điện (ultimate)
+  staticField: boolean
+  staticFieldRadius: number
+  staticFieldDmgPerTick: number
+}
+
+export const ALL_CARD_DEFS: CardDef[] = [
+  // ── Tấn công ────────────────────────────────────────────────────────────────
+  {
+    id: 'heat_missile', name: 'Tên Lửa Tầm Nhiệt', type: 'attack', icon: '🚀', maxLevel: 5,
+    levels: [
+      { desc: 'Triệu hồi 1 bệ phóng bám theo phi cơ, mỗi 5s bắn 1 tên lửa tầm nhiệt.' },
+      { desc: 'Tên lửa bay nhanh +30%, sát thương +20%.' },
+      { desc: 'Thêm 1 bệ phóng tên lửa (tổng 2 bệ).' },
+      { desc: 'Sát thương tên lửa +30%.' },
+      { desc: 'Tên lửa nổ AOE, gây sát thương diện rộng.' },
+    ],
+  },
+  {
+    id: 'plasma_bolt', name: 'Tia Plasma', type: 'attack', icon: '⚡', maxLevel: 5,
+    levels: [
+      { desc: 'Mỗi 6s phóng 1 tia plasma xuyên thấu, gây 80 sát thương.' },
+      { desc: 'Sát thương +25%.' },
+      { desc: 'Tia plasma làm chậm kẻ địch trúng đòn.' },
+      { desc: 'Sát thương +30%.' },
+      { desc: 'Bắn 2 tia plasma song song.' },
+    ],
+  },
+  {
+    id: 'cluster_bomb', name: 'Bom Cụm', type: 'attack', icon: '💣', maxLevel: 5,
+    levels: [
+      { desc: 'Mỗi 8s thả 1 bom cụm, nổ gây 70 sát thương diện rộng.' },
+      { desc: 'Phạm vi nổ +30%, sát thương +20%.' },
+      { desc: 'Bom nổ ra 4 mảnh nhỏ tiếp tục gây sát thương.' },
+      { desc: 'Sát thương +35%.' },
+      { desc: 'Thả 2 bom liên tiếp.' },
+    ],
+  },
+  {
+    id: 'laser_sweep', name: 'Quét Laser', type: 'attack', icon: '🔴', maxLevel: 5,
+    levels: [
+      { desc: 'Mỗi 7s quét tia laser ngang, gây 50 sát thương mọi kẻ địch trong vùng.' },
+      { desc: 'Sát thương +25%.' },
+      { desc: 'Laser quét 2 lần liên tiếp.' },
+      { desc: 'Sát thương +30%.' },
+      { desc: 'Laser vùng rộng, quét toàn màn hình.' },
+    ],
+  },
+  {
+    id: 'weapon_cache_star', name: 'Kho Vũ Khí - Star Keeper', type: 'attack', icon: '🔫', maxLevel: 5,
+    levels: [
+      { desc: '+1 đạn bắn ra và tăng 20% tốc độ bắn.' },
+      { desc: '+25% sát thương đạn.' },
+      { desc: '+1 đạn bắn ra (tổng +2 đạn).' },
+      { desc: '+25% tốc độ bắn và +20% sát thương (cộng dồn).' },
+      { desc: '+50% sát thương đạn (cộng dồn).' },
+    ],
+  },
+  // ── Hỗ trợ ──────────────────────────────────────────────────────────────────
+  {
+    id: 'skill_recovery', name: 'Phục Hồi Kỹ Năng', type: 'support', icon: '🔄', maxLevel: 5,
+    levels: [
+      { desc: 'Giảm 5% thời gian hồi chiêu kỹ năng.' },
+      { desc: 'Giảm thêm 5% (tổng -10%) thời gian hồi chiêu.' },
+      { desc: 'Giảm thêm 5% (tổng -15%) thời gian hồi chiêu.' },
+      { desc: 'Giảm thêm 5% (tổng -20%) thời gian hồi chiêu.' },
+      { desc: 'Giảm thêm 5% (tổng -25%) thời gian hồi chiêu.' },
+    ],
+  },
+  {
+    id: 'energy_shield', name: 'Lá Chắn Năng Lượng', type: 'support', icon: '🛡️', maxLevel: 5,
+    levels: [
+      { desc: 'Mỗi 25s tự động tạo lá chắn hấp thụ 1 đòn tấn công.' },
+      { desc: 'Thời gian hồi lá chắn giảm còn 20s.' },
+      { desc: 'Khi lá chắn vỡ, hồi 50 HP.' },
+      { desc: 'Thời gian hồi lá chắn giảm còn 15s.' },
+      { desc: 'Lá chắn hấp thụ 2 đòn tấn công.' },
+    ],
+  },
+  {
+    id: 'exp_magnet', name: 'Nam Châm EXP', type: 'support', icon: '🧲', maxLevel: 5,
+    levels: [
+      { desc: 'Phạm vi thu thập kinh nghiệm +40.' },
+      { desc: 'Phạm vi thu thập kinh nghiệm +40 (tổng +80).' },
+      { desc: 'Phạm vi thu thập kinh nghiệm +40 (tổng +120).' },
+      { desc: 'Phạm vi thu thập kinh nghiệm +40 (tổng +160).' },
+      { desc: 'Phạm vi thu thập kinh nghiệm +40 (tổng +200). Hút tự động từ xa.' },
+    ],
+  },
+  {
+    id: 'hp_vampire', name: 'Hút Máu', type: 'support', icon: '🩸', maxLevel: 5,
+    levels: [
+      { desc: 'Đánh trúng kẻ địch hồi 1 HP.' },
+      { desc: 'Đánh trúng kẻ địch hồi 2 HP.' },
+      { desc: 'Tiêu diệt kẻ địch bổ sung hồi +5 HP.' },
+      { desc: 'Đánh trúng kẻ địch hồi 3 HP.' },
+      { desc: 'Tiêu diệt kẻ địch bổ sung hồi +10 HP.' },
+    ],
+  },
+  // ── Tối thượng ──────────────────────────────────────────────────────────────
+  {
+    id: 'weapon_cache_star_ult', name: 'Đạn Xuyên Phá', type: 'ultimate', icon: '🔮', maxLevel: 1,
+    requiresAttackId: 'weapon_cache_star',
+    levels: [
+      { desc: 'Đạn xuyên qua kẻ địch khi tiêu diệt, tiếp tục tấn công mục tiêu phía sau. (Yêu cầu: Kho Vũ Khí - Star Keeper Lv5)' },
+    ],
+  },
+  {
+    id: 'interstellar_missile', name: 'Tên Lửa Liên Sao', type: 'ultimate', icon: '🌠', maxLevel: 1,
+    requiresAttackId: 'heat_missile',
+    requiresSupportId: 'skill_recovery',
+    levels: [
+      { desc: 'Tên lửa nhỏ bắn mỗi 0.5s, luôn bám sát và trúng mục tiêu. (Yêu cầu: Tên Lửa Tầm Nhiệt Lv5 + Phục Hồi Kỹ Năng)' },
+    ],
+  },
+  // ── Hỗ trợ (mới) ────────────────────────────────────────────────────────────
+  {
+    id: 'power_advance', name: 'Tân Tiến Sức Mạnh', type: 'support', icon: '💪', maxLevel: 5,
+    levels: [
+      { desc: '+10% sát thương gây ra.' },
+      { desc: '+10% sát thương gây ra (tổng +20%).' },
+      { desc: '+10% sát thương gây ra (tổng +30%).' },
+      { desc: '+10% sát thương gây ra (tổng +40%).' },
+      { desc: '+10% sát thương gây ra (tổng +50%).' },
+    ],
+  },
+  // ── Tối thượng (mới) ─────────────────────────────────────────────────────────
+  {
+    id: 'devastation_ray', name: 'Tia Hủy Diệt', type: 'ultimate', icon: '🔱', maxLevel: 1,
+    requiresAttackId: 'plasma_bolt',
+    requiresSupportId: 'energy_shield',
+    levels: [
+      { desc: 'Tia plasma tiêu diệt tất cả đạn kẻ địch trên đường đi. (Yêu cầu: Tia Plasma Lv5 + Lá Chắn Năng Lượng)' },
+    ],
+  },
+  {
+    id: 'static_field_ult', name: 'Từ Trường Tĩnh Điện', type: 'ultimate', icon: '🌀', maxLevel: 1,
+    requiresAttackId: 'laser_sweep',
+    requiresSupportId: 'exp_magnet',
+    levels: [
+      { desc: 'Thay thế quét laser bằng vùng tĩnh điện bao quanh phi cơ, gây sát thương mỗi 0.5s cho kẻ địch bên trong. (Yêu cầu: Quét Laser Lv5 + Nam Châm EXP)' },
+    ],
+  },
+]
+
 // ─── Achievement definitions ──────────────────────────────────────────────────
 export interface AchievementDef {
   id: string
@@ -23,7 +221,7 @@ export const ALL_ACHIEVEMENTS: AchievementDef[] = [
 ]
 
 // ─── Permanent upgrade definitions ───────────────────────────────────────────
-export type PermUpgradeKey = 'baseDamage' | 'baseHp' | 'baseSpeed' | 'expBonus'
+export type PermUpgradeKey = 'baseDamage' | 'baseHp' | 'baseSpeed' | 'expBonus' | 'bulletCount' | 'fireRate'
 export interface PermUpgradeDef {
   key: PermUpgradeKey
   name: string
@@ -31,10 +229,12 @@ export interface PermUpgradeDef {
   costs: number[]
 }
 export const PERM_UPGRADE_DEFS: PermUpgradeDef[] = [
-  { key: 'baseDamage', name: '💥 Sức Công Cơ Bản', desc: '+5 sát thương khởi đầu mỗi cấp',      costs: [100, 250, 500, 1000, 2000] },
-  { key: 'baseHp',     name: '❤ Thể Trạng',        desc: '+25 HP tối đa khởi đầu mỗi cấp',      costs: [80,  200, 400,  800, 1600] },
-  { key: 'baseSpeed',  name: '🚀 Tốc Hành',         desc: '+0.05 tốc bay khởi đầu mỗi cấp',      costs: [150, 400, 900] },
-  { key: 'expBonus',   name: '🌀 Hấp Thu',          desc: '+10% kinh nghiệm nhận được mỗi cấp',  costs: [120, 300, 700] },
+  { key: 'baseDamage',  name: '💥 Sức Công Cơ Bản', desc: '+5 sát thương khởi đầu mỗi cấp',      costs: [100, 250, 500, 1000, 2000] },
+  { key: 'baseHp',      name: '❤ Thể Trạng',        desc: '+25 HP tối đa khởi đầu mỗi cấp',      costs: [80,  200, 400,  800, 1600] },
+  { key: 'baseSpeed',   name: '🚀 Tốc Hành',         desc: '+0.05 tốc bay khởi đầu mỗi cấp',      costs: [150, 400, 900] },
+  { key: 'expBonus',    name: '🌀 Hấp Thu',          desc: '+10% kinh nghiệm nhận được mỗi cấp',  costs: [120, 300, 700] },
+  { key: 'bulletCount', name: '🔫 Hỏa Lực',          desc: '+1 viên đạn cùng lúc mỗi cấp',        costs: [200, 600, 1500] },
+  { key: 'fireRate',    name: '⚡ Tốc Xạ',           desc: '+15% tốc độ bắn mỗi cấp',             costs: [150, 400, 900] },
 ]
 
 // ─── Upgrade definitions ──────────────────────────────────────────────────────
@@ -77,10 +277,12 @@ export const useGameStore = defineStore('game', () => {
 
   // Nâng cấp vĩnh viễn (mua bằng vàng, giữ giữa các ván)
   const permUpgrades = ref({
-    baseDamage: 0,  // +5 damage/level
-    baseHp:     0,  // +25 HP/level
-    baseSpeed:  0,  // +0.05 speed/level
-    expBonus:   0,  // +10% exp/level
+    baseDamage:  0,  // +5 damage/level
+    baseHp:      0,  // +25 HP/level
+    baseSpeed:   0,  // +0.05 speed/level
+    expBonus:    0,  // +10% exp/level
+    bulletCount: 0,  // +1 extra bullet/level
+    fireRate:    0,  // +15% fire rate/level
   })
 
   // Nâng cấp dạng stat
@@ -113,9 +315,140 @@ export const useGameStore = defineStore('game', () => {
       : 0
   )
 
-  // Level-up UI
-  const levelUpChoices = ref<UpgradeOption[]>([])
+  // Level-up UI (card system)
+  const levelUpCardChoices = ref<CardDef[]>([])
   const isLevelUpPending = ref(false)
+
+  // Card system state
+  const activeCards = ref<Record<string, number>>({})   // cardId → level (1‑5)
+  const shieldActive = ref(false)
+  const shieldLivesLeft = ref(0)
+  const shieldCooldownLeft = ref(0)
+
+  // Derived card stats (read by GameCanvas each frame)
+  const cardStats = computed((): CardStats => {
+    const stats: CardStats = {
+      missileLaunchers: 0,
+      missileSpeedMult: 1,
+      missileDamageMult: 1,
+      missileAOE: false,
+      missileIntervalFrames: 300,
+      interstellarMissile: false,
+      cdReductionPct: 0,
+      shieldCooldownSec: 0,
+      shieldLives: 0,
+      shieldHealOnBreak: 0,
+      expRangeBonus: 0,
+      vampireHitHeal: 0,
+      vampireKillHeal: 0,
+      plasmaBolt: false,
+      plasmaBoltDmgMult: 1,
+      plasmaBoltIntervalFrames: 360,
+      plasmaBoltCount: 1,
+      clusterBomb: false,
+      clusterBombDmgMult: 1,
+      clusterBombIntervalFrames: 480,
+      clusterBombDouble: false,
+      laserSweep: false,
+      laserSweepDmgMult: 1,
+      laserSweepIntervalFrames: 420,
+      laserSweepDouble: false,
+      arsenalBulletBonus: 0,
+      arsenalFireRatePct: 0,
+      arsenalDamagePct: 0,
+      bulletPierceOnKill: false,
+      damageBonusPct: 0,
+      plasmaClearsBullets: false,
+      staticField: false,
+      staticFieldRadius: 0,
+      staticFieldDmgPerTick: 0,
+    }
+    const c = activeCards.value
+
+    // heat_missile
+    const hmLv = c['heat_missile'] ?? 0
+    if (hmLv >= 1) stats.missileLaunchers = 1
+    if (hmLv >= 2) { stats.missileSpeedMult = 1.3; stats.missileDamageMult = 1.2 }
+    if (hmLv >= 3) stats.missileLaunchers = 2
+    if (hmLv >= 4) stats.missileDamageMult = 1.56   // 1.2 × 1.3
+    if (hmLv >= 5) stats.missileAOE = true
+
+    // plasma_bolt
+    const pbLv = c['plasma_bolt'] ?? 0
+    if (pbLv >= 1) stats.plasmaBolt = true
+    if (pbLv >= 2) stats.plasmaBoltDmgMult = 1.25
+    if (pbLv >= 4) stats.plasmaBoltDmgMult = 1.625  // 1.25 × 1.3
+    if (pbLv >= 5) stats.plasmaBoltCount = 2
+
+    // cluster_bomb
+    const cbLv = c['cluster_bomb'] ?? 0
+    if (cbLv >= 1) stats.clusterBomb = true
+    if (cbLv >= 2) stats.clusterBombDmgMult = 1.2
+    if (cbLv >= 4) stats.clusterBombDmgMult = 1.62  // 1.2 × 1.35
+    if (cbLv >= 5) stats.clusterBombDouble = true
+
+    // laser_sweep
+    const lsLv = c['laser_sweep'] ?? 0
+    if (lsLv >= 1) stats.laserSweep = true
+    if (lsLv >= 2) stats.laserSweepDmgMult = 1.25
+    if (lsLv >= 3) stats.laserSweepDouble = true
+    if (lsLv >= 4) stats.laserSweepDmgMult = 1.625
+
+    // skill_recovery
+    stats.cdReductionPct = (c['skill_recovery'] ?? 0) * 0.05
+
+    // energy_shield
+    const esLv = c['energy_shield'] ?? 0
+    if (esLv >= 1) { stats.shieldCooldownSec = 25; stats.shieldLives = 1 }
+    if (esLv >= 2) stats.shieldCooldownSec = 20
+    if (esLv >= 3) stats.shieldHealOnBreak = 50
+    if (esLv >= 4) stats.shieldCooldownSec = 15
+    if (esLv >= 5) stats.shieldLives = 2
+
+    // exp_magnet
+    stats.expRangeBonus = (c['exp_magnet'] ?? 0) * 40
+
+    // hp_vampire
+    const hvLv = c['hp_vampire'] ?? 0
+    if (hvLv >= 1) stats.vampireHitHeal = 1
+    if (hvLv >= 2) stats.vampireHitHeal = 2
+    if (hvLv >= 3) stats.vampireKillHeal = 5
+    if (hvLv >= 4) stats.vampireHitHeal = 3
+    if (hvLv >= 5) stats.vampireKillHeal = 10
+
+    // weapon_cache_star (Kho Vũ Khí - Star Keeper)
+    const ac = c['weapon_cache_star'] ?? 0
+    if (ac >= 1) { stats.arsenalBulletBonus = 1; stats.arsenalFireRatePct = 20 }
+    if (ac >= 2) stats.arsenalDamagePct = 25
+    if (ac >= 3) stats.arsenalBulletBonus = 2
+    if (ac >= 4) { stats.arsenalFireRatePct = 45; stats.arsenalDamagePct = 45 }
+    if (ac >= 5) stats.arsenalDamagePct = 95
+    if ((c['weapon_cache_star_ult'] ?? 0) >= 1) stats.bulletPierceOnKill = true
+
+    // interstellar_missile (ultimate)
+    if ((c['interstellar_missile'] ?? 0) >= 1) {
+      stats.interstellarMissile = true
+      if (stats.missileLaunchers === 0) stats.missileLaunchers = 1
+      stats.missileIntervalFrames = 30   // 0.5 s at 60 fps
+      stats.missileAOE = false
+    }
+
+    // power_advance (support)
+    stats.damageBonusPct = (c['power_advance'] ?? 0) * 10
+
+    // devastation_ray (ultimate)
+    if ((c['devastation_ray'] ?? 0) >= 1) stats.plasmaClearsBullets = true
+
+    // static_field_ult (ultimate) — replaces laser sweep with an AOE field
+    if ((c['static_field_ult'] ?? 0) >= 1) {
+      stats.staticField = true
+      stats.laserSweep = false   // no more horizontal sweep
+      stats.staticFieldRadius = 100 + (c['exp_magnet'] ?? 0) * 20
+      stats.staticFieldDmgPerTick = Math.round(50 * stats.laserSweepDmgMult)
+    }
+
+    return stats
+  })
 
   // Skill: Sóng tầm nhiệt huỷ diệt (Star Keeper)
   const skillCooldown = ref(0)          // giây còn lại (0 = sẵn sàng)
@@ -167,74 +500,97 @@ export const useGameStore = defineStore('game', () => {
     saveProgress()
   }
 
-  // All possible upgrades pool
-  function buildUpgradePool(): UpgradeOption[] {
-    return [
-      { id: 'bulletSpeed_w', name: '⚡ Đạn nhanh', desc: 'Tốc độ đạn +20%', rarity: 'white', apply: s => { s.upgrades.bulletSpeed += 0.2 } },
-      { id: 'shipSpeed_w', name: '🚀 Máy bay nhanh', desc: 'Tốc độ tàu +15%', rarity: 'white', apply: s => { s.upgrades.shipSpeed += 0.15 } },
-      { id: 'hp_w', name: '❤ Máu +20', desc: 'Tăng HP tối đa lên 20', rarity: 'white', apply: s => { s.playerMaxHp += 20; s.playerHp = Math.min(s.playerHp + 20, s.playerMaxHp) } },
-      { id: 'bulletCount_b', name: '🔫 Đa đạn', desc: 'Bắn thêm 1 viên đạn', rarity: 'blue', apply: s => { s.upgrades.bulletCount++ } },
-      { id: 'damage_b', name: '💥 Sức mạnh', desc: 'Sát thương +15', rarity: 'blue', apply: s => { s.upgrades.damage += 15 } },
-      { id: 'collectRange_b', name: '🌀 Hút kinh nghiệm', desc: 'Phạm vi thu kinh nghiệm +30', rarity: 'blue', apply: s => { s.upgrades.collectRange += 30 } },
-      { id: 'hpRegen_p', name: '💊 Tái sinh', desc: 'Hồi 2 HP/s', rarity: 'purple', apply: s => { s.upgrades.hpRegen += 2 } },
-      { id: 'trishot_p', name: '💠 Tam xạ', desc: 'Đạn +2, tốc đạn +10%', rarity: 'purple', apply: s => { s.upgrades.bulletCount += 2; s.upgrades.bulletSpeed += 0.1 } },
-      { id: 'damage_p', name: '🔥 Đại phá', desc: 'Sát thương +40, đạn nhanh +15%', rarity: 'purple', apply: s => { s.upgrades.damage += 40; s.upgrades.bulletSpeed += 0.15 } },
-      { id: 'godship_g', name: '⭐ Thần tốc', desc: 'Tất cả chỉ số +25%', rarity: 'gold', apply: s => { s.upgrades.bulletSpeed += 0.25; s.upgrades.shipSpeed += 0.25; s.upgrades.damage += 25; s.upgrades.collectRange += 25 } },
-      { id: 'fullheal_g', name: '✨ Phục hồi', desc: 'Hồi đầy HP + thêm 50 HP tối đa', rarity: 'gold', apply: s => { s.playerMaxHp += 50; s.playerHp = s.playerMaxHp } },
-    ]
+  // ─── Card system helpers ────────────────────────────────────────────────────
+  function getAttackSlotsFilled(): number {
+    return Object.keys(activeCards.value).filter(id => {
+      const def = ALL_CARD_DEFS.find(c => c.id === id)
+      return def?.type === 'attack'
+    }).length
   }
 
-  function getRarityWeight(rarity: UpgradeRarity): number {
-    const lvl = playerLevel.value
-    if (rarity === 'white') return Math.max(20, 70 - lvl * 2)
-    if (rarity === 'blue') return Math.min(30, 12 + lvl * 1.5)
-    if (rarity === 'purple') return Math.min(8, lvl * 0.4)
-    if (rarity === 'gold') return Math.min(3, lvl * 0.15)
-    return 1
+  function getSupportSlotsFilled(): number {
+    return Object.keys(activeCards.value).filter(id => {
+      const def = ALL_CARD_DEFS.find(c => c.id === id)
+      return def?.type === 'support'
+    }).length
   }
 
-  function pickWeightedUpgrades(count: number): UpgradeOption[] {
-    const pool = buildUpgradePool()
-    const result: UpgradeOption[] = []
-    const remaining = [...pool]
-    for (let i = 0; i < count && remaining.length > 0; i++) {
-      const totalW = remaining.reduce((s, u) => s + getRarityWeight(u.rarity), 0)
-      let r = Math.random() * totalW
-      for (let j = 0; j < remaining.length; j++) {
-        r -= getRarityWeight(remaining[j]!.rarity)
-        if (r <= 0) {
-          result.push(remaining[j]!)
-          remaining.splice(j, 1)
-          break
-        }
+  function buildCardChoices(): CardDef[] {
+    const owned = activeCards.value
+    const atkFilled = getAttackSlotsFilled()
+    const supFilled = getSupportSlotsFilled()
+
+    const available = ALL_CARD_DEFS.filter(def => {
+      if (def.type === 'ultimate') {
+        if (!def.requiresAttackId || !def.requiresSupportId) return false
+        const atkDef = ALL_CARD_DEFS.find(c => c.id === def.requiresAttackId)
+        const atkLv = owned[def.requiresAttackId] ?? 0
+        const supLv = owned[def.requiresSupportId] ?? 0
+        return atkLv >= (atkDef?.maxLevel ?? 5) && supLv >= 1 && (owned[def.id] ?? 0) < def.maxLevel
       }
-    }
-    return result
+      const currentLv = owned[def.id] ?? 0
+      if (currentLv > 0) return currentLv < def.maxLevel
+      if (def.type === 'attack') return atkFilled < 5
+      if (def.type === 'support') return supFilled < 5
+      return false
+    })
+
+    return [...available].sort(() => Math.random() - 0.5).slice(0, 3)
+  }
+
+  function chooseCard(cardId: string) {
+    const def = ALL_CARD_DEFS.find(c => c.id === cardId)
+    if (!def) return
+    const currentLv = activeCards.value[cardId] ?? 0
+    if (currentLv >= def.maxLevel) return
+    activeCards.value = { ...activeCards.value, [cardId]: currentLv + 1 }
+    isLevelUpPending.value = false
+    isPaused.value = false
   }
 
   function triggerLevelUp() {
     if (playerLevel.value >= 10) unlockAchievement('level_10')
-    levelUpChoices.value = pickWeightedUpgrades(3)
+    levelUpCardChoices.value = buildCardChoices()
+    if (levelUpCardChoices.value.length === 0) return  // all cards maxed, skip
     isLevelUpPending.value = true
     isPaused.value = true
   }
 
-  // Caps chỉ số Star Keeper
-  function capStarKeeperStats() {
-    upgrades.value.damage = Math.min(100, upgrades.value.damage)
-    upgrades.value.bulletSpeed = Math.min(1.5, upgrades.value.bulletSpeed)
-    upgrades.value.bulletCount = Math.min(3, upgrades.value.bulletCount)
-    upgrades.value.shipSpeed = Math.min(1.5, upgrades.value.shipSpeed)
-    playerMaxHp.value = Math.min(300, playerMaxHp.value)
-    playerHp.value = Math.min(playerMaxHp.value, playerHp.value)
+  // ─── Shield helpers ─────────────────────────────────────────────────────────
+  function tickShield(deltaSeconds: number) {
+    const cs = cardStats.value
+    if (cs.shieldCooldownSec <= 0) return
+    if (!shieldActive.value) {
+      if (shieldCooldownLeft.value > 0) {
+        shieldCooldownLeft.value = Math.max(0, shieldCooldownLeft.value - deltaSeconds)
+        if (shieldCooldownLeft.value <= 0) {
+          shieldActive.value = true
+          shieldLivesLeft.value = cs.shieldLives
+        }
+      } else {
+        shieldActive.value = true
+        shieldLivesLeft.value = cs.shieldLives
+      }
+    }
   }
 
-  function chooseLevelUpOption(option: UpgradeOption) {
-    option.apply(useGameStore())
-    capStarKeeperStats()
-    isLevelUpPending.value = false
-    isPaused.value = false
-    saveProgress()
+  // Returns true if the hit was absorbed by shield
+  function absorbShieldHit(): boolean {
+    if (!shieldActive.value) return false
+    const cs = cardStats.value
+    shieldLivesLeft.value--
+    if (shieldLivesLeft.value <= 0) {
+      shieldActive.value = false
+      shieldCooldownLeft.value = cs.shieldCooldownSec
+      if (cs.shieldHealOnBreak > 0) {
+        playerHp.value = Math.min(playerMaxHp.value, playerHp.value + cs.shieldHealOnBreak)
+      }
+    }
+    return true
+  }
+
+  function healPlayer(amount: number) {
+    playerHp.value = Math.min(playerMaxHp.value, playerHp.value + amount)
   }
 
   // ─── Account / Achievement / PermUpgrade helpers ─────────────────────
@@ -304,7 +660,7 @@ export const useGameStore = defineStore('game', () => {
     if (skillCooldown.value > 0) return
     unlockAchievement('skill_use')
     skillActivationPending.value = true
-    skillCooldown.value = 30
+    skillCooldown.value = 30 * (1 - cardStats.value.cdReductionPct)
   }
 
   function tickSkillCooldown(deltaSeconds: number) {
@@ -336,7 +692,7 @@ export const useGameStore = defineStore('game', () => {
     playerHp.value = playerMaxHp.value
     upgrades.value = {
       bulletSpeed: 1,
-      bulletCount: 1,
+      bulletCount: 1 + permUpgrades.value.bulletCount,
       shipSpeed: Math.min(1.5, 1 + permUpgrades.value.baseSpeed * 0.05),
       shield: 0,
       bombCount: 0,
@@ -344,19 +700,30 @@ export const useGameStore = defineStore('game', () => {
       collectRange: 40,
       hpRegen: 0,
     }
-    levelUpChoices.value = []
+    levelUpCardChoices.value = []
     isLevelUpPending.value = false
     goldEarnedThisRun.value = 0
     isGameOverSequence.value = false
     skillCooldown.value = 0
     skillActivationPending.value = false
+    // Reset card system
+    activeCards.value = {}
+    shieldActive.value = false
+    shieldLivesLeft.value = 0
+    shieldCooldownLeft.value = 0
     isPlaying.value = true
     isPaused.value = false
   }
 
   function endGame() {
-    // Thoát thủ công (không tính gold cho manual exit)
     isGameOverSequence.value = false
+    // Award gold/exp earned during this run when player exits manually
+    if (isPlaying.value) {
+      goldEarnedThisRun.value = Math.floor(currentStage.value * 5) + Math.floor(currentScore.value / 100)
+      playerCoins.value += goldEarnedThisRun.value
+      const earnedAccountExp = currentStage.value * 10 + Math.floor(currentScore.value / 50)
+      addAccountExp(earnedAccountExp)
+    }
     isPlaying.value = false
     saveProgress()
   }
@@ -419,10 +786,12 @@ export const useGameStore = defineStore('game', () => {
         unlockedAchievements.value    = data.unlockedAchievements ?? []
         if (data.permUpgrades) {
           permUpgrades.value = {
-            baseDamage: data.permUpgrades.baseDamage ?? 0,
-            baseHp:     data.permUpgrades.baseHp     ?? 0,
-            baseSpeed:  data.permUpgrades.baseSpeed  ?? 0,
-            expBonus:   data.permUpgrades.expBonus   ?? 0,
+            baseDamage:  data.permUpgrades.baseDamage  ?? 0,
+            baseHp:      data.permUpgrades.baseHp      ?? 0,
+            baseSpeed:   data.permUpgrades.baseSpeed   ?? 0,
+            expBonus:    data.permUpgrades.expBonus    ?? 0,
+            bulletCount: data.permUpgrades.bulletCount ?? 0,
+            fireRate:    data.permUpgrades.fireRate    ?? 0,
           }
         }
       } catch {
@@ -451,8 +820,14 @@ export const useGameStore = defineStore('game', () => {
     stageEnemiesKilled,
     stageComplete,
     stageProgress,
-    levelUpChoices,
+    // Card system
+    levelUpCardChoices,
     isLevelUpPending,
+    activeCards,
+    cardStats,
+    shieldActive,
+    shieldLivesLeft,
+    shieldCooldownLeft,
     expToNextLevel,
     expPercent,
     hpPercent,
@@ -481,9 +856,10 @@ export const useGameStore = defineStore('game', () => {
     pauseGame,
     loseLife,
     takeDamage,
+    healPlayer,
     upgradeShip,
     triggerLevelUp,
-    chooseLevelUpOption,
+    chooseCard,
     saveProgress,
     loadProgress,
     unlockAchievement,
@@ -494,5 +870,7 @@ export const useGameStore = defineStore('game', () => {
     activateSkill,
     tickSkillCooldown,
     consumeSkillActivation,
+    tickShield,
+    absorbShieldHit,
   }
 })

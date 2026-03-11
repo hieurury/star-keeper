@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useGameStore } from '../stores/gameStore'
 import GameCanvas from '../components/game/GameCanvas.vue'
@@ -8,6 +8,11 @@ import PixelButton from '../components/ui/PixelButton.vue'
 
 const router = useRouter()
 const game = useGameStore()
+
+// Prevent gameover overlay from flashing before the canvas initialises and
+// calls startGame() (which sets isPlaying = true).
+const isInitializing = ref(true)
+watch(() => game.isPlaying, (val) => { if (val) isInitializing.value = false }, { immediate: true })
 
 const showExitWarning = ref(false)
 const exitConfirmed = ref(false)
@@ -73,10 +78,9 @@ onUnmounted(() => window.removeEventListener('beforeunload', handleBeforeUnload)
   <div class="game-view">
     <!-- Top control bar -->
     <div class="game-view__bar">
-      <PixelButton label="◀ Menu" variant="secondary" size="sm" @click="requestGoHome" />
-      <div class="game-view__bar-title">CHẾ ĐỘ VÔ TẬN</div>
+      <div class="game-view__bar-title">CHẾO VÔ TẪN</div>
       <PixelButton
-        :label="game.isPaused ? '▶ Tiếp' : '⏸ Dừng'"
+        :label="game.isPaused ? '&#9654; Tiếp' : '&#9208; Dừng'"
         variant="secondary"
         size="sm"
         @click="game.pauseGame()"
@@ -86,11 +90,11 @@ onUnmounted(() => window.removeEventListener('beforeunload', handleBeforeUnload)
     <!-- Game area -->
     <div class="game-view__area">
       <GameCanvas />
-      <GameHUD />
+      <GameHUD @request-go-home="requestGoHome" />
 
       <!-- Game over menu (slides up after 2s death sequence) -->
       <Transition name="gameover">
-        <div v-if="!game.isPlaying" class="gameover-overlay">
+        <div v-if="!game.isPlaying && !isInitializing" class="gameover-overlay">
           <div class="gameover-menu">
             <div class="gameover-title">GAME OVER</div>
             <div class="gameover-stats">
@@ -127,7 +131,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', handleBeforeUnload)
     <div v-if="showExitWarning" class="exit-overlay">
       <div class="exit-dialog">
         <div class="exit-dialog__title">⚠ THOÁT GAME?</div>
-        <div class="exit-dialog__body">Tiến trình hiện tại sẽ bị mất.<br>Bạn có chắc muốn thoát không?</div>
+        <div class="exit-dialog__body">Vàng kiếm được sẽ được giữ lại.<br>Tiến trình khác (exp, stage) sẽ bị mất.</div>
         <div class="exit-dialog__actions">
           <PixelButton label="✗ Hủy" variant="secondary" size="md" @click="cancelExit" />
           <PixelButton label="✓ Thoát" variant="danger" size="md" @click="confirmExit" />

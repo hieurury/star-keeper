@@ -14,7 +14,7 @@ interface Bullet {
   vy: number
   vx?: number
 }
-type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer'
+type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'
 type KamiState = 'descend' | 'aim' | 'charge' | 'prexplode' | 'dead'
 type BossAttack2State = 'ready' | 'locking'
 // Pioneer movement phases: patrol → approach → ram
@@ -67,6 +67,27 @@ interface Enemy {
   squadId?: number       // which flock this pioneer belongs to
   formOffsetX?: number   // offset from squad anchor X
   formOffsetY?: number   // offset from squad anchor Y
+  // boss_invader
+  bossTurrets?: BossTurret[]
+}
+
+interface BossTurret {
+  gfx: Graphics
+  hpBarBg: Graphics
+  hpBar: Graphics
+  hp: number
+  maxHp: number
+  offsetX: number
+  offsetY: number
+  stunTimer: number
+  shootTimer: number
+  attached: boolean   // phase 2: this turret spawns kamikazes instead of firing
+  kamiTimer: number
+  laserState: 'idle' | 'warning' | 'firing'
+  laserTimer: number      // countdown until next laser attack
+  laserWarnTimer: number  // countdown during warning/firing phase
+  laserAngle: number      // direction of the beam
+  laserGfx: Graphics      // in gameLayer (NOT inside boss container)
 }
 interface EnemyBullet {
   gfx: Graphics
@@ -98,6 +119,30 @@ interface ExpOrb {
 type OrbTier = 'white' | 'blue' | 'purple' | 'gold'
 // Game phase for intro
 type GamePhase = 'intro' | 'stageTitle' | 'playing'
+
+// ─── Card ability state ───────────────────────────────────────────────────────
+interface MissileLauncher {
+  gfx: Graphics
+  angle: number    // current orbit angle
+  timer: number    // frames until next fire
+}
+
+interface PlayerMissile {
+  gfx: Graphics
+  vx: number
+  vy: number
+  damage: number
+  aoe: boolean
+}
+
+let missileLaunchers: MissileLauncher[] = []
+let playerMissiles: PlayerMissile[] = []
+let shieldGfx: Graphics | null = null
+let pbTimer = 0   // plasma bolt frame timer
+let cbTimer = 0   // cluster bomb frame timer
+let lsTimer = 0   // laser sweep frame timer
+let sfGfx: Graphics | null = null   // static field graphics
+let sfDmgTimer = 0                  // static field damage tick timer
 
 let playerShip: Graphics | null = null
 let bullets: Bullet[] = []
@@ -218,6 +263,78 @@ function drawStarDestroyer(g: Graphics, size: number) {
   g.rect(size*0.32, size*0.75, size*0.18, size*0.22).fill({ color: 0x4466ff, alpha: 0.85 })
 }
 
+// Anox Kẻ Xâm Lăng — shark-shaped boss, blue-steel tones
+function drawBossInvader(g: Graphics, size: number) {
+  g.clear()
+  // Main elongated body (head at top = negative y)
+  g.poly([
+    0, -size * 0.9,
+    size * 0.5, -size * 0.3,
+    size * 0.62, size * 0.38,
+    size * 0.28, size * 0.82,
+    0, size * 0.65,
+    -size * 0.28, size * 0.82,
+    -size * 0.62, size * 0.38,
+    -size * 0.5, -size * 0.3,
+  ]).fill(0x1a4a88)
+  // Dorsal fin (center top)
+  g.poly([
+    0, -size * 0.9,
+    size * 0.2, -size * 0.5,
+    0, -size * 0.58,
+    -size * 0.2, -size * 0.5,
+  ]).fill(0x2266aa)
+  // Left pectoral fin
+  g.poly([
+    -size * 0.55, -size * 0.05,
+    -size * 1.3, size * 0.28,
+    -size * 0.72, size * 0.48,
+    -size * 0.55, size * 0.22,
+  ]).fill(0x153a77)
+  // Right pectoral fin
+  g.poly([
+    size * 0.55, -size * 0.05,
+    size * 1.3, size * 0.28,
+    size * 0.72, size * 0.48,
+    size * 0.55, size * 0.22,
+  ]).fill(0x153a77)
+  // Tail fin
+  g.poly([
+    -size * 0.22, size * 0.65,
+    -size * 0.5, size * 1.1,
+    0, size * 0.78,
+    size * 0.5, size * 1.1,
+    size * 0.22, size * 0.65,
+  ]).fill(0x2266aa)
+  // Eyes
+  g.circle(-size * 0.22, -size * 0.52, size * 0.09).fill(0xff3333)
+  g.circle( size * 0.22, -size * 0.52, size * 0.09).fill(0xff3333)
+  // Central energy core
+  g.circle(0, size * 0.05, size * 0.2).fill(0x3366cc)
+  g.circle(0, size * 0.05, size * 0.11).fill({ color: 0x88bbff, alpha: 0.9 })
+  // Jaw stripe
+  g.rect(-size * 0.18, -size * 0.88, size * 0.36, size * 0.06).fill(0xaaccff)
+}
+
+// Turret sub-entity — barrel drawn pointing toward +y
+function drawTurret(g: Graphics, size: number, stunned = false) {
+  g.clear()
+  const bodyColor   = stunned ? 0x444444 : 0x2266cc
+  const innerColor  = stunned ? 0x777777 : 0x44aaff
+  const barrelColor = stunned ? 0x555555 : 0x335599
+  g.circle(0, 0, size).fill(bodyColor)
+  g.circle(0, 0, size * 0.6).fill(innerColor)
+  // Barrel
+  g.rect(-size * 0.22, 0, size * 0.44, size * 0.85).fill(barrelColor)
+  if (!stunned) {
+    g.circle(0, 0, size * 0.25).fill({ color: 0xffffff, alpha: 0.8 })
+  } else {
+    const xs = size * 0.35
+    g.moveTo(-xs, -xs).lineTo(xs, xs).stroke({ color: 0xff4444, width: 2 })
+    g.moveTo( xs, -xs).lineTo(-xs, xs).stroke({ color: 0xff4444, width: 2 })
+  }
+}
+
 function drawBossBullet(g: Graphics) {
   g.clear()
   g.circle(0, 0, 6.5).fill(0x4466bb)
@@ -233,6 +350,381 @@ function drawBossMissile(g: Graphics, small = false) {
   g.poly([-2.5*s, 4*s, -5.5*s, 8*s, -2.5*s, 2*s]).fill(0x2255aa)
   g.poly([2.5*s, 4*s, 5.5*s, 8*s, 2.5*s, 2*s]).fill(0x2255aa)
   g.circle(0, 7*s, 2*s).fill({ color: 0xff8800, alpha: 0.9 })
+}
+
+function drawMissileLauncher(g: Graphics) {
+  g.clear()
+  g.rect(-6, -9, 12, 18).fill(0x0088cc)
+  g.poly([0, -13, 4, -9, -4, -9]).fill(0x44ccff)
+  g.rect(-4, 7, 8, 5).fill({ color: 0xff6600, alpha: 0.8 })
+  g.circle(0, -1, 4).fill(0x66ddff)
+  g.circle(0, -1, 2).fill(0xffffff)
+}
+
+function drawPlayerMissile(g: Graphics, small = false) {
+  g.clear()
+  const s = small ? 0.65 : 1.0
+  g.rect(-2.5*s, -7*s, 5*s, 12*s).fill(0x00ccff)
+  g.poly([0, -10*s, 3*s, -7*s, -3*s, -7*s]).fill(0x66eeff)
+  g.circle(0, 5*s, 2*s).fill({ color: 0xff8800, alpha: 0.9 })
+}
+
+// ─── Enemy helpers ────────────────────────────────────────────────────────────
+function findNearestEnemy(x: number, y: number): Enemy | null {
+  let nearest: Enemy | null = null
+  let nearestD2 = Infinity
+  for (const e of enemies) {
+    const d2 = dist2(x, y, e.container.x, e.container.y)
+    if (d2 < nearestD2) { nearestD2 = d2; nearest = e }
+  }
+  return nearest
+}
+
+// Clean up turret laser graphics when boss_invader is removed from the field
+function cleanupBossInvaderTurrets(e: Enemy) {
+  if (!e.bossTurrets || !gameLayer) return
+  for (const t of e.bossTurrets) {
+    t.laserGfx.clear()
+    if (!t.laserGfx.destroyed) gameLayer.removeChild(t.laserGfx)
+  }
+}
+
+// Shared kill handler — used by card ability systems
+function killEnemy(e: Enemy, i: number) {
+  if (e.kind === 'boss_stardestroyer') {
+    spawnExplosion(e.container.x, e.container.y, 50, 0x4466ff, 0xaaccff)
+    spawnExplosion(e.container.x - 30, e.container.y + 20, 28, 0xff4400, 0xffee44)
+    spawnExplosion(e.container.x + 30, e.container.y - 10, 24, 0xff8800, 0xffee44)
+    screenFlash(0x4466ff, 0.65, 800)
+    spawnEnemyOrbs(e.container.x, e.container.y, 'boss_stardestroyer')
+    if (e.laserLine) e.laserLine.clear()
+    game.addScore(300 + game.currentStage * 50)
+    game.unlockAchievement('kill_boss')
+  } else if (e.kind === 'boss_invader') {
+    spawnExplosion(e.container.x, e.container.y, 55, 0x2255ff, 0x88bbff)
+    spawnExplosion(e.container.x - 40, e.container.y + 25, 28, 0xff4400, 0xffee44)
+    spawnExplosion(e.container.x + 40, e.container.y - 15, 24, 0x2266ff, 0x88bbff)
+    spawnExplosion(e.container.x, e.container.y + 40, 20, 0x4488ff, 0xaaccff)
+    screenFlash(0x2255ff, 0.65, 800)
+    spawnEnemyOrbs(e.container.x, e.container.y, 'boss_invader')
+    if (e.laserLine) e.laserLine.clear()
+    cleanupBossInvaderTurrets(e)
+    game.addScore(400 + game.currentStage * 60)
+    game.unlockAchievement('kill_boss')
+  } else {
+    const explR = e.kind === 'kamikaze' ? 18 : 14
+    spawnExplosion(e.container.x, e.container.y, explR)
+    spawnEnemyOrbs(e.container.x, e.container.y, e.kind)
+    const pts = e.kind === 'sniper' ? 20 + game.currentStage * 7
+      : e.kind === 'kamikaze' ? 15 + game.currentStage * 6
+      : 10 + game.currentStage * 5
+    game.addScore(pts)
+  }
+  if (game.cardStats.vampireKillHeal > 0) game.healPlayer(game.cardStats.vampireKillHeal)
+  gameLayer.removeChild(e.container)
+  enemies.splice(i, 1)
+  game.stageEnemiesKilled++
+}
+
+// ─── Card abilities ───────────────────────────────────────────────────────────
+function updateMissileLaunchers(dt: number) {
+  if (!playerShip) return
+  const cs = game.cardStats
+  const count = cs.missileLaunchers
+
+  // Sync launcher gfx count
+  while (missileLaunchers.length < count) {
+    const g = new Graphics()
+    drawMissileLauncher(g)
+    gameLayer.addChild(g)
+    const angle = (missileLaunchers.length * Math.PI * 2 / Math.max(1, count)) + Math.PI / 4
+    const stagger = cs.missileIntervalFrames * (missileLaunchers.length / Math.max(1, count))
+    missileLaunchers.push({ gfx: g, angle, timer: stagger })
+  }
+  while (missileLaunchers.length > count) {
+    const ml = missileLaunchers.pop()!
+    if (!ml.gfx.destroyed) gameLayer.removeChild(ml.gfx)
+  }
+
+  for (let idx = 0; idx < missileLaunchers.length; idx++) {
+    const launcher = missileLaunchers[idx]
+    // Fixed wing positions: idx 0 = left side, idx 1 = right side
+    const px = playerShip.x + (idx === 0 ? -40 : 40)
+    const py = playerShip.y + 8
+    launcher.gfx.x = px
+    launcher.gfx.y = py
+    // Aim toward nearest enemy, or straight up when no target
+    const aimEnemy = findNearestEnemy(px, py)
+    if (aimEnemy) {
+      const adx = aimEnemy.container.x - px
+      const ady = aimEnemy.container.y - py
+      launcher.gfx.rotation = Math.atan2(ady, adx) + Math.PI / 2
+    } else {
+      launcher.gfx.rotation = 0
+    }
+
+    launcher.timer -= dt
+    if (launcher.timer <= 0) {
+      launcher.timer = cs.missileIntervalFrames
+      const target = findNearestEnemy(px, py)
+      if (target) {
+        const isSmall = cs.interstellarMissile
+        const mg = new Graphics()
+        drawPlayerMissile(mg, isSmall)
+        mg.x = px; mg.y = py
+        gameLayer.addChild(mg)
+        const dx = target.container.x - px
+        const dy = target.container.y - py
+        const mag = Math.sqrt(dx * dx + dy * dy) || 1
+        const spd = 5.5 * cs.missileSpeedMult
+        playerMissiles.push({
+          gfx: mg,
+          vx: (dx / mag) * spd,
+          vy: (dy / mag) * spd,
+          damage: Math.round(65 * cs.missileDamageMult),
+          aoe: cs.missileAOE,
+        })
+      }
+    }
+  }
+
+  // Move & collide player missiles
+  const spd = 5.5 * cs.missileSpeedMult
+  const turnRate = cs.interstellarMissile ? 0.18 : 0.10
+  for (let i = playerMissiles.length - 1; i >= 0; i--) {
+    const m = playerMissiles[i]
+    const target = findNearestEnemy(m.gfx.x, m.gfx.y)
+    if (target) {
+      const dx = target.container.x - m.gfx.x
+      const dy = target.container.y - m.gfx.y
+      const mag = Math.sqrt(dx * dx + dy * dy) || 1
+      m.vx += (dx / mag * spd - m.vx) * turnRate
+      m.vy += (dy / mag * spd - m.vy) * turnRate
+    }
+    m.gfx.x += m.vx * dt
+    m.gfx.y += m.vy * dt
+    m.gfx.rotation = Math.atan2(m.vy, m.vx) + Math.PI / 2
+
+    if (m.gfx.y < -100 || m.gfx.y > GAME_H + 100 || m.gfx.x < -100 || m.gfx.x > GAME_W + 100) {
+      if (!m.gfx.destroyed) gameLayer.removeChild(m.gfx)
+      playerMissiles.splice(i, 1)
+      continue
+    }
+
+    let hit = false
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      const e = enemies[j]
+      const hitR = e.kind === 'boss_stardestroyer' ? 50 : 14
+      if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < hitR * hitR) {
+        if (m.aoe) {
+          spawnExplosion(m.gfx.x, m.gfx.y, 30, 0xff6600, 0xffee44)
+          const AOE_R2 = 65 * 65
+          for (let k = enemies.length - 1; k >= 0; k--) {
+            const ae = enemies[k]
+            if (dist2(m.gfx.x, m.gfx.y, ae.container.x, ae.container.y) < AOE_R2) {
+              ae.hp = Math.max(0, ae.hp - m.damage)
+              hitFlash(ae.body)
+              spawnDamageText(ae.container.x, ae.container.y - (ae.kind === 'boss_stardestroyer' ? 60 : 16), m.damage)
+              redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
+              if (ae.hp <= 0) killEnemy(ae, k)
+            }
+          }
+        } else {
+          e.hp = Math.max(0, e.hp - m.damage)
+          hitFlash(e.body)
+          spawnDamageText(e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' ? 60 : 16), m.damage)
+          redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+          spawnExplosion(m.gfx.x, m.gfx.y, 8, 0x00ccff, 0x44eeff)
+          if (e.hp <= 0) killEnemy(e, j)
+        }
+        if (!m.gfx.destroyed) gameLayer.removeChild(m.gfx)
+        playerMissiles.splice(i, 1)
+        hit = true
+        break
+      }
+    }
+    if (hit) continue
+  }
+}
+
+function spawnPlasmaBeam(x: number, damage: number) {
+  if (!app || !gameLayer) return
+  const beamW = 20
+  screenFlash(0x4488ff, 0.22, 300)
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i]
+    if (Math.abs(e.container.x - x) < beamW + 10) {
+      e.hp = Math.max(0, e.hp - damage)
+      hitFlash(e.body)
+      spawnDamageText(e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' ? 60 : 16), damage)
+      redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+      if (e.hp <= 0) killEnemy(e, i)
+    }
+  }
+  // Devastation Ray: destroy all enemy bullets in the beam column
+  if (game.cardStats.plasmaClearsBullets) {
+    for (let i = enemyBullets.length - 1; i >= 0; i--) {
+      if (Math.abs(enemyBullets[i].gfx.x - x) < beamW + 12) {
+        if (!enemyBullets[i].gfx.destroyed) gameLayer.removeChild(enemyBullets[i].gfx)
+        enemyBullets.splice(i, 1)
+      }
+    }
+  }
+  const beam = new Graphics()
+  beam.x = x
+  gameLayer.addChild(beam)
+  let frame = 0
+  const tick = () => {
+    frame++
+    beam.clear()
+    const alpha = Math.max(0, 0.5 - frame * 0.033)
+    beam.rect(-beamW / 2, 0, beamW, GAME_H).fill({ color: 0x4488ff, alpha })
+    if (frame >= 15) { if (!beam.destroyed) gameLayer.removeChild(beam); app?.ticker.remove(tick) }
+  }
+  app.ticker.add(tick)
+}
+
+function dropClusterBomb(fromX: number, fromY: number, damage: number) {
+  if (!app || !gameLayer) return
+  const tx = Math.max(40, Math.min(GAME_W - 40, fromX + (Math.random() - 0.5) * 140))
+  const ty = GAME_H * 0.15 + Math.random() * GAME_H * 0.45
+  const bomb = new Graphics()
+  bomb.circle(0, 0, 9).fill(0xff6600)
+  bomb.circle(0, 0, 5).fill(0xffee44)
+  bomb.x = fromX; bomb.y = fromY
+  gameLayer.addChild(bomb)
+  let frame = 0
+  const maxFrames = 35
+  const startX = fromX; const startY = fromY
+  const tick = () => {
+    frame++
+    bomb.x = startX + (tx - startX) * (frame / maxFrames)
+    bomb.y = startY + (ty - startY) * (frame / maxFrames)
+    if (frame >= maxFrames) {
+      spawnExplosion(bomb.x, bomb.y, 28, 0xff6600, 0xffee44)
+      const AOE_R2 = 58 * 58
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i]
+        if (dist2(bomb.x, bomb.y, e.container.x, e.container.y) < AOE_R2) {
+          e.hp = Math.max(0, e.hp - damage)
+          hitFlash(e.body)
+          spawnDamageText(e.container.x, e.container.y - 16, damage)
+          redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+          if (e.hp <= 0) killEnemy(e, i)
+        }
+      }
+      if (!bomb.destroyed) gameLayer.removeChild(bomb)
+      app?.ticker.remove(tick)
+    }
+  }
+  app.ticker.add(tick)
+}
+
+function fireLaserSweep(damage: number) {
+  if (!app || !gameLayer) return
+  const sweepY = GAME_H * 0.1 + Math.random() * GAME_H * 0.5
+  screenFlash(0xff4400, 0.18, 220)
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i]
+    if (Math.abs(e.container.y - sweepY) < 26) {
+      e.hp = Math.max(0, e.hp - damage)
+      hitFlash(e.body)
+      spawnDamageText(e.container.x, e.container.y - 16, damage)
+      redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+      if (e.hp <= 0) killEnemy(e, i)
+    }
+  }
+  const laser = new Graphics()
+  laser.y = sweepY
+  gameLayer.addChild(laser)
+  let frame = 0
+  const tick = () => {
+    frame++
+    laser.clear()
+    laser.rect(0, -12, GAME_W, 24).fill({ color: 0xff3300, alpha: Math.max(0, 0.55 - frame * 0.028) })
+    if (frame >= 20) { if (!laser.destroyed) gameLayer.removeChild(laser); app?.ticker.remove(tick) }
+  }
+  app.ticker.add(tick)
+}
+
+function updatePeriodicAbilities(dt: number) {
+  if (!playerShip) return
+  const cs = game.cardStats
+
+  if (cs.plasmaBolt) {
+    pbTimer -= dt
+    if (pbTimer <= 0) {
+      pbTimer = cs.plasmaBoltIntervalFrames
+      const dmg = Math.round(80 * cs.plasmaBoltDmgMult)
+      for (let b = 0; b < cs.plasmaBoltCount; b++) {
+        const offX = cs.plasmaBoltCount > 1 ? (b - 0.5) * 30 : 0
+        spawnPlasmaBeam(playerShip.x + offX, dmg)
+      }
+    }
+  }
+
+  if (cs.clusterBomb) {
+    cbTimer -= dt
+    if (cbTimer <= 0) {
+      cbTimer = cs.clusterBombIntervalFrames
+      const dmg = Math.round(70 * cs.clusterBombDmgMult)
+      dropClusterBomb(playerShip.x, playerShip.y - 20, dmg)
+      if (cs.clusterBombDouble) {
+        const capX = playerShip.x; const capY = playerShip.y
+        setTimeout(() => { if (app && playerShip) dropClusterBomb(capX + 40, capY - 20, dmg) }, 430)
+      }
+    }
+  }
+
+  if (cs.laserSweep) {
+    lsTimer -= dt
+    if (lsTimer <= 0) {
+      lsTimer = cs.laserSweepIntervalFrames
+      const dmg = Math.round(50 * cs.laserSweepDmgMult)
+      fireLaserSweep(dmg)
+      if (cs.laserSweepDouble) {
+        setTimeout(() => { if (app) fireLaserSweep(dmg) }, 380)
+      }
+    }
+  }
+
+  updateStaticField(dt)
+}
+
+function updateStaticField(dt: number) {
+  if (!playerShip || !gameLayer) return
+  const cs = game.cardStats
+  if (!cs.staticField) {
+    if (sfGfx) sfGfx.visible = false
+    return
+  }
+  if (!sfGfx) {
+    sfGfx = new Graphics()
+    gameLayer.addChild(sfGfx)
+  }
+  sfGfx.visible = true
+  sfGfx.x = playerShip.x
+  sfGfx.y = playerShip.y
+  sfGfx.clear()
+  const pulse = 0.35 + Math.sin(Date.now() * 0.008) * 0.2
+  sfGfx.circle(0, 0, cs.staticFieldRadius).fill({ color: 0xff2200, alpha: 0.10 + pulse * 0.07 })
+  sfGfx.circle(0, 0, cs.staticFieldRadius).stroke({ color: 0xff4400, width: 2, alpha: 0.4 + pulse * 0.3 })
+
+  sfDmgTimer -= dt
+  if (sfDmgTimer <= 0) {
+    sfDmgTimer = 30   // ~0.5s at 60 fps
+    const r2 = cs.staticFieldRadius * cs.staticFieldRadius
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i]
+      if (dist2(playerShip.x, playerShip.y, e.container.x, e.container.y) < r2) {
+        e.hp = Math.max(0, e.hp - cs.staticFieldDmgPerTick)
+        hitFlash(e.body)
+        spawnDamageText(e.container.x, e.container.y - 14, cs.staticFieldDmgPerTick)
+        redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+        if (e.hp <= 0) killEnemy(e, i)
+      }
+    }
+  }
 }
 
 function redrawHpBar(hpBarBg: Graphics, hpBar: Graphics, pct: number, w: number) {
@@ -391,7 +883,7 @@ function activateHeatWave() {
     const e = enemies[i]
     e.hp = Math.max(0, e.hp - waveDamage)
     hitFlash(e.body)
-    spawnDamageText(e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' ? 60 : 16), waveDamage)
+    spawnDamageText(e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 60 : 16), waveDamage)
     redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
     if (e.hp <= 0) {
       if (e.kind === 'boss_stardestroyer') {
@@ -402,6 +894,15 @@ function activateHeatWave() {
         spawnEnemyOrbs(e.container.x, e.container.y, 'boss_stardestroyer')
         if (e.laserLine) e.laserLine.clear()
         game.addScore(300 + game.currentStage * 50)
+      } else if (e.kind === 'boss_invader') {
+        spawnExplosion(e.container.x, e.container.y, 55, 0x2255ff, 0x88bbff)
+        spawnExplosion(e.container.x - 40, e.container.y + 25, 28, 0xff4400, 0xffee44)
+        spawnExplosion(e.container.x + 40, e.container.y - 15, 24, 0x2266ff, 0x88bbff)
+        screenFlash(0x2255ff, 0.65, 800)
+        spawnEnemyOrbs(e.container.x, e.container.y, 'boss_invader')
+        if (e.laserLine) e.laserLine.clear()
+        cleanupBossInvaderTurrets(e)
+        game.addScore(400 + game.currentStage * 60)
       } else {
         spawnExplosion(e.container.x, e.container.y, e.kind === 'kamikaze' ? 18 : 14)
         spawnEnemyOrbs(e.container.x, e.container.y, e.kind)
@@ -450,6 +951,10 @@ function spawnEnemyOrbs(x: number, y: number, kind: EnemyKind) {
     for (let i = 0; i < 10; i++) spawnExpOrb(x + (Math.random()-0.5)*40, y + (Math.random()-0.5)*20, 'gold')
     for (let i = 0; i < 6; i++) spawnExpOrb(x + (Math.random()-0.5)*30, y + (Math.random()-0.5)*20, 'purple')
     for (let i = 0; i < 4; i++) spawnExpOrb(x + (Math.random()-0.5)*20, y, 'blue')
+  } else if (kind === 'boss_invader') {
+    for (let i = 0; i < 12; i++) spawnExpOrb(x + (Math.random()-0.5)*50, y + (Math.random()-0.5)*25, 'gold')
+    for (let i = 0; i < 8; i++) spawnExpOrb(x + (Math.random()-0.5)*35, y + (Math.random()-0.5)*20, 'purple')
+    for (let i = 0; i < 5; i++) spawnExpOrb(x + (Math.random()-0.5)*20, y, 'blue')
   }
 }
 
@@ -719,11 +1224,173 @@ function spawnStarDestroyer() {
   game.stageEnemiesTotal++
 }
 
+// Variant of spawnKamikaze that starts at a given position (used by boss turrets)
+function spawnKamikazeAt(startX: number, startY: number) {
+  const size = Math.random() * 5 + 16
+  const barW = size * 2.8
+  const body = new Graphics()
+  drawKamikaze(body, size)
+  const hpBarBg = new Graphics()
+  const hpBar = new Graphics()
+  const maxHp = 30 + game.currentStage * 22
+  redrawHpBar(hpBarBg, hpBar, 1, barW)
+  hpBarBg.y = -size - 10
+  hpBar.y = -size - 10
+  const warnStyle = new TextStyle({
+    fill: 0xffdd00, fontSize: 16,
+    fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold',
+  })
+  const warnSign = new Text({ text: '!!', style: warnStyle })
+  warnSign.anchor.set(0.5, 1)
+  warnSign.y = -size - 14
+  warnSign.visible = false
+  const aimLine = new Graphics()
+  aimLine.visible = false
+  const container = new Container()
+  container.addChild(body, hpBarBg, hpBar, warnSign, aimLine)
+  container.x = startX
+  container.y = startY
+  gameLayer.addChild(container)
+  enemies.push({
+    container, body, hpBarBg, hpBar,
+    kind: 'kamikaze',
+    vy: 1.2 + Math.random() * 0.6 + game.currentStage * 0.08,
+    vx: 0,
+    hp: maxHp, maxHp, barW,
+    kamiState: 'aim',  // skip descent — immediately aim at player
+    kamiTimer: 0,
+    warnSign, aimLine,
+    targetX: 0, targetY: 0,
+  })
+  game.stageEnemiesTotal++
+}
+
+function spawnBossInvader() {
+  const size = 50
+  const maxHp = 2000 + game.currentStage * 500
+  const barW = 280
+  const body = new Graphics()
+  drawBossInvader(body, size)
+  const hpBarBg = new Graphics()
+  const hpBar = new Graphics()
+  redrawHpBar(hpBarBg, hpBar, 1, barW)
+  hpBarBg.y = -size - 22
+  hpBar.y = -size - 22
+  const laserLine = new Graphics()
+  laserLine.visible = false
+  const labelStyle = new TextStyle({
+    fill: 0x88bbff, fontSize: 10,
+    fontFamily: "'Chakra Petch', sans-serif",
+    fontWeight: 'bold',
+    stroke: { color: 0x000022, width: 3 },
+  })
+  const bossLabel = new Text({ text: 'ANOX - KẺ XÂM LĂNG', style: labelStyle })
+  bossLabel.anchor.set(0.5, 1)
+  bossLabel.y = -size - 24
+  const container = new Container()
+  container.addChild(body, hpBarBg, hpBar, laserLine, bossLabel)
+  container.x = GAME_W / 2
+  container.y = -size * 2.5
+  gameLayer.addChild(container)
+
+  // Create 5 turrets arranged around the boss body
+  const turretMaxHp = 80 + game.currentStage * 20
+  const turretOffsets: [number, number][] = [
+    [-70, -15],  // front-left
+    [ 70, -15],  // front-right
+    [-88,  42],  // rear-left
+    [ 88,  42],  // rear-right
+    [  0,  68],  // bottom-center
+  ]
+  const bossTurrets: BossTurret[] = turretOffsets.map(([offX, offY], ti) => {
+    const tg = new Graphics()
+    drawTurret(tg, 10)
+    tg.x = offX
+    tg.y = offY
+    const thpBg = new Graphics()
+    thpBg.x = offX; thpBg.y = offY - 20
+    const thpBar = new Graphics()
+    thpBar.x = offX; thpBar.y = offY - 20
+    redrawHpBar(thpBg, thpBar, 1, 24)
+    container.addChild(tg, thpBg, thpBar)
+    const laserGfx = new Graphics()
+    gameLayer.addChild(laserGfx)
+    return {
+      gfx: tg, hpBarBg: thpBg, hpBar: thpBar,
+      hp: turretMaxHp, maxHp: turretMaxHp,
+      offsetX: offX, offsetY: offY,
+      stunTimer: 0,
+      shootTimer: 40 + ti * 18 + Math.random() * 30,
+      attached: false,
+      kamiTimer: 0,
+      laserState: 'idle' as const,
+      laserTimer: 150 + ti * 55 + Math.random() * 100,
+      laserWarnTimer: 0,
+      laserAngle: 0,
+      laserGfx,
+    }
+  })
+
+  // Boss appearance alert
+  const alertStyle = new TextStyle({
+    fill: 0x4499ff, fontSize: 22,
+    fontFamily: "'Chakra Petch', sans-serif",
+    fontWeight: 'bold',
+    stroke: { color: 0x000022, width: 4 },
+  })
+  const alertText = new Text({ text: '⚠ BOSS XUẤT HIỆN ⚠', style: alertStyle })
+  alertText.anchor.set(0.5, 0.5)
+  alertText.x = GAME_W / 2
+  alertText.y = GAME_H * 0.45
+  alertText.alpha = 0
+  uiLayer.addChild(alertText)
+  let alertFrame = 0
+  const alertTick = () => {
+    alertFrame++
+    if (alertFrame < 30) alertText.alpha = alertFrame / 30
+    else if (alertFrame < 120) alertText.alpha = 1
+    else alertText.alpha = Math.max(0, 1 - (alertFrame - 120) / 30)
+    if (alertFrame >= 150) { uiLayer.removeChild(alertText); app?.ticker.remove(alertTick) }
+  }
+  app?.ticker.add(alertTick)
+  screenFlash(0x2255ff, 0.3, 500)
+
+  const e: Enemy = {
+    container, body, hpBarBg, hpBar,
+    kind: 'boss_invader',
+    vy: 0, vx: 0,
+    hp: maxHp, maxHp, barW,
+    laserLine, bossLabel,
+    bossEntered: false,
+    bossTargetY: GAME_H * 0.22,
+    bossPhase: 1,
+    attack1Timer: 0,
+    attack2Timer: 0,
+    bossDriftTarget: GAME_W / 2,
+    bossDriftTimer: 200,
+    bossTurrets,
+  }
+  enemies.push(e)
+  game.stageEnemiesTotal++
+}
+
 // ─── Wave builder ─────────────────────────────────────────────────────────────
 // Returns an array of spawner functions for stage N
 function buildWave(stage: number): WaveSpawner[] {
   const wave: WaveSpawner[] = []
-  const isBossStage = stage % 5 === 0
+  const isInvaderBossStage = stage % 10 === 0   // every 10th stage: shark boss
+  const isBossStage = stage % 5 === 0 && !isInvaderBossStage  // every 5th (not 10th): star destroyer
+
+  if (isInvaderBossStage) {
+    // Invader boss stage: escort + new shark boss
+    const escortGroups = 2 + Math.floor(stage / 10)
+    for (let g = 0; g < escortGroups; g++) {
+      const entries: Array<'top' | 'left' | 'right'> = ['top', 'left', 'right']
+      wave.push(() => spawnPioneerSquad('diamond', entries[g % 3]!))
+    }
+    wave.push(() => spawnBossInvader())
+    return wave
+  }
 
   if (isBossStage) {
     // Boss stage: bigger escort waves before boss appears
@@ -887,11 +1554,30 @@ function gameLoop(ticker: Ticker) {
   // ── PLAYING PHASE ────────────────────────────────────────────────────────
   if (game.isPaused) return
 
-  // Tick skill cooldown
+  // Tick skill cooldown & shield
   game.tickSkillCooldown(dt / 60)
+  game.tickShield(dt / 60)
   // Kiểm tra skill activation
   if (game.consumeSkillActivation()) {
     activateHeatWave()
+  }
+  // Card abilities
+  updateMissileLaunchers(dt)
+  updatePeriodicAbilities(dt)
+
+  // Shield visual
+  if (shieldGfx && playerShip) {
+    if (game.shieldActive) {
+      shieldGfx.visible = true
+      shieldGfx.x = playerShip.x
+      shieldGfx.y = playerShip.y
+      shieldGfx.clear()
+      const pulse = 0.65 + Math.sin(Date.now() * 0.006) * 0.35
+      shieldGfx.circle(0, 0, 32).stroke({ color: 0x44aaff, width: 3, alpha: pulse })
+      shieldGfx.circle(0, 0, 32).fill({ color: 0x2266ff, alpha: 0.10 * pulse })
+    } else {
+      shieldGfx.visible = false
+    }
   }
 
   // Player move
@@ -907,11 +1593,12 @@ function gameLoop(ticker: Ticker) {
   }
 
   // Shoot
+  const effectiveBulletCount = game.upgrades.bulletCount + game.cardStats.arsenalBulletBonus
   shootTimer += dt
-  const shootInterval = 18 / Math.sqrt(game.upgrades.bulletCount)
+  const shootInterval = (18 / Math.sqrt(effectiveBulletCount)) / (1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100)
   if (shootTimer >= shootInterval) {
     shootTimer = 0
-    const cnt = game.upgrades.bulletCount
+    const cnt = effectiveBulletCount
     // Spread angle: max ±12° for outermost bullet (giảm từ 22.5°)
     const maxHalfAngle = Math.min(Math.PI * 12 / 180, (cnt - 1) * Math.PI * 3 / 180)
     const bulletVy = 8 * game.upgrades.bulletSpeed
@@ -960,10 +1647,15 @@ function gameLoop(ticker: Ticker) {
     // Check hit player — larger hitbox for homing missiles
     const bHitR = b.homing ? 14 : 12
     if (playerShip && dist2(b.gfx.x, b.gfx.y, playerShip.x, playerShip.y) < bHitR * bHitR) {
-      const dmg = 15 + game.currentStage * 3
-      game.takeDamage(dmg)
-      screenFlash()
-      spawnDamageText(playerShip.x, playerShip.y - 20, dmg)
+      if (game.absorbShieldHit()) {
+        spawnExplosion(b.gfx.x, b.gfx.y, 9, 0x44aaff, 0x88ddff)
+        screenFlash(0x4488ff, 0.28, 200)
+      } else {
+        const dmg = 15 + game.currentStage * 3
+        game.takeDamage(dmg)
+        screenFlash()
+        spawnDamageText(playerShip.x, playerShip.y - 20, dmg)
+      }
       b.onHitPlayer?.()
       gameLayer.removeChild(b.gfx)
       enemyBullets.splice(i, 1)
@@ -1004,7 +1696,9 @@ function gameLoop(ticker: Ticker) {
   }
   // Pre-compute bullet damage scaled by bullet count (more bullets = less per-bullet damage, higher total)
   const bulletDmg = Math.round(
-    game.upgrades.damage * Math.pow(1.2, game.upgrades.bulletCount - 1) / game.upgrades.bulletCount
+    game.upgrades.damage * Math.pow(1.2, effectiveBulletCount - 1) / effectiveBulletCount
+    * (1 + game.cardStats.arsenalDamagePct / 100)
+    * (1 + game.cardStats.damageBonusPct / 100)
   )
   // ── Advance flock anchors (shared per squad) ─────────────────────────────
   const flockSpeed = 1.4 + game.currentStage * 0.05
@@ -1200,8 +1894,10 @@ function gameLoop(ticker: Ticker) {
           e.container.y += (dy / dist) * speed * dt
         }
       } else {
-        // patrol/approach: gentle slow drift downward
-        e.container.y += e.vy * dt
+        // patrol: stay at high altitude, gentle horizontal sine drift (no downward movement)
+        const t = Date.now() / 1000
+        e.container.x += Math.sin(t * 0.75 + (e.formTargetX ?? 0) * 0.011) * 0.65 * dt
+        e.container.x = Math.max(30, Math.min(GAME_W - 30, e.container.x))
       }
 
       // Shoot at player every 300 frames (~5s)
@@ -1385,18 +2081,224 @@ function gameLoop(ticker: Ticker) {
       }
     }
 
+    // ── Boss Invader (Anox Kẻ Xâm Lăng) ──
+    else if (e.kind === 'boss_invader') {
+      // Entry descent
+      if (!e.bossEntered) {
+        e.container.y += 1.2 * dt
+        if (e.container.y >= (e.bossTargetY ?? GAME_H * 0.22)) {
+          e.container.y = e.bossTargetY ?? GAME_H * 0.22
+          e.bossEntered = true
+        }
+      }
+
+      if (e.bossEntered) {
+        // Phase 2 transition at 50% HP
+        if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
+          e.bossPhase = 2
+          screenFlash(0x2255ff, 0.5, 600)
+          spawnExplosion(e.container.x, e.container.y, 28, 0x2255ff, 0x88bbff)
+          if (e.bossLabel) {
+            e.bossLabel.text = 'ANOX - KẺ XÂM LĂNG [PHASE 2]'
+            e.bossLabel.style = new TextStyle({ fill: 0xff88cc, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000022, width: 3 } })
+          }
+          // Mark front-left and front-right turrets as "attached" (index 0 and 1)
+          if (e.bossTurrets) {
+            e.bossTurrets[0]!.attached = true
+            e.bossTurrets[1]!.attached = true
+            // Cancel any active laser on newly kamikaze-spawning turrets
+            for (const ti of [0, 1]) {
+              const t = e.bossTurrets[ti]!
+              if (t.laserState !== 'idle') { t.laserState = 'idle'; t.laserWarnTimer = 0; t.laserGfx.clear() }
+            }
+          }
+        }
+
+        // Horizontal drift
+        e.bossDriftTimer = (e.bossDriftTimer ?? 0) - dt
+        if ((e.bossDriftTimer ?? 0) <= 0) {
+          e.bossDriftTarget = Math.random() * (GAME_W - 120) + 60
+          e.bossDriftTimer = 180 + Math.random() * 120
+        }
+        if (e.bossDriftTarget !== undefined) {
+          const ddx = e.bossDriftTarget - e.container.x
+          e.container.x += Math.min(Math.abs(ddx), 2.0 * dt) * Math.sign(ddx)
+        }
+
+        // Turret updates — each turret independently fires bullets and lasers
+        if (e.bossTurrets) {
+          for (const t of e.bossTurrets) {
+            // Stun cooldown — regen HP and clear laser display
+            if (t.stunTimer > 0) {
+              t.stunTimer -= dt
+              t.laserGfx.clear()  // hide laser while stunned
+              if (t.stunTimer <= 0) {
+                t.stunTimer = 0
+                t.hp = t.maxHp
+                drawTurret(t.gfx, 10, false)
+                redrawHpBar(t.hpBarBg, t.hpBar, 1, 24)
+              }
+              continue // stunned turret does nothing
+            }
+
+            // Aim barrel toward player (only when in idle mode)
+            if (playerShip && t.laserState === 'idle') {
+              const adx = playerShip.x - (e.container.x + t.offsetX)
+              const ady = playerShip.y - (e.container.y + t.offsetY)
+              t.gfx.rotation = Math.atan2(ady, adx) - Math.PI / 2
+            }
+
+            if (t.attached) {
+              // Phase 2 attached turrets: spawn kamikaze every 5s
+              t.kamiTimer += dt
+              if (t.kamiTimer >= 300) {
+                t.kamiTimer = 0
+                spawnKamikazeAt(e.container.x + t.offsetX, e.container.y + t.offsetY)
+              }
+            } else {
+              // ── Per-turret laser state machine ──
+              if (t.laserState !== 'idle') {
+                const wx = e.container.x + t.offsetX
+                const wy = e.container.y + t.offsetY
+                const len = GAME_W + GAME_H
+                if (t.laserState === 'warning') {
+                  t.laserWarnTimer -= dt
+                  t.gfx.rotation = t.laserAngle + Math.PI / 2
+                  const alpha = 0.25 + Math.abs(Math.sin(t.laserWarnTimer * 0.15)) * 0.4
+                  t.laserGfx.clear()
+                  t.laserGfx
+                    .moveTo(wx, wy)
+                    .lineTo(wx + Math.cos(t.laserAngle) * len, wy + Math.sin(t.laserAngle) * len)
+                    .stroke({ color: 0x4499ff, width: 2, alpha })
+                  if (t.laserWarnTimer <= 0) {
+                    t.laserState = 'firing'
+                    t.laserWarnTimer = 18
+                    screenFlash(0x2255ff, 0.18, 180)
+                    // Ray vs player-circle damage check
+                    if (playerShip) {
+                      const px = playerShip.x - wx
+                      const py = playerShip.y - wy
+                      const lx = Math.cos(t.laserAngle)
+                      const ly = Math.sin(t.laserAngle)
+                      const dot = px * lx + py * ly
+                      const perpX = px - dot * lx
+                      const perpY = py - dot * ly
+                      if (Math.sqrt(perpX * perpX + perpY * perpY) < 22 && dot > 0) {
+                        if (!game.absorbShieldHit()) {
+                          const dmg = 18 + game.currentStage * 2
+                          game.takeDamage(dmg)
+                          screenFlash()
+                          spawnDamageText(playerShip.x, playerShip.y - 20, dmg)
+                        } else {
+                          spawnExplosion(playerShip.x, playerShip.y, 9, 0x44aaff, 0x88ddff)
+                          screenFlash(0x4488ff, 0.28, 200)
+                        }
+                      }
+                    }
+                  }
+                } else {
+                  // 'firing' — bright beam fades out
+                  t.laserWarnTimer -= dt
+                  t.gfx.rotation = t.laserAngle + Math.PI / 2
+                  const alpha = Math.max(0, t.laserWarnTimer / 18) * 0.85
+                  t.laserGfx.clear()
+                  t.laserGfx
+                    .moveTo(wx, wy)
+                    .lineTo(wx + Math.cos(t.laserAngle) * len, wy + Math.sin(t.laserAngle) * len)
+                    .stroke({ color: 0x44aaff, width: 5, alpha })
+                  if (t.laserWarnTimer <= 0) {
+                    t.laserState = 'idle'
+                    t.laserTimer = 200 + Math.random() * 120
+                    t.laserGfx.clear()
+                  }
+                }
+              }
+
+              // ── Normal bullet fire + laser cooldown (when laser is idle) ──
+              if (t.laserState === 'idle') {
+                t.laserTimer -= dt
+                if (t.laserTimer <= 0 && playerShip) {
+                  t.laserState = 'warning'
+                  t.laserWarnTimer = 60  // 1 second warning
+                  const wx = e.container.x + t.offsetX
+                  const wy = e.container.y + t.offsetY
+                  // Aim roughly at player with random angular spread
+                  t.laserAngle = Math.atan2(playerShip.y - wy, playerShip.x - wx)
+                    + (Math.random() - 0.5) * Math.PI * 0.55
+                }
+                t.shootTimer -= dt
+                if (t.shootTimer <= 0 && playerShip) {
+                  t.shootTimer = 60 + Math.random() * 35
+                  const wx = e.container.x + t.offsetX
+                  const wy = e.container.y + t.offsetY
+                  const tdx = playerShip.x - wx
+                  const tdy = playerShip.y - wy
+                  const spd = 3.5
+                  for (let k = 0; k < 2; k++) {
+                    const spread = (k - 0.5) * 0.12
+                    const angle = Math.atan2(tdy, tdx) + spread
+                    const bg = new Graphics()
+                    drawEnemyBullet(bg)
+                    bg.x = wx
+                    bg.y = wy
+                    gameLayer.addChild(bg)
+                    enemyBullets.push({ gfx: bg, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd })
+                  }
+                }
+              }
+            }
+          } // end turret loop
+        } // end bossTurrets
+      } // end bossEntered
+    } // end boss_invader block
+
     // ── Hit by player bullets ──
     let killed = false
+    // For boss_invader: check turret hits first (turrets have their own HP)
+    if (e.kind === 'boss_invader' && e.bossTurrets) {
+      for (let j = bullets.length - 1; j >= 0; j--) {
+        let tHit = false
+        for (const t of e.bossTurrets) {
+          if (t.stunTimer > 0) continue  // stunned = invincible
+          const wx = e.container.x + t.offsetX
+          const wy = e.container.y + t.offsetY
+          if (dist2(bullets[j].gfx.x, bullets[j].gfx.y, wx, wy) < 12 * 12) {
+            t.hp = Math.max(0, t.hp - bulletDmg)
+            spawnDamageText(wx, wy - 16, bulletDmg)
+            if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
+            redrawHpBar(t.hpBarBg, t.hpBar, t.hp / t.maxHp, 24)
+            if (!game.cardStats.bulletPierceOnKill || t.hp <= 0) {
+              gameLayer.removeChild(bullets[j].gfx)
+              bullets.splice(j, 1)
+            }
+            if (t.hp <= 0) {
+              t.stunTimer = 200  // stun for ~3.3s
+              t.laserState = 'idle'; t.laserGfx.clear()  // cancel any active laser
+              drawTurret(t.gfx, 10, true)
+              spawnExplosion(wx, wy, 12, 0x4499ff, 0x88ddff)
+            }
+            tHit = true
+            break
+          }
+        }
+        if (tHit) break
+      }
+    }
     for (let j = bullets.length - 1; j >= 0; j--) {
-      const bulletHitR = e.kind === 'boss_stardestroyer' ? 50 : 15
+      const bulletHitR = e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 45 : 15
       if (dist2(bullets[j].gfx.x, bullets[j].gfx.y, e.container.x, e.container.y) < bulletHitR * bulletHitR) {
         const dmg = bulletDmg
         e.hp = Math.max(0, e.hp - dmg)
-        spawnDamageText(e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' ? 60 : 14), dmg)
+        spawnDamageText(e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 60 : 14), dmg)
         hitFlash(e.body)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
-        gameLayer.removeChild(bullets[j].gfx)
-        bullets.splice(j, 1)
+        // HP Vampire: heal on hit
+        if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
+        // Pierce on kill: bullet stays alive and continues to next enemy
+        if (!game.cardStats.bulletPierceOnKill || e.hp > 0) {
+          gameLayer.removeChild(bullets[j].gfx)
+          bullets.splice(j, 1)
+        }
         if (e.hp <= 0) {
           if (e.kind === 'boss_stardestroyer') {
             spawnExplosion(e.container.x, e.container.y, 50, 0x4466ff, 0xaaccff)
@@ -1406,6 +2308,18 @@ function gameLoop(ticker: Ticker) {
             spawnEnemyOrbs(e.container.x, e.container.y, 'boss_stardestroyer')
             if (e.laserLine) e.laserLine.clear()
             game.addScore(300 + game.currentStage * 50)
+            game.unlockAchievement('kill_boss')
+            game.stageEnemiesKilled++
+          } else if (e.kind === 'boss_invader') {
+            spawnExplosion(e.container.x, e.container.y, 55, 0x2255ff, 0x88bbff)
+            spawnExplosion(e.container.x - 40, e.container.y + 25, 28, 0xff4400, 0xffee44)
+            spawnExplosion(e.container.x + 40, e.container.y - 15, 24, 0x2266ff, 0x88bbff)
+            spawnExplosion(e.container.x, e.container.y + 40, 20, 0x4488ff, 0xaaccff)
+            screenFlash(0x2255ff, 0.65, 800)
+            spawnEnemyOrbs(e.container.x, e.container.y, 'boss_invader')
+            if (e.laserLine) e.laserLine.clear()
+            cleanupBossInvaderTurrets(e)
+            game.addScore(400 + game.currentStage * 60)
             game.unlockAchievement('kill_boss')
             game.stageEnemiesKilled++
           } else {
@@ -1418,6 +2332,8 @@ function gameLoop(ticker: Ticker) {
             game.addScore(pts)
             game.stageEnemiesKilled++
           }
+          // HP Vampire: bonus kill heal
+          if (game.cardStats.vampireKillHeal > 0) game.healPlayer(game.cardStats.vampireKillHeal)
           gameLayer.removeChild(e.container)
           enemies.splice(i, 1)
           killed = true
@@ -1432,17 +2348,22 @@ function gameLoop(ticker: Ticker) {
       dist2(e.container.x, e.container.y, playerShip.x, playerShip.y) < 20 * 20) {
       spawnExplosion(e.container.x, e.container.y, 14)
       spawnEnemyOrbs(e.container.x, e.container.y, 'pioneer')
-      game.takeDamage(25)
-      screenFlash()
-      spawnDamageText(playerShip.x, playerShip.y - 20, 25)
+      if (game.absorbShieldHit()) {
+        screenFlash(0x4488ff, 0.28, 200)
+      } else {
+        game.takeDamage(25)
+        screenFlash()
+        spawnDamageText(playerShip.x, playerShip.y - 20, 25)
+      }
       game.stageEnemiesKilled++
       gameLayer.removeChild(e.container)
       enemies.splice(i, 1)
     }
   }
 
-  // Exp orbs — move & collect
-  const collectR2 = game.upgrades.collectRange * game.upgrades.collectRange
+  // Exp orbs — move & collect (with card range bonus)
+  const collectRange = game.upgrades.collectRange + game.cardStats.expRangeBonus
+  const collectR2 = collectRange * collectRange
   for (let i = expOrbs.length - 1; i >= 0; i--) {
     const o = expOrbs[i]
     o.y += o.vy * dt
@@ -1509,20 +2430,30 @@ async function initPixi() {
   playerShip.y = GAME_H + 60
   gameLayer.addChild(playerShip)
 
+  // Shield visual (above ship layer)
+  shieldGfx = new Graphics()
+  shieldGfx.visible = false
+  gameLayer.addChild(shieldGfx)
+
   // Reset intro phase
   gamePhase = 'intro'
   introTimer = 0
 
   // Input: touch/mouse drag
   app.canvas.addEventListener('touchstart', onTouchStart, { passive: false })
-  app.canvas.addEventListener('touchmove', onTouchMove, { passive: false })
-  app.canvas.addEventListener('touchend', onTouchEnd)
+  window.addEventListener('touchmove', onTouchMove, { passive: false })
+  window.addEventListener('touchend', onTouchEnd)
   app.canvas.addEventListener('mousedown', onMouseDown)
   app.canvas.addEventListener('mousemove', onMouseMove)
   app.canvas.addEventListener('mouseup', onMouseUp)
+  app.canvas.addEventListener('mouseleave', onMouseLeave)
+  app.canvas.addEventListener('contextmenu', onContextMenu)
+  window.addEventListener('keydown', onKeyDown)
 
   app.ticker.add(gameLoop)
 }
+
+let lastTapTime = 0
 
 function onTouchStart(e: TouchEvent) {
   e.preventDefault()
@@ -1532,10 +2463,18 @@ function onTouchStart(e: TouchEvent) {
   const scaleY = GAME_H / rect.height
   touchX = (e.touches[0].clientX - rect.left) * scaleX
   touchY = (e.touches[0].clientY - rect.top) * scaleY
+  // Double-tap triggers skill
+  const now = Date.now()
+  if (now - lastTapTime < 300 && game.isPlaying && !game.isPaused && !game.isLevelUpPending) {
+    game.activateSkill()
+    lastTapTime = 0
+  } else {
+    lastTapTime = now
+  }
 }
 function onTouchMove(e: TouchEvent) {
-  e.preventDefault()
   if (!isDragging) return
+  e.preventDefault()
   const rect = (app!.canvas as HTMLCanvasElement).getBoundingClientRect()
   const scaleX = GAME_W / rect.width
   const scaleY = GAME_H / rect.height
@@ -1552,24 +2491,40 @@ function onMouseDown(e: MouseEvent) {
   touchY = (e.clientY - rect.top) * scaleY
 }
 function onMouseMove(e: MouseEvent) {
-  if (!isDragging) return
+  isDragging = true  // ship always follows cursor on PC (no click needed)
   const rect = (app!.canvas as HTMLCanvasElement).getBoundingClientRect()
   const scaleX = GAME_W / rect.width
   const scaleY = GAME_H / rect.height
   touchX = (e.clientX - rect.left) * scaleX
-  touchY = (e.clientY - rect.top) * scaleY
+  // Add offset so the movement formula (touchY - TOUCH_Y_OFFSET) lands the ship
+  // exactly at the cursor position on PC (no finger-obscuring offset needed)
+  touchY = (e.clientY - rect.top) * scaleY + TOUCH_Y_OFFSET
 }
 function onMouseUp() { isDragging = false }
+function onMouseLeave() { isDragging = false }
+function onContextMenu(e: MouseEvent) {
+  e.preventDefault()
+  if (game.isPlaying && !game.isPaused && !game.isLevelUpPending) game.activateSkill()
+}
+function onKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    if (game.isPlaying && !game.isLevelUpPending) game.pauseGame()
+  }
+}
 
 function destroyPixi() {
   if (app) {
     app.ticker.remove(gameLoop)
     app.canvas.removeEventListener('touchstart', onTouchStart)
-    app.canvas.removeEventListener('touchmove', onTouchMove)
-    app.canvas.removeEventListener('touchend', onTouchEnd)
+    window.removeEventListener('touchmove', onTouchMove)
+    window.removeEventListener('touchend', onTouchEnd)
     app.canvas.removeEventListener('mousedown', onMouseDown)
     app.canvas.removeEventListener('mousemove', onMouseMove)
     app.canvas.removeEventListener('mouseup', onMouseUp)
+    app.canvas.removeEventListener('mouseleave', onMouseLeave)
+    app.canvas.removeEventListener('contextmenu', onContextMenu)
+    window.removeEventListener('keydown', onKeyDown)
     app.destroy(true, { children: true })
     app = null
   }
@@ -1633,6 +2588,13 @@ watch(() => game.isPlaying, (val, old) => {
     for (const o of expOrbs) gameLayer?.removeChild(o.gfx)
     if (stageTitleText) { uiLayer?.removeChild(stageTitleText); stageTitleText = null }
     bullets = []; enemies = []; enemyBullets = []; damageTexts = []; expOrbs = []
+    // Clear card ability state
+    for (const ml of missileLaunchers) { if (!ml.gfx.destroyed) gameLayer?.removeChild(ml.gfx) }
+    for (const pm of playerMissiles) { if (!pm.gfx.destroyed) gameLayer?.removeChild(pm.gfx) }
+    missileLaunchers = []; playerMissiles = []
+    pbTimer = 0; cbTimer = 0; lsTimer = 0; sfDmgTimer = 0
+    if (shieldGfx) shieldGfx.visible = false
+    if (sfGfx) { sfGfx.visible = false }
     shootTimer = 0
     waveQueue = []; waveDispatchTimer = 0; waveIsClearing = false; stageClearTimer = 0; stageAnnouncePending = false
     // Restart intro animation

@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useGameStore } from '../../stores/gameStore'
-import type { UpgradeRarity } from '../../stores/gameStore'
+import { ALL_CARD_DEFS } from '../../stores/gameStore'
+import type { CardType } from '../../stores/gameStore'
+import { PhLightning } from '@phosphor-icons/vue'
 
 const game = useGameStore()
 
-function rarityLabel(r: UpgradeRarity) {
-  return { white: 'THƯỜNG', blue: 'HIẾM', purple: 'Sử THI', gold: 'HUYỀN THOẠI' }[r]
+const isTouchDevice = 'ontouchstart' in window
+
+const emit = defineEmits<{ requestGoHome: [] }>()
+
+function cardTypeLabel(type: CardType): string {
+  return { attack: 'TẤN CÔNG', support: 'HỖ TRỢ', ultimate: 'TỐI THƯỢNG' }[type]
+}
+
+function getCardDef(id: string) {
+  return ALL_CARD_DEFS.find(c => c.id === id)
 }
 
 // Flash kéo sự chú ý khi cooldown xong
@@ -70,50 +80,94 @@ watch(() => game.isSkillReady, (ready) => {
       <div class="hud__pause-box">
         <div class="hud__pause-title">PAUSE</div>
         <div class="hud__pause-score">Score: {{ game.currentScore }}</div>
+        <div class="hud__pause-actions">
+          <button class="hud__pause-btn hud__pause-btn--resume" @click="game.pauseGame()">&#9654; TIỌ TỤC</button>
+          <button class="hud__pause-btn hud__pause-btn--menu" @click="emit('requestGoHome')">&#9664; MENU</button>
+        </div>
+        <!-- Active card collection -->
+        <div v-if="Object.keys(game.activeCards).length > 0" class="hud__pause-cards">
+          <div class="hud__pause-cards-title">THẺ KỸ NĂNG</div>
+          <div class="hud__pause-card-list">
+            <div
+              v-for="(level, cardId) in game.activeCards"
+              :key="cardId"
+              class="hud__pause-card-item"
+              :class="'pause-card--' + (getCardDef(String(cardId))?.type ?? 'attack')"
+            >
+              <span class="hud__pause-card-icon">{{ getCardDef(String(cardId))?.icon }}</span>
+              <span class="hud__pause-card-name">{{ getCardDef(String(cardId))?.name }}</span>
+              <div class="hud__pause-card-dots">
+                <span
+                  v-for="d in 5"
+                  :key="d"
+                  class="hud__card-dot"
+                  :class="{ 'hud__card-dot--filled': d <= (level as number) }"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Level-up overlay -->
+    <!-- Level-up overlay (Card selection 3-column) -->
     <div v-if="game.isLevelUpPending" class="hud__levelup-overlay">
       <div class="hud__levelup-box">
         <div class="hud__levelup-title">&#9650; LEVEL UP! &#9650;</div>
-        <div class="hud__levelup-sub">Chọn nâng cấp</div>
-        <div class="hud__levelup-choices">
+        <div class="hud__levelup-sub">Chọn 1 thẻ kỹ năng</div>
+        <div class="hud__card-grid">
           <button
-            v-for="opt in game.levelUpChoices"
-            :key="opt.id"
-            class="hud__levelup-card"
-            :class="'rarity-' + opt.rarity"
-            @click="game.chooseLevelUpOption(opt)"
+            v-for="card in game.levelUpCardChoices"
+            :key="card.id"
+            class="hud__card"
+            :class="'card--' + card.type"
+            @click="game.chooseCard(card.id)"
           >
-            <div class="hud__levelup-card-name">{{ opt.name }}</div>
-            <div class="hud__levelup-card-desc">{{ opt.desc }}</div>
-            <div class="hud__levelup-card-rarity">{{ rarityLabel(opt.rarity) }}</div>
+            <!-- Thumbnail -->
+            <div class="hud__card-thumb" :class="'card-thumb--' + card.type">
+              <span class="hud__card-big-icon">{{ card.icon }}</span>
+            </div>
+            <!-- Type badge -->
+            <div class="hud__card-type-badge" :class="'badge--' + card.type">
+              {{ cardTypeLabel(card.type) }}
+            </div>
+            <!-- Name -->
+            <div class="hud__card-name">{{ card.name }}</div>
+            <!-- Level dots -->
+            <div class="hud__card-dots">
+              <span
+                v-for="d in card.maxLevel"
+                :key="d"
+                class="hud__card-dot"
+                :class="{ 'hud__card-dot--filled': d <= (game.activeCards[card.id] ?? 0) }"
+              />
+            </div>
+            <!-- Description (next level that will be gained) -->
+            <div class="hud__card-desc">
+              {{ card.levels[game.activeCards[card.id] ?? 0]?.desc }}
+            </div>
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Game over overlay removed — handled by InfiniteGameView -->
-
-    <!-- Skill button: bên trái, ngang vị trí máy bay xuất hiện -->
+    <!-- Skill indicator (click to activate: double-tap mobile / right-click PC) -->
     <div
       v-if="game.isPlaying && !game.isLevelUpPending"
       class="hud__skill-wrap"
     >
-      <button
+      <div
         class="hud__skill-btn"
         :class="{
           'hud__skill-btn--ready': game.isSkillReady,
           'hud__skill-btn--flash': skillJustReady,
         }"
-        :disabled="!game.isSkillReady || game.isPaused"
-        @click="game.activateSkill()"
       >
-        <span v-if="game.isSkillReady" class="hud__skill-icon">🌊</span>
+        <span v-if="game.isSkillReady" class="hud__skill-icon"><PhLightning weight="fill" :size="24" /></span>
         <span v-else class="hud__skill-cd">{{ Math.ceil(game.skillCooldown) }}</span>
-      </button>
+      </div>
       <div class="hud__skill-label">SÓNG<br/>NHIỀT</div>
+      <div class="hud__skill-hint">{{ isTouchDevice ? '2× TAP' : 'RMB' }}</div>
     </div>
   </div>
 </template>
@@ -233,13 +287,17 @@ watch(() => game.isSkillReady, (ready) => {
   justify-content: center;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(3px);
+  pointer-events: all;
+  z-index: 20;
 }
 .hud__pause-box {
   text-align: center;
-  padding: 24px 40px;
+  padding: 20px 28px;
   background: var(--color-panel);
   border: 3px solid var(--color-border);
   box-shadow: 6px 6px 0 var(--color-border-dark);
+  max-width: 320px;
+  width: 90%;
 }
 .hud__pause-title {
   font-size: 28px;
@@ -251,6 +309,177 @@ watch(() => game.isSkillReady, (ready) => {
   font-size: 12px;
   color: var(--color-text-dim);
   margin-top: 8px;
+}
+.hud__pause-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  justify-content: center;
+}
+.hud__pause-btn {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  letter-spacing: 1px;
+  padding: 8px 14px;
+  cursor: pointer;
+  border: 2px solid;
+  transition: opacity 0.1s;
+}
+.hud__pause-btn:hover { opacity: 0.8; }
+.hud__pause-btn--resume { background: #0a1a0f; border-color: #44ff88; color: #44ff88; }
+.hud__pause-btn--menu   { background: #1a0a0a; border-color: #ff6644; color: #ff9977; }
+.hud__pause-cards {
+  margin-top: 14px;
+  text-align: left;
+}
+.hud__pause-cards-title {
+  font-size: 8px;
+  color: #44ffaa;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+.hud__pause-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.hud__pause-card-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  background: var(--color-panel-dark);
+  border: 1px solid #334;
+}
+.pause-card--attack  { border-color: #884422; }
+.pause-card--support { border-color: #224488; }
+.pause-card--ultimate { border-color: #886622; }
+.hud__pause-card-icon { font-size: 14px; }
+.hud__pause-card-name { font-size: 8px; color: var(--color-text); flex: 1; }
+.hud__pause-card-dots { display: flex; gap: 3px; }
+
+/* Level-up card grid */
+.hud__levelup-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  pointer-events: all;
+  z-index: 30;
+}
+.hud__levelup-box {
+  width: min(370px, 96vw);
+  padding: 18px 12px 22px;
+  background: var(--color-panel);
+  border: 3px solid #44ffaa;
+  box-shadow: 6px 6px 0 #0a3018, 0 0 30px rgba(68,255,170,0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.hud__levelup-title {
+  font-size: 16px;
+  color: #44ffaa;
+  letter-spacing: 3px;
+  text-shadow: 0 0 12px #44ffaa;
+}
+.hud__levelup-sub {
+  font-size: 9px;
+  color: var(--color-text-dim);
+  letter-spacing: 2px;
+}
+
+/* 3-column card grid */
+.hud__card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.hud__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 8px;
+  background: var(--color-panel-dark);
+  border: 2px solid #334;
+  cursor: pointer;
+  font-family: var(--font-pixel);
+  transition: transform 0.06s, box-shadow 0.06s, border-color 0.12s;
+  overflow: hidden;
+}
+.hud__card:hover  { transform: translateY(-3px); box-shadow: 0 4px 14px rgba(100,200,255,0.18); }
+.hud__card:active { transform: translateY(1px); }
+
+.card--attack  { border-color: #aa3311; }
+.card--support { border-color: #1155aa; }
+.card--ultimate { border-color: #aa8811; box-shadow: 0 0 10px rgba(255,220,80,0.18); }
+
+/* Thumbnail area */
+.hud__card-thumb {
+  width: 100%;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card-thumb--attack  { background: linear-gradient(160deg, #1a0808, #2a1008); }
+.card-thumb--support { background: linear-gradient(160deg, #080d1a, #081828); }
+.card-thumb--ultimate { background: linear-gradient(160deg, #1a1408, #1a1000); }
+
+.hud__card-big-icon { font-size: 28px; filter: drop-shadow(0 0 6px rgba(255,255,255,0.4)); }
+
+/* Type badge */
+.hud__card-type-badge {
+  font-size: 6px;
+  letter-spacing: 1px;
+  padding: 2px 5px;
+  border-radius: 1px;
+}
+.badge--attack  { background: #660022; color: #ff9966; }
+.badge--support { background: #001166; color: #88aaff; }
+.badge--ultimate { background: #664400; color: #ffcc66; }
+
+.hud__card-name {
+  font-size: 8px;
+  color: var(--color-text);
+  text-align: center;
+  padding: 0 4px;
+  line-height: 1.3;
+}
+
+/* Level dots */
+.hud__card-dots {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+.hud__card-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #333;
+  border: 1px solid #555;
+}
+.hud__card-dot--filled {
+  background: #f1c40f;
+  border-color: #f1c40f;
+  box-shadow: 0 0 4px #f1c40f;
+}
+
+.hud__card-desc {
+  font-size: 7px;
+  color: var(--color-text-dim);
+  text-align: center;
+  padding: 0 5px;
+  line-height: 1.5;
 }
 
 /* EXP bar */
@@ -287,79 +516,6 @@ watch(() => game.isSkillReady, (ready) => {
   white-space: nowrap;
 }
 
-/* Level-up overlay */
-.hud__levelup-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.82);
-  backdrop-filter: blur(4px);
-  pointer-events: all;
-  z-index: 30;
-}
-.hud__levelup-box {
-  width: 340px;
-  max-width: 92vw;
-  padding: 20px 14px 24px;
-  background: var(--color-panel);
-  border: 3px solid #44ffaa;
-  box-shadow: 6px 6px 0 #0a3018, 0 0 30px rgba(68,255,170,0.15);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-.hud__levelup-title {
-  font-size: 16px;
-  color: #44ffaa;
-  letter-spacing: 3px;
-  text-shadow: 0 0 12px #44ffaa;
-}
-.hud__levelup-sub {
-  font-size: 9px;
-  color: var(--color-text-dim);
-  letter-spacing: 2px;
-}
-.hud__levelup-choices {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-}
-.hud__levelup-card {
-  width: 100%;
-  background: var(--color-panel-dark);
-  border: 3px solid var(--color-border);
-  box-shadow: 3px 3px 0 var(--color-border-dark);
-  padding: 10px 14px;
-  text-align: left;
-  cursor: pointer;
-  font-family: var(--font-pixel);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  transition: transform 0.06s, box-shadow 0.06s;
-}
-.hud__levelup-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 3px 5px 0 var(--color-border-dark);
-}
-.hud__levelup-card:active { transform: translateY(1px); box-shadow: 1px 2px 0 var(--color-border-dark); }
-.hud__levelup-card-name { font-size: 10px; color: var(--color-text); }
-.hud__levelup-card-desc { font-size: 8px; color: var(--color-text-dim); }
-.hud__levelup-card-rarity { font-size: 7px; letter-spacing: 1px; margin-top: 2px; }
-
-.rarity-white  { border-color: #aaaaaa; }
-.rarity-white  .hud__levelup-card-rarity { color: #aaaaaa; }
-.rarity-blue   { border-color: #4488ff; box-shadow: 3px 3px 0 #112244; }
-.rarity-blue   .hud__levelup-card-rarity { color: #4488ff; }
-.rarity-purple { border-color: #aa44ff; box-shadow: 3px 3px 0 #220033; }
-.rarity-purple .hud__levelup-card-rarity { color: #aa44ff; }
-.rarity-gold   { border-color: #f1c40f; box-shadow: 3px 3px 0 #7d6608, 0 0 12px rgba(241,196,15,0.3); }
-.rarity-gold   .hud__levelup-card-rarity { color: #f1c40f; }
-
 /* Skill button */
 .hud__skill-wrap {
   position: absolute;
@@ -370,7 +526,7 @@ watch(() => game.isSkillReady, (ready) => {
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  pointer-events: all;
+  pointer-events: none;
   z-index: 20;
 }
 .hud__skill-btn {
@@ -379,16 +535,12 @@ watch(() => game.isSkillReady, (ready) => {
   border-radius: 50%;
   border: 3px solid #334;
   background: rgba(5, 12, 35, 0.88);
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-pixel);
   transition: border-color 0.25s, box-shadow 0.25s;
   backdrop-filter: blur(4px);
-}
-.hud__skill-btn:disabled {
-  cursor: default;
 }
 .hud__skill-btn--ready {
   border-color: #ff6600;
@@ -412,6 +564,12 @@ watch(() => game.isSkillReady, (ready) => {
   letter-spacing: 1px;
   text-align: center;
   line-height: 1.4;
+}
+.hud__skill-hint {
+  font-size: 6px;
+  color: #445566;
+  letter-spacing: 0.5px;
+  text-align: center;
 }
 @keyframes skill-flash {
   0%   { box-shadow: 0 0 6px rgba(255,100,0,0.5); }
