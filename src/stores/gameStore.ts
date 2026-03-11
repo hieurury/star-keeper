@@ -17,6 +17,7 @@ export interface CardDef {
   levels: CardLevelDef[]         // index 0 = lv1 desc, etc.
   requiresAttackId?: string      // ultimate: required attack card (must be max level)
   requiresSupportId?: string     // ultimate: required support card (any level)
+  shipId?: string                // if set, only available when using this ship
 }
 
 export interface CardStats {
@@ -50,6 +51,8 @@ export interface CardStats {
   arsenalFireRatePct: number
   arsenalDamagePct: number
   bulletPierceOnKill: boolean
+  arsenalLaserSizePct: number
+  laserKillDropsSoul: boolean
   // Tân Tiến Sức Mạnh
   damageBonusPct: number
   // Tia Hủy Diệt (ultimate)
@@ -103,13 +106,23 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'weapon_cache_star', name: 'Kho Vũ Khí - Star Keeper', type: 'attack', icon: '🔫', maxLevel: 5,
+    id: 'weapon_cache_star', name: 'Kho Vũ Khí - Star Keeper', type: 'attack', icon: '🔫', maxLevel: 5, shipId: 'star_keeper',
     levels: [
       { desc: '+1 đạn bắn ra và tăng 20% tốc độ bắn.' },
       { desc: '+25% sát thương đạn.' },
       { desc: '+1 đạn bắn ra (tổng +2 đạn).' },
       { desc: '+25% tốc độ bắn và +20% sát thương (cộng dồn).' },
       { desc: '+50% sát thương đạn (cộng dồn).' },
+    ],
+  },
+  {
+    id: 'weapon_cache_holder', name: 'Kho Vũ Khí - Star Holder', type: 'attack', icon: '🔥', maxLevel: 5, shipId: 'star_holder',
+    levels: [
+      { desc: 'Tăng kích thước tia lazer +25%.' },
+      { desc: 'Bắn thêm 1 tia lazer song song.' },
+      { desc: '+30% sát thương lazer và +20% tốc độ bắn.' },
+      { desc: 'Bắn thêm 1 tia lazer nữa (tổng +2 tia).' },
+      { desc: '+40% sát thương lazer và +20% kích thước lazer.' },
     ],
   },
   // ── Hỗ trợ ──────────────────────────────────────────────────────────────────
@@ -155,10 +168,17 @@ export const ALL_CARD_DEFS: CardDef[] = [
   },
   // ── Tối thượng ──────────────────────────────────────────────────────────────
   {
-    id: 'weapon_cache_star_ult', name: 'Đạn Xuyên Phá', type: 'ultimate', icon: '🔮', maxLevel: 1,
+    id: 'weapon_cache_star_ult', name: 'Đạn Xuyên Phá', type: 'ultimate', icon: '🔮', maxLevel: 1, shipId: 'star_keeper',
     requiresAttackId: 'weapon_cache_star',
     levels: [
       { desc: 'Đạn xuyên qua kẻ địch khi tiêu diệt, tiếp tục tấn công mục tiêu phía sau. (Yêu cầu: Kho Vũ Khí - Star Keeper Lv5)' },
+    ],
+  },
+  {
+    id: 'weapon_cache_holder_ult', name: 'Thu Hồn Tự Động', type: 'ultimate', icon: '👻', maxLevel: 1, shipId: 'star_holder',
+    requiresAttackId: 'weapon_cache_holder',
+    levels: [
+      { desc: 'Kẻ địch bị tiêu diệt bởi lazer có 100% cơ hội rơi linh hồn. (Yêu cầu: Kho Vũ Khí - Star Holder Lv5)' },
     ],
   },
   {
@@ -237,6 +257,25 @@ export const PERM_UPGRADE_DEFS: PermUpgradeDef[] = [
   { key: 'fireRate',    name: '⚡ Tốc Xạ',           desc: '+15% tốc độ bắn mỗi cấp',             costs: [150, 400, 900] },
 ]
 
+// ─── Artifact definitions ─────────────────────────────────────────────────────
+export interface ArtifactDef {
+  id: string
+  name: string
+  icon: string
+  desc: string
+  cost: number
+}
+
+export const ALL_ARTIFACT_DEFS: ArtifactDef[] = [
+  { id: 'neutron_star', name: 'Sao Neutron',   icon: '⭐', cost: 2000, desc: '+20% EXP nhận được; mỗi 30 giây hút tất cả orb EXP về tàu' },
+  { id: 'carbon_core',  name: 'Lõi Cacbon',    icon: '🪨', cost: 2000, desc: '-10% sát thương nhận; mỗi lần lên cấp +5 HP tối đa' },
+  { id: 'stardust',     name: 'Bùa Bụi Sao',  icon: '✨', cost: 1000, desc: '+10% tốc độ bay; +10% sát thương' },
+  { id: 'mana_core',    name: 'Lõi Mana',      icon: '💠', cost: 3500, desc: '+1 đạn (vượt giới hạn); mỗi 10 tiêu diệt → nổ diện rộng' },
+]
+
+export const SHIP_ARTIFACT_SLOTS: Record<string, number> = { star_keeper: 1, star_holder: 1 }
+export const SHIP_DURABILITY_MAX: Record<string, number> = { star_keeper: 100, star_holder: 90 }
+
 // ─── Upgrade definitions ──────────────────────────────────────────────────────
 export type UpgradeRarity = 'white' | 'blue' | 'purple' | 'gold'
 export interface UpgradeOption {
@@ -246,6 +285,75 @@ export interface UpgradeOption {
   rarity: UpgradeRarity
   apply: (store: ReturnType<typeof useGameStore>) => void
 }
+
+// ─── Daily Mission ────────────────────────────────────────────────────────────
+export interface DailyMission {
+  id: string
+  kind: string
+  desc: string
+  target: number
+  progress: number
+  completed: boolean
+  claimed: boolean
+  reward: { coins?: number; ruby?: number; accountExp?: number }
+  shipId?: string
+}
+
+const MISSION_POOL: Array<{
+  kind: string; shipId?: string
+  variants: Array<{ target: number; desc: string; reward: { coins?: number; ruby?: number; accountExp?: number } }>
+}> = [
+  { kind: 'score', variants: [
+    { target: 500,  desc: 'Đạt 500 điểm trong 1 ván',     reward: { coins: 60 } },
+    { target: 1000, desc: 'Đạt 1,000 điểm trong 1 ván',   reward: { coins: 80 } },
+    { target: 3000, desc: 'Đạt 3,000 điểm trong 1 ván',   reward: { coins: 120 } },
+    { target: 8000, desc: 'Đạt 8,000 điểm trong 1 ván',   reward: { coins: 200 } },
+  ]},
+  { kind: 'kills', variants: [
+    { target: 10, desc: 'Tiêu diệt 10 kẻ địch trong 1 ván', reward: { coins: 50 } },
+    { target: 20, desc: 'Tiêu diệt 20 kẻ địch trong 1 ván', reward: { coins: 70 } },
+    { target: 35, desc: 'Tiêu diệt 35 kẻ địch trong 1 ván', reward: { coins: 100 } },
+    { target: 50, desc: 'Tiêu diệt 50 kẻ địch trong 1 ván', reward: { coins: 130 } },
+  ]},
+  { kind: 'earn_gold', variants: [
+    { target: 50,  desc: 'Kiếm 50 vàng trong 1 ván',  reward: { accountExp: 30 } },
+    { target: 100, desc: 'Kiếm 100 vàng trong 1 ván', reward: { accountExp: 50 } },
+    { target: 200, desc: 'Kiếm 200 vàng trong 1 ván', reward: { accountExp: 80 } },
+  ]},
+  { kind: 'reach_stage', variants: [
+    { target: 3,  desc: 'Vượt qua stage 3 trong 1 ván',  reward: { coins: 80 } },
+    { target: 5,  desc: 'Vượt qua stage 5 trong 1 ván',  reward: { accountExp: 60 } },
+    { target: 8,  desc: 'Vượt qua stage 8 trong 1 ván',  reward: { coins: 130 } },
+    { target: 12, desc: 'Vượt qua stage 12 trong 1 ván', reward: { accountExp: 100 } },
+  ]},
+  { kind: 'kill_boss', variants: [
+    { target: 1, desc: 'Hạ gục 1 trùm trong ngày', reward: { ruby: 1 } },
+    { target: 3, desc: 'Hạ gục 3 trùm trong ngày', reward: { ruby: 2 } },
+  ]},
+  { kind: 'play_with_ship', shipId: 'star_keeper', variants: [
+    { target: 1, desc: 'Chơi 1 ván với Star Keeper', reward: { coins: 40 } },
+    { target: 3, desc: 'Chơi 3 ván với Star Keeper', reward: { coins: 80 } },
+  ]},
+  { kind: 'play_with_ship', shipId: 'star_holder', variants: [
+    { target: 1, desc: 'Chơi 1 ván với Star Holder', reward: { coins: 50 } },
+    { target: 2, desc: 'Chơi 2 ván với Star Holder', reward: { coins: 90 } },
+  ]},
+  { kind: 'play_time', variants: [
+    { target: 60,  desc: 'Chơi liên tục 60 giây trong 1 ván',  reward: { accountExp: 40 } },
+    { target: 120, desc: 'Chơi liên tục 120 giây trong 1 ván', reward: { accountExp: 60 } },
+    { target: 180, desc: 'Chơi liên tục 3 phút trong 1 ván',   reward: { accountExp: 90 } },
+  ]},
+  { kind: 'choose_upgrades', variants: [
+    { target: 3, desc: 'Chọn 3 thẻ Lõi Sao trong 1 ván', reward: { coins: 60 } },
+    { target: 5, desc: 'Chọn 5 thẻ Lõi Sao trong 1 ván', reward: { coins: 100 } },
+    { target: 7, desc: 'Chọn 7 thẻ Lõi Sao trong 1 ván', reward: { coins: 140 } },
+  ]},
+  { kind: 'earn_upgrades', variants: [
+    { target: 3, desc: 'Đạt cấp 3 trong 1 ván',  reward: { accountExp: 40 } },
+    { target: 5, desc: 'Đạt cấp 5 trong 1 ván',  reward: { accountExp: 70 } },
+    { target: 7, desc: 'Đạt cấp 7 trong 1 ván',  reward: { accountExp: 100 } },
+  ]},
+]
 
 export const useGameStore = defineStore('game', () => {
   // Tiến độ người chơi
@@ -357,6 +465,8 @@ export const useGameStore = defineStore('game', () => {
       arsenalFireRatePct: 0,
       arsenalDamagePct: 0,
       bulletPierceOnKill: false,
+      arsenalLaserSizePct: 0,
+      laserKillDropsSoul: false,
       damageBonusPct: 0,
       plasmaClearsBullets: false,
       staticField: false,
@@ -425,7 +535,14 @@ export const useGameStore = defineStore('game', () => {
     if (ac >= 5) stats.arsenalDamagePct = 95
     if ((c['weapon_cache_star_ult'] ?? 0) >= 1) stats.bulletPierceOnKill = true
 
-    // interstellar_missile (ultimate)
+    // weapon_cache_holder (Kho Vũ Khí - Star Holder)
+    const hac = c['weapon_cache_holder'] ?? 0
+    if (hac >= 1) stats.arsenalLaserSizePct = 25
+    if (hac >= 2) stats.arsenalBulletBonus = 1
+    if (hac >= 3) { stats.arsenalDamagePct = 30; stats.arsenalFireRatePct = 20 }
+    if (hac >= 4) stats.arsenalBulletBonus = 2
+    if (hac >= 5) { stats.arsenalDamagePct = 70; stats.arsenalLaserSizePct = 45 }
+    if ((c['weapon_cache_holder_ult'] ?? 0) >= 1) stats.laserKillDropsSoul = true
     if ((c['interstellar_missile'] ?? 0) >= 1) {
       stats.interstellarMissile = true
       if (stats.missileLaunchers === 0) stats.missileLaunchers = 1
@@ -450,10 +567,52 @@ export const useGameStore = defineStore('game', () => {
     return stats
   })
 
-  // Skill: Sóng tầm nhiệt huỷ diệt (Star Keeper)
-  const skillCooldown = ref(0)          // giây còn lại (0 = sẵn sàng)
+  // Skill: Sóng tầm nhiệt huỷ diệt (Star Keeper) / Thu thập linh hồn (Star Holder)
+  const skillCooldown = ref(0)          // giây còn lại (0 = sẵn sàng) — chỉ dùng cho star_keeper
   const skillActivationPending = ref(false) // GameCanvas tiêu thụ flag này
-  const isSkillReady = computed(() => skillCooldown.value <= 0)
+  const fragmentCount = ref(0)           // Star Holder: mảnh linh hồn đã thu thập
+
+  // ─── Artifact & Durability state ─────────────────────────────────────────────
+  const ownedArtifacts = ref<string[]>([])
+  const equippedArtifacts = ref<Record<string, string[]>>({})  // shipId → artifactId[]
+  const shipDurabilities = ref<Record<string, number>>({ star_keeper: 100, star_holder: 90 })
+  // Runtime artifact progress (0–1), written by GameCanvas each frame for HUD
+  const neutronVacuumPct = ref(0)
+  const manaCorePct = ref(0)
+
+  // ─── Daily missions ───────────────────────────────────────────────────────────
+  const dailyMissions = ref<DailyMission[]>([])
+  const dailyDate = ref('')
+  const milestone2Claimed = ref(false)
+  const milestone5Claimed = ref(false)
+
+  // ─── Session tracking (per run) ───────────────────────────────────────────────
+  const sessionKillsTotal = ref(0)
+  const sessionBossKillsTotal = ref(0)
+  const sessionCardsChosen = ref(0)
+  const sessionStartMs = ref(0)
+  const isAdminMode = ref(false)
+
+  const isSkillReady = computed(() =>
+    selectedShip.value === 'star_holder'
+      ? fragmentCount.value >= 10
+      : skillCooldown.value <= 0
+  )
+
+  // ─── Artifact stats computed ──────────────────────────────────────────────────
+  const artifactStats = computed(() => {
+    const equipped = equippedArtifacts.value[selectedShip.value] ?? []
+    return {
+      expMult:               equipped.includes('neutron_star') ? 1.2 : 1.0,
+      damageTakenReduction:  equipped.includes('carbon_core')  ? 0.1 : 0,
+      hpPerLevel:            equipped.includes('carbon_core')  ? 5   : 0,
+      speedBonus:            equipped.includes('stardust')     ? 0.1 : 0,
+      damageBonus:           equipped.includes('stardust')     ? 0.1 : 0,
+      extraBullet:           equipped.includes('mana_core')    ? 1   : 0,
+      neutronVacuumActive:   equipped.includes('neutron_star'),
+      manaCoreActive:        equipped.includes('mana_core'),
+    }
+  })
 
   // Computed
   const expToNextLevel = computed(() => playerLevel.value * 100)
@@ -486,7 +645,7 @@ export const useGameStore = defineStore('game', () => {
 
   // Thêm exp trong session (không lưu, dùng expOrb)
   function gainSessionExp(amount: number) {
-    const multi = 1 + permUpgrades.value.expBonus * 0.1
+    const multi = (1 + permUpgrades.value.expBonus * 0.1) * artifactStats.value.expMult
     playerExp.value += Math.round(amount * multi)
     if (playerExp.value >= expToNextLevel.value) {
       playerExp.value -= expToNextLevel.value
@@ -521,6 +680,8 @@ export const useGameStore = defineStore('game', () => {
     const supFilled = getSupportSlotsFilled()
 
     const available = ALL_CARD_DEFS.filter(def => {
+      // Ship-specific cards only available when using the matching ship
+      if (def.shipId && def.shipId !== selectedShip.value) return false
       if (def.type === 'ultimate') {
         if (!def.requiresAttackId || !def.requiresSupportId) return false
         const atkDef = ALL_CARD_DEFS.find(c => c.id === def.requiresAttackId)
@@ -544,12 +705,19 @@ export const useGameStore = defineStore('game', () => {
     const currentLv = activeCards.value[cardId] ?? 0
     if (currentLv >= def.maxLevel) return
     activeCards.value = { ...activeCards.value, [cardId]: currentLv + 1 }
+    sessionCardsChosen.value++
     isLevelUpPending.value = false
     isPaused.value = false
   }
 
   function triggerLevelUp() {
     if (playerLevel.value >= 10) unlockAchievement('level_10')
+    // Carbon core: +5 max HP per level-up
+    const hpBonus = artifactStats.value.hpPerLevel
+    if (hpBonus > 0) {
+      playerMaxHp.value = Math.min(300, playerMaxHp.value + hpBonus)
+      playerHp.value = Math.min(playerMaxHp.value, playerHp.value + hpBonus)
+    }
     levelUpCardChoices.value = buildCardChoices()
     if (levelUpCardChoices.value.length === 0) return  // all cards maxed, skip
     isLevelUpPending.value = true
@@ -623,7 +791,9 @@ export const useGameStore = defineStore('game', () => {
 
   function takeDamage(amount: number) {
     if (isGameOverSequence.value) return
-    playerHp.value = Math.max(0, playerHp.value - amount)
+    const reduction = artifactStats.value.damageTakenReduction
+    const actualDmg = reduction > 0 ? Math.max(1, Math.round(amount * (1 - reduction))) : amount
+    playerHp.value = Math.max(0, playerHp.value - actualDmg)
     if (playerHp.value <= 0) {
       playerHp.value = 0
       isGameOverSequence.value = true
@@ -633,6 +803,8 @@ export const useGameStore = defineStore('game', () => {
 
   function finalizeGameOver() {
     isGameOverSequence.value = false
+    // Tàu bị phá hủy: mất thêm độ bền
+    consumeDurability(selectedShip.value, 15)
     goldEarnedThisRun.value = Math.floor(currentStage.value * 5) + Math.floor(currentScore.value / 100)
     playerCoins.value += goldEarnedThisRun.value
 
@@ -652,15 +824,49 @@ export const useGameStore = defineStore('game', () => {
     if (playerCoins.value >= 5000) unlockAchievement('earn_5000g')
 
     isPlaying.value = false
+    updateRunMissions()
     saveProgress()
+  }
+
+  // Ship purchase + selection
+  function buyShip(id: string, cost: number): boolean {
+    if (playerCoins.value < cost) return false
+    if (ownedShips.value.includes(id)) return false
+    playerCoins.value -= cost
+    ownedShips.value = [...ownedShips.value, id]
+    saveProgress()
+    return true
+  }
+
+  function selectShip(id: string) {
+    if (!ownedShips.value.includes(id)) return
+    selectedShip.value = id
+    saveProgress()
+  }
+
+  function addKill() {
+    stageEnemiesKilled.value++
+    sessionKillsTotal.value++
+  }
+
+  function addBossKill() {
+    sessionBossKillsTotal.value++
+    unlockAchievement('kill_boss')
   }
 
   // Skill actions
   function activateSkill() {
-    if (skillCooldown.value > 0) return
-    unlockAchievement('skill_use')
-    skillActivationPending.value = true
-    skillCooldown.value = 30 * (1 - cardStats.value.cdReductionPct)
+    if (selectedShip.value === 'star_holder') {
+      if (fragmentCount.value < 10) return
+      unlockAchievement('skill_use')
+      skillActivationPending.value = true
+      // fragmentCount sẽ được reset bởi GameCanvas sau khi bắn hết tên lửa
+    } else {
+      if (skillCooldown.value > 0) return
+      unlockAchievement('skill_use')
+      skillActivationPending.value = true
+      skillCooldown.value = 30 * (1 - cardStats.value.cdReductionPct)
+    }
   }
 
   function tickSkillCooldown(deltaSeconds: number) {
@@ -687,16 +893,20 @@ export const useGameStore = defineStore('game', () => {
     stageComplete.value = false
     playerLevel.value = 1
     playerExp.value = 0
-    // Áp dụng nâng cấp vĩnh viễn vào chỉ số bắt đầu
-    playerMaxHp.value = Math.min(300, 100 + permUpgrades.value.baseHp * 25)
+    // Áp dụng nâng cấp vĩnh viễn + cổ vật vào chỉ số bắt đầu
+    const isHolder = selectedShip.value === 'star_holder'
+    const aStats = artifactStats.value
+    playerMaxHp.value = Math.min(300, (isHolder ? 180 : 100) + permUpgrades.value.baseHp * 25)
     playerHp.value = playerMaxHp.value
+    const baseDmg = isHolder ? 25 : 10
+    const baseSpd = isHolder ? 1.2 : 1.0
     upgrades.value = {
-      bulletSpeed: 1,
-      bulletCount: 1 + permUpgrades.value.bulletCount,
-      shipSpeed: Math.min(1.5, 1 + permUpgrades.value.baseSpeed * 0.05),
+      bulletSpeed: isHolder ? 1.2 : 1,
+      bulletCount: 1 + permUpgrades.value.bulletCount + aStats.extraBullet,
+      shipSpeed: Math.min(isHolder ? 1.75 : 1.5, (baseSpd + permUpgrades.value.baseSpeed * 0.05) * (1 + aStats.speedBonus)),
       shield: 0,
       bombCount: 0,
-      damage: Math.min(100, 10 + permUpgrades.value.baseDamage * 5),
+      damage: Math.min(isHolder ? 150 : 100, (baseDmg + permUpgrades.value.baseDamage * 5) * (1 + aStats.damageBonus)),
       collectRange: 40,
       hpRegen: 0,
     }
@@ -706,6 +916,7 @@ export const useGameStore = defineStore('game', () => {
     isGameOverSequence.value = false
     skillCooldown.value = 0
     skillActivationPending.value = false
+    fragmentCount.value = 0
     // Reset card system
     activeCards.value = {}
     shieldActive.value = false
@@ -713,6 +924,13 @@ export const useGameStore = defineStore('game', () => {
     shieldCooldownLeft.value = 0
     isPlaying.value = true
     isPaused.value = false
+    // Reset session tracking
+    sessionKillsTotal.value = 0
+    sessionBossKillsTotal.value = 0
+    sessionCardsChosen.value = 0
+    sessionStartMs.value = Date.now()
+    // Tiêu hao độ bền khi ra trận
+    consumeDurability(selectedShip.value, 5)
   }
 
   function endGame() {
@@ -723,6 +941,7 @@ export const useGameStore = defineStore('game', () => {
       playerCoins.value += goldEarnedThisRun.value
       const earnedAccountExp = currentStage.value * 10 + Math.floor(currentScore.value / 50)
       addAccountExp(earnedAccountExp)
+      updateRunMissions()
     }
     isPlaying.value = false
     saveProgress()
@@ -746,6 +965,179 @@ export const useGameStore = defineStore('game', () => {
     saveProgress()
   }
 
+  // ─── Artifact actions ─────────────────────────────────────────────────────────
+  function buyArtifact(id: string): boolean {
+    const def = ALL_ARTIFACT_DEFS.find(d => d.id === id)
+    if (!def) return false
+    if (ownedArtifacts.value.includes(id)) return false
+    if (playerCoins.value < def.cost) return false
+    playerCoins.value -= def.cost
+    ownedArtifacts.value = [...ownedArtifacts.value, id]
+    saveProgress()
+    return true
+  }
+
+  function equipArtifact(shipId: string, artifactId: string) {
+    if (!ownedArtifacts.value.includes(artifactId)) return
+    const slots = SHIP_ARTIFACT_SLOTS[shipId] ?? 1
+    const current = equippedArtifacts.value[shipId] ?? []
+    if (current.includes(artifactId)) return
+    if (current.length >= slots) return
+    equippedArtifacts.value = { ...equippedArtifacts.value, [shipId]: [...current, artifactId] }
+    saveProgress()
+  }
+
+  function unequipArtifact(shipId: string, artifactId: string) {
+    const current = equippedArtifacts.value[shipId] ?? []
+    equippedArtifacts.value = { ...equippedArtifacts.value, [shipId]: current.filter(id => id !== artifactId) }
+    saveProgress()
+  }
+
+  // ─── Durability actions ───────────────────────────────────────────────────────
+  function canUseShip(shipId: string): boolean {
+    const dur = shipDurabilities.value[shipId] ?? (SHIP_DURABILITY_MAX[shipId] ?? 100)
+    return dur >= 10
+  }
+
+  function consumeDurability(shipId: string, amount: number) {
+    const maxDur = SHIP_DURABILITY_MAX[shipId] ?? 100
+    const current = shipDurabilities.value[shipId] ?? maxDur
+    shipDurabilities.value = { ...shipDurabilities.value, [shipId]: Math.max(0, current - amount) }
+  }
+
+  function tickDurabilityRegen() {
+    const updated = { ...shipDurabilities.value }
+    for (const [shipId, maxDur] of Object.entries(SHIP_DURABILITY_MAX)) {
+      const current = updated[shipId] ?? maxDur
+      if (current < maxDur) updated[shipId] = Math.min(maxDur, current + 1)
+    }
+    shipDurabilities.value = updated
+    saveProgress()
+  }
+
+  // ─── Daily mission functions ──────────────────────────────────────────────────
+  function _seededRand(seed: number): () => number {
+    let s = (seed === 0 ? 1 : seed) | 0
+    return () => {
+      s ^= s << 13; s ^= s >> 17; s ^= s << 5
+      return (s >>> 0) / 0x100000000
+    }
+  }
+
+  function generateDailyMissions() {
+    const d = new Date()
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    if (dailyDate.value === today && dailyMissions.value.length === 5) return
+    if (dailyDate.value !== today) {
+      milestone2Claimed.value = false
+      milestone5Claimed.value = false
+    }
+    dailyDate.value = today
+    const seed = parseInt(today.replace(/-/g, ''), 10)
+    const rand = _seededRand(seed)
+    const shuffled = [...MISSION_POOL].sort(() => rand() - 0.5)
+    const picked: typeof MISSION_POOL = []
+    const usedKeys = new Set<string>()
+    for (const entry of shuffled) {
+      const key = `${entry.kind}:${entry.shipId ?? ''}`
+      if (!usedKeys.has(key) && picked.length < 5) {
+        usedKeys.add(key)
+        picked.push(entry)
+      }
+    }
+    // Restore progress if date is same (shouldn't happen but just in case)
+    const prevById = Object.fromEntries(dailyMissions.value.map(m => [m.id, m]))
+    dailyMissions.value = picked.map((entry, i) => {
+      const vIdx = Math.floor(rand() * entry.variants.length)
+      const variant = entry.variants[Math.min(vIdx, entry.variants.length - 1)]!
+      const id = `m${i}_${today.replace(/-/g, '')}`
+      const prev = prevById[id]
+      return prev ?? {
+        id,
+        kind: entry.kind,
+        shipId: entry.shipId,
+        desc: variant.desc,
+        target: variant.target,
+        progress: 0,
+        completed: false,
+        claimed: false,
+        reward: variant.reward,
+      }
+    })
+    saveProgress()
+  }
+
+  function updateRunMissions() {
+    if (dailyMissions.value.length === 0) return
+    const runScore    = currentScore.value
+    const runKills    = sessionKillsTotal.value
+    const runGold     = goldEarnedThisRun.value
+    const runStage    = Math.max(0, currentStage.value - 1)
+    const runBoss     = sessionBossKillsTotal.value
+    const playTimeSec = Math.floor((Date.now() - sessionStartMs.value) / 1000)
+    const cardsPicked = sessionCardsChosen.value
+    const levelReached = playerLevel.value
+    const shipUsed    = selectedShip.value
+    let changed = false
+    dailyMissions.value = dailyMissions.value.map(m => {
+      if (m.completed) return m
+      const updated = { ...m }
+      switch (m.kind) {
+        case 'score':          if (runScore     >= m.target) updated.progress = m.target; break
+        case 'kills':          if (runKills     >= m.target) updated.progress = m.target; break
+        case 'earn_gold':      if (runGold      >= m.target) updated.progress = m.target; break
+        case 'reach_stage':    if (runStage     >= m.target) updated.progress = m.target; break
+        case 'kill_boss':      updated.progress = Math.min(m.target, m.progress + runBoss); break
+        case 'play_with_ship': if (m.shipId === shipUsed) updated.progress = Math.min(m.target, m.progress + 1); break
+        case 'play_time':      if (playTimeSec  >= m.target) updated.progress = m.target; break
+        case 'choose_upgrades': if (cardsPicked >= m.target) updated.progress = m.target; break
+        case 'earn_upgrades':  if (levelReached >= m.target) updated.progress = m.target; break
+      }
+      if (updated.progress >= m.target) updated.completed = true
+      if (updated.progress !== m.progress || updated.completed !== m.completed) changed = true
+      return updated
+    })
+    if (changed) saveProgress()
+  }
+
+  function claimMissionReward(id: string) {
+    const m = dailyMissions.value.find(x => x.id === id)
+    if (!m || !m.completed || m.claimed) return
+    dailyMissions.value = dailyMissions.value.map(x => x.id === id ? { ...x, claimed: true } : x)
+    if (m.reward.coins)      playerCoins.value  += m.reward.coins
+    if (m.reward.ruby)       playerRuby.value   += m.reward.ruby
+    if (m.reward.accountExp) addAccountExp(m.reward.accountExp)
+    saveProgress()
+  }
+
+  function claimMilestone(which: 2 | 5) {
+    const doneCount = dailyMissions.value.filter(m => m.completed).length
+    if (which === 2) {
+      if (doneCount < 2 || milestone2Claimed.value) return
+      milestone2Claimed.value = true
+      playerCoins.value += 500
+      addAccountExp(100)
+    } else {
+      if (doneCount < 5 || milestone5Claimed.value) return
+      milestone5Claimed.value = true
+      playerRuby.value += 5
+    }
+    saveProgress()
+  }
+
+  function activateAdmin() {
+    isAdminMode.value = true
+    playerCoins.value = 99999
+    playerRuby.value = 999
+    ownedShips.value = ['star_keeper', 'star_holder']
+    ownedArtifacts.value = ALL_ARTIFACT_DEFS.map(a => a.id)
+    shipDurabilities.value = { ...SHIP_DURABILITY_MAX }
+    dailyMissions.value = dailyMissions.value.map(m =>
+      ({ ...m, progress: m.target, completed: true })
+    )
+    saveProgress()
+  }
+
   function saveProgress() {
     const data = {
       playerCoins: playerCoins.value,
@@ -764,6 +1156,17 @@ export const useGameStore = defineStore('game', () => {
       unlockedAchievements: unlockedAchievements.value,
       // Permanent upgrades
       permUpgrades: permUpgrades.value,
+      // Artifacts
+      ownedArtifacts: ownedArtifacts.value,
+      equippedArtifacts: equippedArtifacts.value,
+      // Durability
+      shipDurabilities: shipDurabilities.value,
+      durabilityLastSave: Date.now(),
+      // Daily missions
+      dailyMissions: dailyMissions.value,
+      dailyDate: dailyDate.value,
+      milestone2Claimed: milestone2Claimed.value,
+      milestone5Claimed: milestone5Claimed.value,
     }
     localStorage.setItem('ban-may-bay-save', JSON.stringify(data))
   }
@@ -794,10 +1197,30 @@ export const useGameStore = defineStore('game', () => {
             fireRate:    data.permUpgrades.fireRate    ?? 0,
           }
         }
+        // Artifacts
+        ownedArtifacts.value    = data.ownedArtifacts    ?? []
+        equippedArtifacts.value = data.equippedArtifacts ?? {}
+        // Durability — apply offline regen
+        const savedDurs = data.shipDurabilities ?? {}
+        const lastSave = data.durabilityLastSave ?? Date.now()
+        const minutesPassed = Math.floor((Date.now() - lastSave) / 60000)
+        const regenDurs: Record<string, number> = {}
+        for (const [shipId, maxDur] of Object.entries(SHIP_DURABILITY_MAX)) {
+          const saved = savedDurs[shipId] ?? maxDur
+          regenDurs[shipId] = Math.min(maxDur, saved + minutesPassed)
+        }
+        shipDurabilities.value = regenDurs
+        // Daily missions
+        dailyDate.value         = data.dailyDate        ?? ''
+        dailyMissions.value     = data.dailyMissions    ?? []
+        milestone2Claimed.value = data.milestone2Claimed ?? false
+        milestone5Claimed.value = data.milestone5Claimed ?? false
       } catch {
         // dữ liệu lưu bị hỏng, giữ mặc định
       }
     }
+    // Refresh/generate today's missions after loading
+    generateDailyMissions()
   }
 
   return {
@@ -866,11 +1289,42 @@ export const useGameStore = defineStore('game', () => {
     buyPermUpgrade,
     skillCooldown,
     skillActivationPending,
+    fragmentCount,
     isSkillReady,
     activateSkill,
     tickSkillCooldown,
     consumeSkillActivation,
     tickShield,
     absorbShieldHit,
+    buyShip,
+    selectShip,
+    // Artifacts
+    ownedArtifacts,
+    equippedArtifacts,
+    artifactStats,
+    neutronVacuumPct,
+    manaCorePct,
+    buyArtifact,
+    equipArtifact,
+    unequipArtifact,
+    // Durability
+    shipDurabilities,
+    canUseShip,
+    consumeDurability,
+    tickDurabilityRegen,
+    // Daily missions
+    dailyMissions,
+    dailyDate,
+    milestone2Claimed,
+    milestone5Claimed,
+    generateDailyMissions,
+    claimMissionReward,
+    claimMilestone,
+    // Admin
+    isAdminMode,
+    activateAdmin,
+    // Kill tracking (called from GameCanvas)
+    addKill,
+    addBossKill,
   }
 })

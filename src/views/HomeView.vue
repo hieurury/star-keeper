@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useGameStore, ALL_CARD_DEFS, type CardDef } from '../stores/gameStore'
+import { useGameStore, ALL_CARD_DEFS, ALL_ARTIFACT_DEFS, SHIP_ARTIFACT_SLOTS, SHIP_DURABILITY_MAX, type CardDef } from '../stores/gameStore'
 import PixelButton from '../components/ui/PixelButton.vue'
-import PixelPanel from '../components/ui/PixelPanel.vue'
 import TourOverlay, { type TourStep } from '../components/ui/TourOverlay.vue'
-import { PhCoins, PhDiamond, PhTrophy, PhSword, PhShield, PhCrown } from '@phosphor-icons/vue'
+import ArtifactIcon from '../components/ui/ArtifactIcon.vue'
+import { PhCoins, PhDiamond, PhSword, PhShield, PhCrown } from '@phosphor-icons/vue'
 
 const router = useRouter()
 const game = useGameStore()
@@ -14,11 +14,31 @@ const AVATARS = ['🚀', '✈', '⚡', '🔥', '🛸', '⭐']
 
 const showProfileSheet = ref(false)
 const showShipsPanel = ref(false)
+const shipIndex = ref(0)
+const SHIP_COUNT = 2
+
+function prevShip() { shipIndex.value = (shipIndex.value - 1 + SHIP_COUNT) % SHIP_COUNT }
+function nextShip() { shipIndex.value = (shipIndex.value + 1) % SHIP_COUNT }
+
+// Touch swipe for carousel
+let swipeTouchStartX = 0
+function onShipTouchStart(e: TouchEvent) { swipeTouchStartX = e.touches[0].clientX }
+function onShipTouchEnd(e: TouchEvent) {
+  const dx = e.changedTouches[0].clientX - swipeTouchStartX
+  if (Math.abs(dx) > 40) dx < 0 ? nextShip() : prevShip()
+}
 const showCorePanel = ref(false)
 const selectedCard = ref<CardDef | null>(null)
 const showComingSoon = ref(false)
+const showArtifactsPanel = ref(false)
+const showMissionsPanel = ref(false)
+const showAdminInput = ref(false)
+const adminInput = ref('')
 const showTourPrompt = ref(false)
 const showTour = ref(false)
+
+const completedMissions = computed(() => game.dailyMissions.filter(m => m.completed).length)
+const unclaimedMissions = computed(() => game.dailyMissions.filter(m => m.completed && !m.claimed).length)
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -70,6 +90,20 @@ function onTourDone() {
   localStorage.setItem('hasTakenTour', '1')
 }
 
+function confirmAdmin() {
+  if (adminInput.value.trim().toUpperCase() === 'ADMIN') {
+    game.activateAdmin()
+  }
+  showAdminInput.value = false
+  adminInput.value = ''
+}
+function onAdminKeyDown(e: KeyboardEvent) {
+  if (e.ctrlKey && e.shiftKey && e.key === 'Enter') {
+    showAdminInput.value = true
+    adminInput.value = ''
+  }
+}
+
 const attackCards = ALL_CARD_DEFS.filter(c => c.type === 'attack')
 const supportCards = ALL_CARD_DEFS.filter(c => c.type === 'support')
 const ultimateCards = ALL_CARD_DEFS.filter(c => c.type === 'ultimate')
@@ -87,11 +121,36 @@ const starKeeperStats = [
   { label: 'HP',          display: '100 / 300', pct: 33, color: '#44ff88' },
 ]
 
+const starHolderStats = [
+  { label: 'SÁT THƯƠNG',  display: '25 / 150',  pct: 17, color: '#ff4444' },
+  { label: 'TỐC ĐỘ BẮN', display: '1.2 / 1.8', pct: 67, color: '#ff9900' },
+  { label: 'ĐẠN / LỚT',   display: '1 / 3',    pct: 33, color: '#ffcc00' },
+  { label: 'TỐC BAY',     display: '1.2 / 1.75', pct: 69, color: '#44aaff' },
+  { label: 'HP',          display: '180 / 300', pct: 60, color: '#44ff88' },
+]
+
+function buyShip(id: string, cost: number) {
+  game.buyShip(id, cost)
+}
+function selectShip(id: string) {
+  game.selectShip(id)
+}
+
+let regenInterval: ReturnType<typeof setInterval> | null = null
+
 onMounted(() => {
   game.loadProgress()
   if (!localStorage.getItem('hasTakenTour')) {
     showTourPrompt.value = true
   }
+  // Thụ động tái sinh độ bền: 1/phút
+  regenInterval = setInterval(() => game.tickDurabilityRegen(), 60000)
+  document.addEventListener('keydown', onAdminKeyDown)
+})
+
+onUnmounted(() => {
+  if (regenInterval) clearInterval(regenInterval)
+  document.removeEventListener('keydown', onAdminKeyDown)
 })
 
 function startGame() {
@@ -160,6 +219,13 @@ function onShipNameKey(e: KeyboardEvent) {
           <div class="profile-ship">{{ game.shipName }}</div>
         </div>
       </button>
+      <!-- LV + EXP bar -->
+      <div class="topbar-lv">
+        <div class="topbar-lv__badge">LV {{ game.accountLevel }}</div>
+        <div class="topbar-lv__bar">
+          <div class="topbar-lv__fill" :style="{ width: game.accountExpPercent + '%' }" />
+        </div>
+      </div>
       <div class="currency-display" data-tour="currency">
         <div class="gold-display">
           <span class="gold-icon"><PhCoins weight="fill" :size="16" /></span>
@@ -172,53 +238,100 @@ function onShipNameKey(e: KeyboardEvent) {
       </div>
     </div>
 
+    <!-- Mission FAB -->
+    <button class="mission-fab" @click="showMissionsPanel = true">
+      <span class="mission-fab__icon">📋</span>
+      <span v-if="unclaimedMissions > 0" class="mission-fab__badge">{{ unclaimedMissions }}</span>
+    </button>
+
     <div class="home__container">
       <!-- Logo / Title -->
       <div class="home__hero">
         <div class="home__title-wrapper">
-          <h1 class="home__title">BẮN<br/>MÁY BAY</h1>
-          <div class="home__subtitle">STAR SHOOTER</div>
+          <h1 class="home__title">STAR<br/>KEEPER</h1>
+          <div class="home__subtitle">NGƯỜI HỘ SAO</div>
         </div>
         <div class="home__ship-icon">✈</div>
       </div>
 
-      <!-- Player Stats -->
-      <div data-tour="stats-panel">
-      <PixelPanel title="Tiến Độ">
-        <div class="stats-grid">
-          <div class="stat-item">
-            <span class="stat-label">Cấp độ</span>
-            <span class="stat-value">{{ game.accountLevel }}</span>
+      <!-- Equipment Panel -->
+      <div data-tour="stats-panel" class="equip-panel">
+        <div class="equip-panel__title">TRANG BỊ</div>
+        <div class="equip-panel__body">
+          <!-- Left: ship SVG -->
+          <div class="equip-panel__ship">
+            <template v-if="game.selectedShip === 'star_keeper'">
+              <svg viewBox="-32 -28 64 58" width="56" height="54">
+                <polygon points="-10,0 -28,18 -10,10" fill="#0077bb"/>
+                <polygon points="10,0 28,18 10,10" fill="#0077bb"/>
+                <rect x="-10" y="-22" width="20" height="34" fill="#00cfff"/>
+                <rect x="-5" y="-22" width="10" height="13" fill="#ffd700"/>
+                <rect x="-6" y="12" width="12" height="9" fill="#ff6600" opacity="0.85"/>
+              </svg>
+            </template>
+            <template v-else>
+              <svg viewBox="-34 -32 68 66" width="56" height="54">
+                <polygon points="-9,4 -30,20 -9,14" fill="#dd6600"/>
+                <polygon points="-25,18 -30,20 -20,22" fill="#ff8800"/>
+                <polygon points="9,4 30,20 9,14" fill="#dd6600"/>
+                <polygon points="25,18 30,20 20,22" fill="#ff8800"/>
+                <rect x="-9" y="-24" width="18" height="38" fill="#ff9900"/>
+                <polygon points="0,-28 8,-18 -8,-18" fill="#ffee44"/>
+                <rect x="-6" y="14" width="12" height="10" fill="#ff4400" opacity="0.9"/>
+                <rect x="-3" y="18" width="6" height="6" fill="#ffcc00" opacity="0.85"/>
+              </svg>
+            </template>
           </div>
-          <div class="stat-item">
-            <span class="stat-label"><PhCoins weight="fill" :size="11" style="vertical-align:middle;margin-right:2px"/> Vàng</span>
-            <span class="stat-value coin">{{ game.playerCoins }}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Kỷ lục</span>
-            <span class="stat-value score">{{ game.highScore }}</span>
+          <!-- Right: stats -->
+          <div class="equip-panel__right">
+            <!-- Durability bar -->
+            <div class="equip-dur">
+              <div class="equip-dur__label">
+                ĐỘ BỀN
+                <span class="equip-dur__val">{{ game.shipDurabilities[game.selectedShip] ?? SHIP_DURABILITY_MAX[game.selectedShip] }} / {{ SHIP_DURABILITY_MAX[game.selectedShip] }}</span>
+              </div>
+              <div class="equip-dur__track">
+                <div
+                  class="equip-dur__fill"
+                  :class="{
+                    'dur--low':  ((game.shipDurabilities[game.selectedShip] ?? 100) / (SHIP_DURABILITY_MAX[game.selectedShip] ?? 100)) <= 0.3,
+                    'dur--mid':  ((game.shipDurabilities[game.selectedShip] ?? 100) / (SHIP_DURABILITY_MAX[game.selectedShip] ?? 100)) > 0.3 && ((game.shipDurabilities[game.selectedShip] ?? 100) / (SHIP_DURABILITY_MAX[game.selectedShip] ?? 100)) <= 0.6,
+                  }"
+                  :style="{ width: (((game.shipDurabilities[game.selectedShip] ?? SHIP_DURABILITY_MAX[game.selectedShip]) / SHIP_DURABILITY_MAX[game.selectedShip]) * 100) + '%' }"
+                />
+              </div>
+              <div v-if="!game.canUseShip(game.selectedShip)" class="equip-dur__warn">⚠ Cần ≥ 10 để xuất trận</div>
+            </div>
+            <!-- Artifact slot(s) -->
+            <div class="equip-artifacts">
+              <div class="equip-artifacts__label">CỔ VẬT</div>
+              <div class="equip-artifacts__slots">
+                <template v-for="slotIdx in (SHIP_ARTIFACT_SLOTS[game.selectedShip] ?? 1)" :key="slotIdx">
+                  <div
+                    class="equip-slot"
+                    :class="{ 'equip-slot--filled': !!(game.equippedArtifacts[game.selectedShip] ?? [])[slotIdx - 1] }"
+                    @click="showArtifactsPanel = true"
+                  >
+                    <template v-if="(game.equippedArtifacts[game.selectedShip] ?? [])[slotIdx - 1]">
+                      <ArtifactIcon :id="(game.equippedArtifacts[game.selectedShip] ?? [])[slotIdx - 1]!" :size="18" class="equip-slot__icon" />
+                      <span class="equip-slot__name">{{ ALL_ARTIFACT_DEFS.find(a => a.id === (game.equippedArtifacts[game.selectedShip] ?? [])[slotIdx - 1])?.name }}</span>
+                    </template>
+                    <template v-else>
+                      <span class="equip-slot__empty">+ Gắn cổ vật</span>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </div>
           </div>
         </div>
-        <!-- Account EXP bar -->
-        <div class="exp-bar-wrapper">
-          <div class="exp-bar-label">EXP TÀI KHOẢN {{ game.accountExp }} / {{ game.accountExpToNextLevel }}</div>
-          <div class="exp-bar">
-            <div class="exp-bar__fill" :style="{ width: game.accountExpPercent + '%' }" />
-          </div>
-        </div>
-        <!-- Achievements -->
-        <div v-if="game.unlockedAchievements.length > 0" class="ach-summary">
-          <div class="ach-summary__label"><PhTrophy weight="fill" :size="13" style="vertical-align:middle;margin-right:3px" />THÀNH TỰU ({{ game.unlockedAchievements.length }})</div>
-          <div class="ach-summary__count">{{ game.unlockedAchievements.length }} / 12 mở khóa</div>
-        </div>
-      </PixelPanel>
       </div>
 
       <!-- Menu buttons -->
       <div class="home__menu">
         <PixelButton label="▶ Bắt Đầu" size="lg" data-tour="play-btn" @click="startGame" />
         <PixelButton label="Phi Cơ" variant="secondary" size="md" data-tour="ships-btn" @click="showShipsPanel = true" />
-        <PixelButton label="Nâng Cấp" variant="secondary" size="md" @click="showComingSoon = true" />
+        <PixelButton label="Cổ Vật" variant="secondary" size="md" @click="showArtifactsPanel = true" />
         <PixelButton label="Lõi Sao" variant="secondary" size="md" data-tour="core-btn" @click="showCorePanel = true" />
       </div>
 
@@ -299,51 +412,166 @@ function onShipNameKey(e: KeyboardEvent) {
             <button class="sheet-close" @click="showShipsPanel = false">✕</button>
           </div>
 
-          <div class="ships-scroll">
-            <!-- Star Keeper card -->
-            <div class="ship-card">
-              <div class="ship-card__header">
-                <svg class="ship-svg" viewBox="-32 -28 64 58" width="60" height="58">
-                  <!-- Wings -->
-                  <polygon points="-10,0 -28,18 -10,10" fill="#0077bb"/>
-                  <polygon points="10,0 28,18 10,10" fill="#0077bb"/>
-                  <!-- Body -->
-                  <rect x="-10" y="-22" width="20" height="34" fill="#00cfff"/>
-                  <!-- Cockpit -->
-                  <rect x="-5" y="-22" width="10" height="13" fill="#ffd700"/>
-                  <!-- Thruster -->
-                  <rect x="-6" y="12" width="12" height="9" fill="#ff6600" opacity="0.85"/>
-                </svg>
-                <div class="ship-card__info">
-                  <div class="ship-card__name">STAR KEEPER</div>
-                  <div class="ship-card__tag">⭐ Phi cơ cơ bản · Miễn phí</div>
-                  <div class="ship-card__desc">Chiến cơ mức trung bình, cân bằng giữa tốc độ và sức mạnh. Lựa chọn đầu tiên cho mọi phi công.</div>
-                </div>
-              </div>
+          <!-- Carousel wrapper -->
+          <div
+            class="ship-carousel"
+            @touchstart.passive="onShipTouchStart"
+            @touchend.passive="onShipTouchEnd"
+          >
+            <!-- Slide track -->
+            <div class="ship-carousel__track" :style="{ transform: `translateX(${-shipIndex * 100}%)` }">
 
-              <!-- Stats bars -->
-              <div class="ship-stats">
-                <div v-for="stat in starKeeperStats" :key="stat.label" class="ship-stat">
-                  <span class="ship-stat__label">{{ stat.label }}</span>
-                  <div class="ship-stat__track">
-                    <div class="ship-stat__fill" :style="{ width: stat.pct + '%', background: stat.color }" />
+              <!-- Slide 0: Star Keeper -->
+              <div class="ship-carousel__slide">
+                <div class="ship-card" :class="{ 'ship-card--selected': game.selectedShip === 'star_keeper' }">
+                  <div class="ship-card__header">
+                    <svg class="ship-svg" viewBox="-32 -28 64 58" width="60" height="58">
+                      <polygon points="-10,0 -28,18 -10,10" fill="#0077bb"/>
+                      <polygon points="10,0 28,18 10,10" fill="#0077bb"/>
+                      <rect x="-10" y="-22" width="20" height="34" fill="#00cfff"/>
+                      <rect x="-5" y="-22" width="10" height="13" fill="#ffd700"/>
+                      <rect x="-6" y="12" width="12" height="9" fill="#ff6600" opacity="0.85"/>
+                    </svg>
+                    <div class="ship-card__info">
+                      <div class="ship-card__name">STAR KEEPER</div>
+                      <div class="ship-card__tag">⭐ Phi cơ cơ bản · Miễn phí</div>
+                      <div class="ship-card__desc">Chiến cơ mức trung bình, cân bằng giữa tốc độ và sức mạnh. Lựa chọn đầu tiên cho mọi phi công.</div>
+                    </div>
                   </div>
-                  <span class="ship-stat__val">{{ stat.display }}</span>
+                  <div class="ship-stats">
+                    <div v-for="stat in starKeeperStats" :key="stat.label" class="ship-stat">
+                      <span class="ship-stat__label">{{ stat.label }}</span>
+                      <div class="ship-stat__track"><div class="ship-stat__fill" :style="{ width: stat.pct + '%', background: stat.color }" /></div>
+                      <span class="ship-stat__val">{{ stat.display }}</span>
+                    </div>
+                  </div>
+                  <div class="ship-skill">
+                    <div class="ship-skill__name"><PhCrown weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>SÓNG TẦM NHIỀT HUỶ DIỆT</div>
+                    <div class="ship-skill__cd">⏱ Hồi chiêu: 30 giây</div>
+                    <div class="ship-skill__desc">Toả ra sóng nhiệt tốc độ cao, gây sát thương lên tất cả kẻ địch trên màn hình và huỷ toàn bộ đường đạn của đối phương.</div>
+                  </div>
+                  <div class="ship-card__actions">
+                    <button v-if="game.selectedShip !== 'star_keeper'" class="ship-btn ship-btn--select" @click="selectShip('star_keeper')">✓ Chọn phi cơ này</button>
+                    <div v-else class="ship-btn ship-btn--active">⚡ Đang sử dụng</div>
+                  </div>
                 </div>
               </div>
 
-              <!-- Skill -->
-              <div class="ship-skill">
-                <div class="ship-skill__name"><PhCrown weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>SÓNG TẦM NHIỀT HUỶ DIỆT</div>
-                <div class="ship-skill__cd">⏱ Hồi chiêu: 30 giây</div>
-                <div class="ship-skill__desc">Toả ra sóng nhiệt tốc độ cao, gây sát thương lên tất cả kẻ địch trên màn hình và huỷ toàn bộ đường đạn của đối phương.</div>
+              <!-- Slide 1: Star Holder -->
+              <div class="ship-carousel__slide">
+                <div class="ship-card" :class="{ 'ship-card--selected': game.selectedShip === 'star_holder' }">
+                  <div class="ship-card__header">
+                    <svg class="ship-svg" viewBox="-34 -32 68 66" width="60" height="60">
+                      <polygon points="-9,4 -30,20 -9,14" fill="#dd6600"/>
+                      <polygon points="-25,18 -30,20 -20,22" fill="#ff8800"/>
+                      <polygon points="9,4 30,20 9,14" fill="#dd6600"/>
+                      <polygon points="25,18 30,20 20,22" fill="#ff8800"/>
+                      <rect x="-9" y="-24" width="18" height="38" fill="#ff9900"/>
+                      <polygon points="0,-28 8,-18 -8,-18" fill="#ffee44"/>
+                      <rect x="-6" y="14" width="12" height="10" fill="#ff4400" opacity="0.9"/>
+                      <rect x="-3" y="18" width="6" height="6" fill="#ffcc00" opacity="0.85"/>
+                    </svg>
+                    <div class="ship-card__info">
+                      <div class="ship-card__name">STAR HOLDER</div>
+                      <div class="ship-card__tag" :class="game.ownedShips.includes('star_holder') ? 'tag--owned' : 'tag--locked'">
+                        {{ game.ownedShips.includes('star_holder') ? '✅ Đã sở hữu' : '🔒 Cần mở khoá · 5,000 🪙' }}
+                      </div>
+                      <div class="ship-card__desc">Chiến cơ tấn công cao, thân tàu thoi mạnh mẽ. Linh hồn kẻ địch trở thành vũ khí huỷ diệt.</div>
+                    </div>
+                  </div>
+                  <div class="ship-stats">
+                    <div v-for="stat in starHolderStats" :key="stat.label" class="ship-stat">
+                      <span class="ship-stat__label">{{ stat.label }}</span>
+                      <div class="ship-stat__track"><div class="ship-stat__fill" :style="{ width: stat.pct + '%', background: stat.color }" /></div>
+                      <span class="ship-stat__val">{{ stat.display }}</span>
+                    </div>
+                  </div>
+                  <div class="ship-skill ship-skill--orange">
+                    <div class="ship-skill__name">🔥 THU THẬP LINH HỒN</div>
+                    <div class="ship-skill__cd">⬡ Cần: 10 mảnh linh hồn</div>
+                    <div class="ship-skill__desc">Kẻ địch bị hạ có 30% cơ hội rơi mảnh linh hồn. Thu thập đủ 10 mảnh rồi kích hoạt để bắn tất cả thành tên lửa tự dẫn, tự phân tán tấn công nhiều mục tiêu.</div>
+                  </div>
+                  <div class="ship-card__actions">
+                    <template v-if="!game.ownedShips.includes('star_holder')">
+                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < 5000" @click="buyShip('star_holder', 5000)">
+                        {{ game.playerCoins >= 5000 ? 'Mua — 5,000 🪙' : 'Không đủ vàng' }}
+                      </button>
+                    </template>
+                    <template v-else>
+                      <button v-if="game.selectedShip !== 'star_holder'" class="ship-btn ship-btn--select" @click="selectShip('star_holder')">✓ Chọn phi cơ này</button>
+                      <div v-else class="ship-btn ship-btn--active">⚡ Đang sử dụng</div>
+                    </template>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <!-- Placeholder: phi cơ khác -->
-            <div class="ship-locked">
-              <div class="ship-locked__icon">🔒</div>
-              <div class="ship-locked__text">Phi cơ mới · Sắp ra mắt</div>
+            </div><!-- /.ship-carousel__track -->
+
+            <!-- Prev / Next arrows -->
+            <button class="ship-carousel__arrow ship-carousel__arrow--prev" :disabled="shipIndex === 0" @click="prevShip">‹</button>
+            <button class="ship-carousel__arrow ship-carousel__arrow--next" :disabled="shipIndex === SHIP_COUNT - 1" @click="nextShip">›</button>
+
+            <!-- Dot indicators -->
+            <div class="ship-carousel__dots">
+              <span
+                v-for="i in SHIP_COUNT"
+                :key="i"
+                class="ship-carousel__dot"
+                :class="{ 'ship-carousel__dot--active': shipIndex === i - 1 }"
+                @click="shipIndex = i - 1"
+              />
+            </div>
+          </div><!-- /.ship-carousel -->
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Artifacts Panel -->
+    <Transition name="sheet">
+      <div v-if="showArtifactsPanel" class="sheet-overlay" @click.self="showArtifactsPanel = false">
+        <div class="ships-sheet">
+          <div class="sheet-header">
+            <div style="width:36px"/>
+            <div class="sheet-title">CỔ VẬT</div>
+            <button class="sheet-close" @click="showArtifactsPanel = false">✕</button>
+          </div>
+          <div class="ships-scroll" style="padding: 14px;">
+            <div class="artifact-hint">Trang bị cổ vật vào ô cổ vật của phi cơ để nhận hiệu ứng đặc biệt trong trận.</div>
+            <div class="artifact-grid">
+              <div
+                v-for="art in ALL_ARTIFACT_DEFS"
+                :key="art.id"
+                class="artifact-card"
+                :class="{ 'artifact-card--owned': game.ownedArtifacts.includes(art.id) }"
+              >
+                <ArtifactIcon :id="art.id" :size="38" class="artifact-card__icon" />
+                <div class="artifact-card__name">{{ art.name }}</div>
+                <div class="artifact-card__desc">{{ art.desc }}</div>
+                <div class="artifact-card__cost" v-if="!game.ownedArtifacts.includes(art.id)">
+                  <PhCoins weight="fill" :size="11" style="vertical-align:middle;margin-right:3px;color:#f1c40f"/>{{ art.cost.toLocaleString() }}
+                </div>
+                <div class="artifact-card__actions">
+                  <button
+                    v-if="!game.ownedArtifacts.includes(art.id)"
+                    class="artifact-btn artifact-btn--buy"
+                    :disabled="game.playerCoins < art.cost"
+                    @click="game.buyArtifact(art.id)"
+                  >{{ game.playerCoins >= art.cost ? 'Mua' : 'Thiếu vàng' }}</button>
+                  <template v-else>
+                    <button
+                      v-if="(game.equippedArtifacts[game.selectedShip] ?? []).includes(art.id)"
+                      class="artifact-btn artifact-btn--unequip"
+                      @click="game.unequipArtifact(game.selectedShip, art.id)"
+                    >Tháo</button>
+                    <button
+                      v-else
+                      class="artifact-btn artifact-btn--equip"
+                      :disabled="((game.equippedArtifacts[game.selectedShip] ?? []).length) >= (SHIP_ARTIFACT_SLOTS[game.selectedShip] ?? 1)"
+                      @click="game.equipArtifact(game.selectedShip, art.id)"
+                    >Trang bị</button>
+                  </template>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -475,6 +703,76 @@ function onShipNameKey(e: KeyboardEvent) {
 
     <!-- Onboarding spotlight tour -->
     <TourOverlay v-if="showTour" :steps="TOUR_STEPS" @done="onTourDone" />
+
+    <!-- Missions Panel -->
+    <Transition name="sheet">
+      <div v-if="showMissionsPanel" class="sheet-overlay" @click.self="showMissionsPanel = false">
+        <div class="ships-sheet">
+          <div class="sheet-header">
+            <div style="width:36px"/>
+            <div class="sheet-title">NHIỆM VỤ HÔM NAY</div>
+            <button class="sheet-close" @click="showMissionsPanel = false">✕</button>
+          </div>
+          <div class="ships-scroll" style="padding: 14px 14px 24px;">
+            <div v-for="m in game.dailyMissions" :key="m.id" class="mission-item" :class="{ 'mission-item--done': m.completed }">
+              <div class="mission-item__top">
+                <span class="mission-item__desc">{{ m.desc }}</span>
+                <span class="mission-item__prog">{{ Math.min(m.progress, m.target) }}/{{ m.target }}</span>
+              </div>
+              <div class="mission-item__bar">
+                <div class="mission-item__fill" :style="{ width: (Math.min(m.progress, m.target) / m.target * 100) + '%' }" />
+              </div>
+              <div class="mission-item__reward">
+                <span class="mission-reward-label">Phần thưởng:</span>
+                <span v-if="m.reward.coins"> {{ m.reward.coins }}🪙</span>
+                <span v-if="m.reward.ruby"> {{ m.reward.ruby }}💎</span>
+                <span v-if="m.reward.accountExp"> {{ m.reward.accountExp }} EXP</span>
+              </div>
+              <button v-if="m.completed && !m.claimed" class="mission-claim-btn" @click="game.claimMissionReward(m.id)">Nhận thưởng</button>
+              <div v-else-if="m.claimed" class="mission-claimed">✓ Đã nhận</div>
+            </div>
+            <!-- Milestones -->
+            <div class="milestone-section">
+              <div class="milestone-section__title">CỘT MỐC</div>
+              <div class="milestone-item" :class="{ 'milestone-item--done': completedMissions >= 2, 'milestone-item--claimed': game.milestone2Claimed }">
+                <div class="milestone-item__desc">Hoàn thành 2 nhiệm vụ → 500🪙 + 100 EXP</div>
+                <span class="milestone-item__prog">{{ completedMissions }}/2</span>
+                <button v-if="completedMissions >= 2 && !game.milestone2Claimed" class="mission-claim-btn" @click="game.claimMilestone(2)">Nhận</button>
+                <div v-else-if="game.milestone2Claimed" class="mission-claimed">✓</div>
+              </div>
+              <div class="milestone-item" :class="{ 'milestone-item--done': completedMissions >= 5, 'milestone-item--claimed': game.milestone5Claimed }">
+                <div class="milestone-item__desc">Hoàn thành 5 nhiệm vụ → 5💎</div>
+                <span class="milestone-item__prog">{{ completedMissions }}/5</span>
+                <button v-if="completedMissions >= 5 && !game.milestone5Claimed" class="mission-claim-btn" @click="game.claimMilestone(5)">Nhận</button>
+                <div v-else-if="game.milestone5Claimed" class="mission-claimed">✓</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Admin input modal -->
+    <Transition name="sheet">
+      <div v-if="showAdminInput" class="sheet-overlay admin-overlay" @click.self="showAdminInput = false">
+        <div class="modal-dialog">
+          <div class="modal-dialog__title">NHẬP MÃ ADMIN</div>
+          <input
+            class="admin-input"
+            v-model="adminInput"
+            maxlength="10"
+            autofocus
+            placeholder="..."
+            @keydown.enter="confirmAdmin"
+            @keydown.escape="showAdminInput = false"
+          />
+          <div class="modal-dialog__actions">
+            <PixelButton label="Hủy" variant="secondary" size="md" @click="showAdminInput = false" />
+            <PixelButton label="Xác nhận" size="md" @click="confirmAdmin" />
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -895,12 +1193,70 @@ function onShipNameKey(e: KeyboardEvent) {
   flex-direction: column;
   overflow: hidden;
 }
-.ships-scroll {
-  overflow-y: auto;
-  padding: 14px 16px 32px;
+/* Carousel */
+.ship-carousel {
+  position: relative;
+  overflow: hidden;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+}
+.ship-carousel__track {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  flex: 1;
+  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ship-carousel__slide {
+  min-width: 100%;
+  overflow-y: auto;
+  padding: 14px 16px 60px;
+  box-sizing: border-box;
+}
+.ship-carousel__arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(5, 12, 35, 0.85);
+  border: 2px solid var(--color-border);
+  color: var(--color-accent);
+  font-family: var(--font-pixel);
+  font-size: 24px;
+  width: 32px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  line-height: 1;
+  padding: 0;
+  transition: opacity 0.2s;
+}
+.ship-carousel__arrow:disabled { opacity: 0.2; cursor: default; }
+.ship-carousel__arrow--prev { left: 4px; }
+.ship-carousel__arrow--next { right: 4px; }
+.ship-carousel__dots {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 2;
+}
+.ship-carousel__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-border);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+.ship-carousel__dot--active {
+  background: var(--color-accent);
+  transform: scale(1.3);
 }
 
 /* Ship card */
@@ -1016,6 +1372,57 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 
 /* ─── Lõi Sao (Core Panel) ────────────────────────────────────────────────── */
+.ship-card--selected {
+  border-color: #ff9900;
+  box-shadow: 4px 4px 0 #8b4000, 0 0 10px rgba(255, 150, 0, 0.25);
+}
+.tag--owned { color: #44ff88; }
+.tag--locked { color: #ff6644; }
+.ship-skill--orange {
+  background: rgba(255, 140, 0, 0.09);
+  border-color: rgba(255, 140, 0, 0.5);
+}
+.ship-card__actions {
+  display: flex;
+  gap: 10px;
+}
+.ship-btn {
+  flex: 1;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 1px;
+  padding: 9px 12px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  text-transform: uppercase;
+}
+.ship-btn--buy {
+  background: #22330a;
+  border-color: #44aa22;
+  color: #88ff55;
+}
+.ship-btn--buy:disabled {
+  background: #1a1a1a;
+  border-color: #444;
+  color: #666;
+  cursor: not-allowed;
+}
+.ship-btn--select {
+  background: #0a1a33;
+  border-color: #2255aa;
+  color: #66aaff;
+}
+.ship-btn--active {
+  background: #1a1a00;
+  border-color: #ff9900;
+  color: #ffcc55;
+  padding: 9px 12px;
+  text-align: center;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 1px;
+}
 .sheet-back {
   background: none;
   border: 2px solid var(--color-border-dark);
@@ -1179,5 +1586,399 @@ function onShipNameKey(e: KeyboardEvent) {
   gap: 12px;
   justify-content: center;
   flex-wrap: wrap;
+}
+
+/* ─── Topbar LV + EXP ────────────────────────────────────────────────────── */
+.topbar-lv {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  padding: 0 10px;
+}
+.topbar-lv__badge {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--color-accent);
+  letter-spacing: 1px;
+}
+.topbar-lv__bar {
+  width: 100%;
+  height: 6px;
+  background: var(--color-panel-dark);
+  border: 1px solid var(--color-border-dark);
+  overflow: hidden;
+}
+.topbar-lv__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #27ae60, #2ecc71);
+  transition: width 0.5s ease;
+  box-shadow: 0 0 4px #2ecc71;
+}
+
+/* ─── Equipment Panel (Trang Bị) ─────────────────────────────────────────── */
+.equip-panel {
+  background: var(--color-panel);
+  border: 2px solid var(--color-border);
+  box-shadow: 4px 4px 0 var(--color-border-dark);
+  padding: 10px 12px 12px;
+}
+.equip-panel__title {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--color-accent);
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border-dark);
+}
+.equip-panel__body {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.equip-panel__ship {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  background: var(--color-panel-dark);
+  border: 2px solid var(--color-border-dark);
+  filter: drop-shadow(0 0 8px rgba(0, 200, 255, 0.3));
+}
+.equip-panel__right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* Durability bar */
+.equip-dur__label {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  letter-spacing: 1px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.equip-dur__val { color: var(--color-text); }
+.equip-dur__track {
+  height: 10px;
+  background: var(--color-panel-dark);
+  border: 2px solid var(--color-border-dark);
+  overflow: hidden;
+}
+.equip-dur__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #27ae60, #2ecc71);
+  transition: width 0.5s ease;
+  box-shadow: 0 0 5px #2ecc71;
+}
+.equip-dur__fill.dur--mid {
+  background: linear-gradient(90deg, #e67e22, #f39c12);
+  box-shadow: 0 0 5px #f39c12;
+}
+.equip-dur__fill.dur--low {
+  background: linear-gradient(90deg, #c0392b, #e74c3c);
+  box-shadow: 0 0 5px #e74c3c;
+}
+.equip-dur__warn {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #e74c3c;
+  margin-top: 3px;
+  letter-spacing: 0.5px;
+}
+/* Artifact slots */
+.equip-artifacts__label {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  letter-spacing: 1px;
+  margin-bottom: 5px;
+}
+.equip-artifacts__slots { display: flex; flex-direction: column; gap: 5px; }
+.equip-slot {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--color-panel-dark);
+  border: 2px dashed var(--color-border-dark);
+  padding: 5px 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  min-height: 28px;
+}
+.equip-slot:hover { border-color: var(--color-border); }
+.equip-slot--filled { border-style: solid; border-color: rgba(100, 200, 255, 0.4); }
+.equip-slot__icon { font-size: 16px; flex-shrink: 0; }
+.equip-slot__name {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-accent);
+  letter-spacing: 0.5px;
+}
+.equip-slot__empty {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: var(--color-text-dim);
+  letter-spacing: 0.5px;
+}
+
+/* ─── Artifact Panel ─────────────────────────────────────────────────────── */
+.artifact-hint {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  line-height: 1.7;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: rgba(0, 200, 255, 0.05);
+  border: 1px solid rgba(0, 200, 255, 0.15);
+}
+.artifact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.artifact-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  background: var(--color-panel-dark);
+  border: 2px solid var(--color-border-dark);
+  padding: 10px 8px;
+  transition: border-color 0.15s;
+}
+.artifact-card--owned { border-color: rgba(100, 200, 100, 0.4); }
+.artifact-card__icon { font-size: 26px; flex-shrink: 0; }
+.artifact-card__name {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text);
+  margin-bottom: 2px;
+}
+.artifact-card__desc {
+  font-family: var(--font-pixel);
+  font-size: 6.5px;
+  color: var(--color-text-dim);
+  line-height: 1.6;
+  flex: 1;
+}
+.artifact-card__cost {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #f1c40f;
+}
+.artifact-card__actions { display: flex; flex-direction: column; gap: 4px; width: 100%; margin-top: auto; }
+.artifact-btn {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  letter-spacing: 1px;
+  padding: 5px 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  text-transform: uppercase;
+  width: 100%;
+}
+.artifact-btn--buy {
+  background: #22330a;
+  border-color: #44aa22;
+  color: #88ff55;
+}
+.artifact-btn--buy:disabled {
+  background: #1a1a1a;
+  border-color: #444;
+  color: #666;
+  cursor: not-allowed;
+}
+.artifact-btn--equip {
+  background: #0a1a33;
+  border-color: #2255aa;
+  color: #66aaff;
+}
+.artifact-btn--equip:disabled {
+  background: #111;
+  border-color: #333;
+  color: #555;
+  cursor: not-allowed;
+}
+.artifact-btn--unequip {
+  background: #1a1a00;
+  border-color: #777700;
+  color: #cccc44;
+}
+
+/* ─── PC Scroll Fix ──────────────────────────────────────────────────────── */
+.ships-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ─── Mission FAB ────────────────────────────────────────────────────────── */
+.mission-fab {
+  position: fixed;
+  top: 62px;
+  right: 12px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--color-panel);
+  border: 2px solid var(--color-accent);
+  color: var(--color-text);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 15;
+  box-shadow: 0 2px 12px rgba(0, 200, 255, 0.25);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.mission-fab:hover { transform: scale(1.08); box-shadow: 0 4px 18px rgba(0, 200, 255, 0.4); }
+.mission-fab__icon { line-height: 1; }
+.mission-fab__badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ff4444;
+  color: #fff;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-bg);
+}
+
+/* ─── Mission Panel ──────────────────────────────────────────────────────── */
+.mission-item {
+  background: var(--color-panel-dark);
+  border: 2px solid var(--color-border-dark);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  transition: border-color 0.15s;
+}
+.mission-item--done { border-color: rgba(100, 200, 100, 0.35); }
+.mission-item__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.mission-item__desc {
+  font-family: var(--font-pixel);
+  font-size: 8.5px;
+  color: var(--color-text);
+  flex: 1;
+  line-height: 1.7;
+}
+.mission-item__prog {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+.mission-item__bar {
+  height: 5px;
+  background: var(--color-border-dark);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.mission-item__fill {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.mission-item__reward {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: var(--color-text-dim);
+  margin-bottom: 6px;
+}
+.mission-reward-label { margin-right: 4px; }
+.mission-claim-btn {
+  font-family: var(--font-pixel);
+  font-size: 7.5px;
+  background: #1a3300;
+  border: 2px solid #44aa22;
+  color: #88ff55;
+  padding: 5px 14px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: background 0.15s;
+}
+.mission-claim-btn:hover { background: #224400; }
+.mission-claimed {
+  font-family: var(--font-pixel);
+  font-size: 7.5px;
+  color: #44bb44;
+}
+.milestone-section {
+  margin-top: 16px;
+  border-top: 2px solid var(--color-border-dark);
+  padding-top: 12px;
+}
+.milestone-section__title {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--color-accent);
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+}
+.milestone-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--color-panel-dark);
+  border: 2px solid var(--color-border-dark);
+  margin-bottom: 6px;
+}
+.milestone-item--done { border-color: rgba(255, 200, 50, 0.4); }
+.milestone-item--claimed { opacity: 0.6; }
+.milestone-item__desc {
+  font-family: var(--font-pixel);
+  font-size: 7.5px;
+  color: var(--color-text);
+  flex: 1;
+  line-height: 1.6;
+}
+.milestone-item__prog {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
+/* ─── Admin modal ────────────────────────────────────────────────────────── */
+.admin-overlay { align-items: center; }
+.admin-input {
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  background: var(--color-panel-dark);
+  border: 2px solid var(--color-accent);
+  color: var(--color-text);
+  padding: 10px 14px;
+  width: 100%;
+  text-align: center;
+  letter-spacing: 4px;
+  outline: none;
+  box-sizing: border-box;
 }
 </style>

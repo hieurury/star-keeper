@@ -116,6 +116,20 @@ interface ExpOrb {
   tier: OrbTier
 }
 
+interface FragmentOrb {
+  gfx: Graphics
+  x: number
+  y: number
+  vy: number
+  age: number  // frames elapsed; flies to skill slot after 30 frames
+}
+
+interface FragmentMissile {
+  gfx: Graphics
+  vx: number
+  vy: number
+}
+
 type OrbTier = 'white' | 'blue' | 'purple' | 'gold'
 // Game phase for intro
 type GamePhase = 'intro' | 'stageTitle' | 'playing'
@@ -137,6 +151,10 @@ interface PlayerMissile {
 
 let missileLaunchers: MissileLauncher[] = []
 let playerMissiles: PlayerMissile[] = []
+let fragmentOrbs: FragmentOrb[] = []
+let fragmentMissiles: FragmentMissile[] = []
+let soulMissileQueue = 0      // missiles still to fire sequentially
+let soulMissileFireTimer = 0  // countdown to next missile (frames)
 let shieldGfx: Graphics | null = null
 let pbTimer = 0   // plasma bolt frame timer
 let cbTimer = 0   // cluster bomb frame timer
@@ -154,6 +172,12 @@ let expOrbs: ExpOrb[] = []
 let gameLayer: Container
 let bgLayer: Container
 let uiLayer: Container
+
+// ─── Artifact effect state ────────────────────────────────────────────────────
+let neutronVacuumTimer = 0   // seconds elapsed; triggers at 30
+let manaCoreKillCount = 0    // resets every 10 kills → overload blast
+let artifactOrbitAngle = 0   // radians, advances each frame
+let artifactGfx: Graphics | null = null  // visual attached to ship
 
 let shootTimer = 0
 const TOUCH_Y_OFFSET = 90  // ship floats this many px above the finger
@@ -192,16 +216,90 @@ const GAME_H = 844
 
 // ─── Drawing helpers (Pixi.js v8 API) ────────────────────────────────────────
 function drawShip(g: Graphics) {
-  g.clear()
-  g.rect(-10, -22, 20, 34).fill(0x00cfff)
-  g.poly([-10, 0, -28, 18, -10, 10]).fill(0x0077bb)
-  g.poly([10, 0, 28, 18, 10, 10]).fill(0x0077bb)
-  g.rect(-5, -22, 10, 13).fill(0xffd700)
-  g.rect(-6, 12, 12, 9).fill({ color: 0xff6600, alpha: 0.85 })
+  if (game.selectedShip === 'star_holder') {
+    // Star Holder: shuttle shape, orange-yellow, 2 swept-back rear wings
+    g.clear()
+    // Main body — elongated shuttle
+    g.rect(-9, -24, 18, 38).fill(0xff9900)
+    // Cockpit
+    g.poly([0, -28, 8, -18, -8, -18]).fill(0xffee44)
+    // Left swept-back wing
+    g.poly([-9, 4, -30, 20, -9, 14]).fill(0xdd6600)
+    // Right swept-back wing
+    g.poly([9, 4, 30, 20, 9, 14]).fill(0xdd6600)
+    // Wing tips
+    g.poly([-25, 18, -30, 20, -20, 22]).fill(0xff8800)
+    g.poly([25, 18, 30, 20, 20, 22]).fill(0xff8800)
+    // Thruster glow
+    g.rect(-6, 14, 12, 10).fill({ color: 0xff4400, alpha: 0.9 })
+    g.rect(-3, 18, 6, 6).fill({ color: 0xffcc00, alpha: 0.85 })
+  } else {
+    // Star Keeper default
+    g.clear()
+    g.rect(-10, -22, 20, 34).fill(0x00cfff)
+    g.poly([-10, 0, -28, 18, -10, 10]).fill(0x0077bb)
+    g.poly([10, 0, 28, 18, 10, 10]).fill(0x0077bb)
+    g.rect(-5, -22, 10, 13).fill(0xffd700)
+    g.rect(-6, 12, 12, 9).fill({ color: 0xff6600, alpha: 0.85 })
+  }
 }
 
-function drawBullet(g: Graphics, spdScale = 1.0) {
+// ─── Artifact visuals ────────────────────────────────────────────────────────
+function drawArtifactGfx(g: Graphics, id: string, pulse = 0) {
   g.clear()
+  if (id === 'neutron_star') {
+    // Pulsing gold star — outer glow + 5-point star
+    const r = 7 + pulse * 2
+    g.circle(0, 0, r + 3).fill({ color: 0xffd700, alpha: 0.18 + pulse * 0.15 })
+    const pts: number[] = []
+    for (let i = 0; i < 10; i++) {
+      const a = (i * Math.PI) / 5 - Math.PI / 2
+      const rad = i % 2 === 0 ? r : r * 0.42
+      pts.push(Math.cos(a) * rad, Math.sin(a) * rad)
+    }
+    g.poly(pts).fill({ color: 0xffe566, alpha: 0.95 })
+    g.circle(0, 0, 3).fill(0xffffff)
+  } else if (id === 'carbon_core') {
+    // Hexagonal dark crystal
+    const pts: number[] = []
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI) / 3
+      pts.push(Math.cos(a) * 6, Math.sin(a) * 6)
+    }
+    g.poly(pts).fill(0x3a3a5c)
+    g.poly(pts).stroke({ color: 0x8888bb, width: 1.2, alpha: 0.9 })
+    g.circle(0, 0, 2.5).fill({ color: 0xaaaacc, alpha: 0.7 })
+  } else if (id === 'stardust') {
+    // 4-point sparkle
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 2
+      const bx = Math.cos(a) * 7; const by = Math.sin(a) * 7
+      g.poly([0, 0, bx - Math.sin(a) * 1.5, by + Math.cos(a) * 1.5,
+              bx * 1.5, by * 1.5,
+              bx + Math.sin(a) * 1.5, by - Math.cos(a) * 1.5]).fill({ color: 0xffcc44, alpha: 0.85 })
+    }
+    g.circle(0, 0, 2.5).fill(0xffffff)
+  } else if (id === 'mana_core') {
+    // Diamond gem with pulse glow
+    g.circle(0, 0, 9 + pulse * 3).fill({ color: 0x7700cc, alpha: 0.18 + pulse * 0.2 })
+    g.poly([0, -8, 7, 0, 0, 8, -7, 0]).fill({ color: 0x9933ff, alpha: 0.92 })
+    g.poly([0, -8, 7, 0, 0, 8, -7, 0]).stroke({ color: 0xdd88ff, width: 1.2 })
+    g.circle(0, 0, 2.5).fill({ color: 0xeeccff, alpha: 0.9 })
+  }
+}
+
+function initArtifactGfx() {
+  if (artifactGfx) { gameLayer.removeChild(artifactGfx); artifactGfx = null }
+  const equipped = game.equippedArtifacts[game.selectedShip] ?? []
+  if (equipped.length === 0 || !gameLayer) return
+  const id = equipped[0]!
+  const g = new Graphics()
+  drawArtifactGfx(g, id)
+  gameLayer.addChild(g)
+  artifactGfx = g
+}
+
+function drawBullet(g: Graphics, spdScale = 1.0) {  g.clear()
   // Faster bullets are smaller (min 60% original size)
   const sz = Math.max(0.6, 1.0 / Math.pow(spdScale, 0.35))
   const w = Math.max(2, Math.round(4 * sz))
@@ -369,6 +467,22 @@ function drawPlayerMissile(g: Graphics, small = false) {
   g.circle(0, 5*s, 2*s).fill({ color: 0xff8800, alpha: 0.9 })
 }
 
+// Fragment (linh hồn) orb — small glowing orange soul fragment
+function drawFragmentOrb(g: Graphics) {
+  g.clear()
+  g.circle(0, 0, 5.5).fill(0xff8800)
+  g.circle(0, 0, 3.2).fill({ color: 0xffdd44, alpha: 0.95 })
+  g.circle(0, 0, 1.4).fill(0xffffff)
+}
+
+// Fragment missile — small orange-gold homing shard
+function drawFragmentMissile(g: Graphics) {
+  g.clear()
+  g.poly([0, -9, 3, -3, 0, 2, -3, -3]).fill(0xff9900)
+  g.poly([0, -9, 2, -5, -2, -5]).fill(0xffee44)
+  g.circle(0, 2, 2).fill({ color: 0xff4400, alpha: 0.85 })
+}
+
 // ─── Enemy helpers ────────────────────────────────────────────────────────────
 function findNearestEnemy(x: number, y: number): Enemy | null {
   let nearest: Enemy | null = null
@@ -390,7 +504,7 @@ function cleanupBossInvaderTurrets(e: Enemy) {
 }
 
 // Shared kill handler — used by card ability systems
-function killEnemy(e: Enemy, i: number) {
+function killEnemy(e: Enemy, i: number, laserKill = false) {
   if (e.kind === 'boss_stardestroyer') {
     spawnExplosion(e.container.x, e.container.y, 50, 0x4466ff, 0xaaccff)
     spawnExplosion(e.container.x - 30, e.container.y + 20, 28, 0xff4400, 0xffee44)
@@ -399,7 +513,7 @@ function killEnemy(e: Enemy, i: number) {
     spawnEnemyOrbs(e.container.x, e.container.y, 'boss_stardestroyer')
     if (e.laserLine) e.laserLine.clear()
     game.addScore(300 + game.currentStage * 50)
-    game.unlockAchievement('kill_boss')
+    game.addBossKill()
   } else if (e.kind === 'boss_invader') {
     spawnExplosion(e.container.x, e.container.y, 55, 0x2255ff, 0x88bbff)
     spawnExplosion(e.container.x - 40, e.container.y + 25, 28, 0xff4400, 0xffee44)
@@ -410,7 +524,7 @@ function killEnemy(e: Enemy, i: number) {
     if (e.laserLine) e.laserLine.clear()
     cleanupBossInvaderTurrets(e)
     game.addScore(400 + game.currentStage * 60)
-    game.unlockAchievement('kill_boss')
+    game.addBossKill()
   } else {
     const explR = e.kind === 'kamikaze' ? 18 : 14
     spawnExplosion(e.container.x, e.container.y, explR)
@@ -419,11 +533,26 @@ function killEnemy(e: Enemy, i: number) {
       : e.kind === 'kamikaze' ? 15 + game.currentStage * 6
       : 10 + game.currentStage * 5
     game.addScore(pts)
+    // Star Holder: soul fragment drop
+    if (game.selectedShip === 'star_holder') {
+      const dropChance = (laserKill && game.cardStats.laserKillDropsSoul) ? 1.0 : 0.75
+      if (Math.random() < dropChance) spawnFragmentOrb(e.container.x, e.container.y)
+    }
   }
   if (game.cardStats.vampireKillHeal > 0) game.healPlayer(game.cardStats.vampireKillHeal)
   gameLayer.removeChild(e.container)
   enemies.splice(i, 1)
-  game.stageEnemiesKilled++
+  game.addKill()
+  // Mana Core: track kills for overload
+  if (game.artifactStats.manaCoreActive) {
+    manaCoreKillCount++
+    game.manaCorePct = manaCoreKillCount / 10
+    if (manaCoreKillCount >= 10) {
+      manaCoreKillCount = 0
+      game.manaCorePct = 0
+      activateManaCoreOverload()
+    }
+  }
 }
 
 // ─── Card abilities ───────────────────────────────────────────────────────────
@@ -918,6 +1047,65 @@ function activateHeatWave() {
   }
 }
 
+// ─── Artifact abilities ───────────────────────────────────────────────────────
+function activateNeutronVacuum() {
+  if (!playerShip) return
+  // Pull all exp orbs to player instantly
+  for (let i = expOrbs.length - 1; i >= 0; i--) {
+    const o = expOrbs[i]
+    game.gainSessionExp(o.amount)
+    gameLayer.removeChild(o.gfx)
+  }
+  expOrbs = []
+  screenFlash(0xffd700, 0.35, 300)
+}
+
+function activateManaCoreOverload() {
+  if (!playerShip || !app || !gameLayer) return
+  const blastRadius = 130
+  const blastDmg = Math.round(game.upgrades.damage * 0.5)
+  // Visual ring
+  const ring = new Graphics()
+  ring.circle(0, 0, blastRadius).stroke({ color: 0x9933ff, width: 4, alpha: 0.9 })
+  ring.circle(0, 0, blastRadius).fill({ color: 0x6600cc, alpha: 0.12 })
+  ring.x = playerShip.x
+  ring.y = playerShip.y
+  gameLayer.addChild(ring)
+  screenFlash(0x9933ff, 0.4, 350)
+  // Damage all enemies in range
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i]
+    const dx = e.container.x - playerShip.x
+    const dy = e.container.y - playerShip.y
+    if (Math.sqrt(dx * dx + dy * dy) <= blastRadius) {
+      e.hp = Math.max(0, e.hp - blastDmg)
+      spawnDamageText(e.container.x, e.container.y - 10, blastDmg)
+      if (e.hp <= 0) killEnemy(e, i)
+    }
+  }
+  // Fade out ring
+  let fadeAlpha = 0.9
+  const fadeFn = () => {
+    fadeAlpha -= 0.08
+    ring.alpha = Math.max(0, fadeAlpha)
+    if (fadeAlpha <= 0) {
+      gameLayer.removeChild(ring)
+      app!.ticker.remove(fadeFn)
+    }
+  }
+  app!.ticker.add(fadeFn)
+}
+
+function activateSoulHarvest() {
+  if (!playerShip || !app || !gameLayer) return
+  const count = game.fragmentCount
+  if (count <= 0) return
+  game.fragmentCount = 0  // consume all fragments
+  soulMissileQueue = count
+  soulMissileFireTimer = 0
+  screenFlash(0xff8800, 0.45, 400)
+}
+
 const ORB_CONFIG: Record<OrbTier, { outer: number; inner: number; exp: number; r: number }> = {
   white:  { outer: 0xffffff, inner: 0xdddddd, exp: 10, r: 4.5 },
   blue:   { outer: 0x44aaff, inner: 0xaaddff, exp: 20, r: 5.0 },
@@ -935,6 +1123,16 @@ function spawnExpOrb(x: number, y: number, tier: OrbTier) {
   g.y = y
   gameLayer.addChild(g)
   expOrbs.push({ gfx: g, x: ox, y, vy: 0.55 + Math.random() * 0.45, amount: cfg.exp, tier })
+}
+
+function spawnFragmentOrb(x: number, y: number) {
+  const g = new Graphics()
+  drawFragmentOrb(g)
+  const ox = x + (Math.random() - 0.5) * 24
+  g.x = ox
+  g.y = y
+  gameLayer.addChild(g)
+  fragmentOrbs.push({ gfx: g, x: ox, y, vy: 0.45 + Math.random() * 0.4, age: 0 })
 }
 
 function spawnEnemyOrbs(x: number, y: number, kind: EnemyKind) {
@@ -1465,6 +1663,52 @@ function shoot(offsetX = 0, vxDrift = 0) {
   bullets.push({ gfx: g, vy: 8 * game.upgrades.bulletSpeed, vx: vxDrift })
 }
 
+// angle: radians from vertical (0 = straight up, +π/4 = 45° right, -π/4 = 45° left)
+function spawnHolderLaser(fromX: number, fromY: number, angle: number, damage: number) {
+  if (!app || !gameLayer) return
+  const beamW = Math.max(6, Math.round(10 * (1 + game.cardStats.arsenalLaserSizePct / 100)))
+  const beamLen = fromY + 60  // long enough to reach beyond top of screen
+  const sinA = Math.sin(angle)
+  const cosA = Math.cos(angle)
+  // Beam direction (upward at angle): d = (sinA, -cosA)
+  // Perpendicular: p = (cosA, sinA)
+  // Hit all enemies within the beam sweep
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i]
+    const ex = e.container.x - fromX
+    const ey = e.container.y - fromY
+    const perpDist = Math.abs(ex * cosA + ey * sinA)
+    const along = ex * sinA - ey * cosA  // positive = forward (toward top of screen)
+    const hitR = e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 45 : 15
+    if (perpDist < beamW / 2 + hitR && along > -hitR && along < beamLen + hitR) {
+      e.hp = Math.max(0, e.hp - damage)
+      hitFlash(e.body)
+      spawnDamageText(e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 60 : 16), damage)
+      redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+      if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
+      if (e.hp <= 0) killEnemy(e, i, true)
+    }
+  }
+  // Animated beam — rotated from ship position upward, fades over ~14 frames
+  const beam = new Graphics()
+  beam.x = fromX
+  beam.y = fromY
+  beam.rotation = angle  // rotates around ship position
+  gameLayer.addChild(beam)
+  let frame = 0
+  const tick = () => {
+    frame++
+    beam.clear()
+    const alpha = Math.max(0, 1 - frame / 14)
+    // rect drawn from local y=0 (ship) going up to y=-beamLen
+    beam.rect(-beamW / 2, -beamLen, beamW, beamLen).fill({ color: 0xff2200, alpha: alpha * 0.50 })
+    beam.rect(-beamW * 0.4, -beamLen, beamW * 0.8, beamLen).fill({ color: 0xff6600, alpha: alpha * 0.65 })
+    beam.rect(-beamW * 0.2, -beamLen, beamW * 0.4, beamLen).fill({ color: 0xffcc88, alpha: alpha * 0.80 })
+    if (frame >= 14) { if (!beam.destroyed) gameLayer.removeChild(beam); app?.ticker.remove(tick) }
+  }
+  app.ticker.add(tick)
+}
+
 function dist2(ax: number, ay: number, bx: number, by: number) {
   const dx = ax - bx
   const dy = ay - by
@@ -1557,13 +1801,60 @@ function gameLoop(ticker: Ticker) {
   // Tick skill cooldown & shield
   game.tickSkillCooldown(dt / 60)
   game.tickShield(dt / 60)
+  // Neutron Star: vacuum timer (30s)
+  if (game.artifactStats.neutronVacuumActive) {
+    neutronVacuumTimer += dt / 60
+    if (neutronVacuumTimer >= 30) {
+      neutronVacuumTimer = 0
+      activateNeutronVacuum()
+    }
+    game.neutronVacuumPct = neutronVacuumTimer / 30
+  }
+
+  // Update artifact gfx — orbit ship
+  if (artifactGfx && playerShip) {
+    const equipped = game.equippedArtifacts[game.selectedShip] ?? []
+    const artifactId = equipped[0] ?? ''
+    artifactOrbitAngle += 0.022 * dt
+    const orbitR = 36
+    artifactGfx.x = playerShip.x + Math.cos(artifactOrbitAngle) * orbitR
+    artifactGfx.y = playerShip.y + Math.sin(artifactOrbitAngle) * orbitR * 0.55
+    // Pulse for active artifacts
+    let pulse = 0
+    if (artifactId === 'neutron_star') pulse = game.neutronVacuumPct
+    if (artifactId === 'mana_core') pulse = game.manaCorePct
+    drawArtifactGfx(artifactGfx, artifactId, pulse)
+  }
   // Kiểm tra skill activation
   if (game.consumeSkillActivation()) {
-    activateHeatWave()
+    if (game.selectedShip === 'star_holder') {
+      activateSoulHarvest()
+    } else {
+      activateHeatWave()
+    }
   }
   // Card abilities
   updateMissileLaunchers(dt)
   updatePeriodicAbilities(dt)
+
+  // Sequential soul missile firing (Star Holder)
+  if (soulMissileQueue > 0 && playerShip) {
+    soulMissileFireTimer -= dt
+    if (soulMissileFireTimer <= 0) {
+      soulMissileFireTimer = 6  // 0.1s at 60fps
+      soulMissileQueue--
+      const target = findNearestEnemy(playerShip.x, playerShip.y)
+      const mg = new Graphics()
+      drawFragmentMissile(mg)
+      mg.x = playerShip.x + (Math.random() - 0.5) * 20
+      mg.y = playerShip.y - 12
+      gameLayer.addChild(mg)
+      const mdx = target ? (target.container.x - mg.x) : 0
+      const mdy = target ? (target.container.y - mg.y) : -1
+      const md = Math.sqrt(mdx * mdx + mdy * mdy) || 1
+      fragmentMissiles.push({ gfx: mg, vx: (mdx / md) * 7, vy: (mdy / md) * 7 })
+    }
+  }
 
   // Shield visual
   if (shieldGfx && playerShip) {
@@ -1593,19 +1884,37 @@ function gameLoop(ticker: Ticker) {
   }
 
   // Shoot
+  const isHolder = game.selectedShip === 'star_holder'
   const effectiveBulletCount = game.upgrades.bulletCount + game.cardStats.arsenalBulletBonus
   shootTimer += dt
-  const shootInterval = (18 / Math.sqrt(effectiveBulletCount)) / (1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100)
+  // Star Holder fires at 0.75× base rate (slower, heavier lasers)
+  const baseShootInterval = isHolder ? 60 : 18
+  const shootInterval = (baseShootInterval / Math.sqrt(effectiveBulletCount)) / (1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100)
   if (shootTimer >= shootInterval) {
     shootTimer = 0
     const cnt = effectiveBulletCount
-    // Spread angle: max ±12° for outermost bullet (giảm từ 22.5°)
-    const maxHalfAngle = Math.min(Math.PI * 12 / 180, (cnt - 1) * Math.PI * 3 / 180)
-    const bulletVy = 8 * game.upgrades.bulletSpeed
-    for (let i = 0; i < cnt; i++) {
-      const norm = cnt > 1 ? (i - (cnt - 1) / 2) / ((cnt - 1) / 2) : 0
-      const vxDrift = Math.tan(norm * maxHalfAngle) * bulletVy
-      shoot((i - (cnt - 1) / 2) * 12, vxDrift)
+    if (isHolder && playerShip) {
+      // Laser beams spread from ship upward — max ±45° for outermost beam
+      const laserDmg = Math.round(
+        game.upgrades.damage * Math.pow(1.2, cnt - 1) / cnt
+        * (1 + game.cardStats.arsenalDamagePct / 100)
+        * (1 + game.cardStats.damageBonusPct / 100)
+      )
+      screenFlash(0xff4400, 0.15, 200)
+      const step = Math.PI / 18  // 10° per beam
+      for (let i = 0; i < cnt; i++) {
+        const angle = (i - (cnt - 1) / 2) * step
+        spawnHolderLaser(playerShip.x, playerShip.y - 18, angle, laserDmg)
+      }
+    } else {
+      // Spread angle: max ±12° for outermost bullet (giảm từ 22.5°)
+      const maxHalfAngle = Math.min(Math.PI * 12 / 180, (cnt - 1) * Math.PI * 3 / 180)
+      const bulletVy = 8 * game.upgrades.bulletSpeed
+      for (let i = 0; i < cnt; i++) {
+        const norm = cnt > 1 ? (i - (cnt - 1) / 2) / ((cnt - 1) / 2) : 0
+        const vxDrift = Math.tan(norm * maxHalfAngle) * bulletVy
+        shoot((i - (cnt - 1) / 2) * 12, vxDrift)
+      }
     }
   }
 
@@ -2308,8 +2617,8 @@ function gameLoop(ticker: Ticker) {
             spawnEnemyOrbs(e.container.x, e.container.y, 'boss_stardestroyer')
             if (e.laserLine) e.laserLine.clear()
             game.addScore(300 + game.currentStage * 50)
-            game.unlockAchievement('kill_boss')
-            game.stageEnemiesKilled++
+            game.addBossKill()
+            game.addKill()
           } else if (e.kind === 'boss_invader') {
             spawnExplosion(e.container.x, e.container.y, 55, 0x2255ff, 0x88bbff)
             spawnExplosion(e.container.x - 40, e.container.y + 25, 28, 0xff4400, 0xffee44)
@@ -2320,8 +2629,8 @@ function gameLoop(ticker: Ticker) {
             if (e.laserLine) e.laserLine.clear()
             cleanupBossInvaderTurrets(e)
             game.addScore(400 + game.currentStage * 60)
-            game.unlockAchievement('kill_boss')
-            game.stageEnemiesKilled++
+            game.addBossKill()
+            game.addKill()
           } else {
             const explR = e.kind === 'kamikaze' ? 18 : 14
             spawnExplosion(e.container.x, e.container.y, explR)
@@ -2330,7 +2639,7 @@ function gameLoop(ticker: Ticker) {
               : e.kind === 'kamikaze' ? 15 + game.currentStage * 6
                 : 10 + game.currentStage * 5
             game.addScore(pts)
-            game.stageEnemiesKilled++
+            game.addKill()
           }
           // HP Vampire: bonus kill heal
           if (game.cardStats.vampireKillHeal > 0) game.healPlayer(game.cardStats.vampireKillHeal)
@@ -2377,6 +2686,88 @@ function gameLoop(ticker: Ticker) {
       game.gainSessionExp(o.amount)
       gameLayer.removeChild(o.gfx)
       expOrbs.splice(i, 1)
+    }
+  }
+
+  // Fragment orbs (Star Holder) — drift 0.5s then auto-fly to skill slot
+  if (game.selectedShip === 'star_holder') {
+    // Skill button CSS: left:12px top:67% over the 390×844 canvas
+    const skillTargetX = 39
+    const skillTargetY = GAME_H * 0.67
+    for (let i = fragmentOrbs.length - 1; i >= 0; i--) {
+      const o = fragmentOrbs[i]
+      o.age += dt
+      if (o.age < 30) {
+        // Initial drift: fall slowly
+        o.y += o.vy * dt
+        o.gfx.y = o.y
+        o.gfx.alpha = 0.75 + Math.sin(Date.now() * 0.008 + i) * 0.25
+        if (o.y > GAME_H + 20) {
+          gameLayer.removeChild(o.gfx)
+          fragmentOrbs.splice(i, 1)
+        }
+      } else {
+        // Auto-fly toward skill slot
+        const dx = skillTargetX - o.gfx.x
+        const dy = skillTargetY - o.gfx.y
+        const d = Math.sqrt(dx * dx + dy * dy) || 1
+        const speed = 9
+        o.gfx.x += (dx / d) * speed * dt
+        o.gfx.y += (dy / d) * speed * dt
+        o.gfx.alpha = 0.6 + Math.sin(Date.now() * 0.015 + i) * 0.4
+        if (d < 22) {
+          game.fragmentCount = Math.min(50, game.fragmentCount + 1)
+          gameLayer.removeChild(o.gfx)
+          fragmentOrbs.splice(i, 1)
+        }
+      }
+    }
+  }
+
+  // Fragment missiles (Star Holder skill) — homing update
+  for (let i = fragmentMissiles.length - 1; i >= 0; i--) {
+    const m = fragmentMissiles[i]
+    // Steer toward nearest enemy
+    const nearest = findNearestEnemy(m.gfx.x, m.gfx.y)
+    if (nearest) {
+      const dx = nearest.container.x - m.gfx.x
+      const dy = nearest.container.y - m.gfx.y
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1
+      const turnSpeed = 0.18
+      m.vx += (dx / dist) * 7 * turnSpeed
+      m.vy += (dy / dist) * 7 * turnSpeed
+      // Clamp speed
+      const spd = Math.sqrt(m.vx * m.vx + m.vy * m.vy)
+      if (spd > 8) { m.vx = (m.vx / spd) * 8; m.vy = (m.vy / spd) * 8 }
+    }
+    m.gfx.x += m.vx * dt
+    m.gfx.y += m.vy * dt
+    m.gfx.rotation = Math.atan2(m.vy, m.vx) + Math.PI / 2
+    // Out of bounds
+    if (m.gfx.x < -20 || m.gfx.x > GAME_W + 20 || m.gfx.y < -40 || m.gfx.y > GAME_H + 20) {
+      if (!m.gfx.destroyed) gameLayer.removeChild(m.gfx)
+      fragmentMissiles.splice(i, 1)
+      continue
+    }
+    // Hit detection
+    let hit = false
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      const e = enemies[j]
+      if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < 20 * 20) {
+        const dmg = Math.round(60 + game.upgrades.damage * 0.5)
+        e.hp = Math.max(0, e.hp - dmg)
+        hitFlash(e.body)
+        spawnDamageText(e.container.x, e.container.y - 14, dmg)
+        redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+        spawnExplosion(m.gfx.x, m.gfx.y, 10, 0xff8800, 0xffdd44)
+        if (e.hp <= 0) killEnemy(e, j)
+        hit = true
+        break
+      }
+    }
+    if (hit) {
+      if (!m.gfx.destroyed) gameLayer.removeChild(m.gfx)
+      fragmentMissiles.splice(i, 1)
     }
   }
 
@@ -2429,6 +2820,9 @@ async function initPixi() {
   playerShip.x = GAME_W / 2
   playerShip.y = GAME_H + 60
   gameLayer.addChild(playerShip)
+
+  // Artifact visual (orbits ship)
+  initArtifactGfx()
 
   // Shield visual (above ship layer)
   shieldGfx = new Graphics()
@@ -2534,6 +2928,16 @@ function destroyPixi() {
   stars = []
   damageTexts = []
   expOrbs = []
+  fragmentOrbs = []
+  fragmentMissiles = []
+  soulMissileQueue = 0
+  soulMissileFireTimer = 0
+  neutronVacuumTimer = 0
+  manaCoreKillCount = 0
+  artifactOrbitAngle = 0
+  artifactGfx = null
+  game.neutronVacuumPct = 0
+  game.manaCorePct = 0
 }
 
 onMounted(async () => {

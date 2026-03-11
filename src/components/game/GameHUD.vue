@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { useGameStore } from '../../stores/gameStore'
-import { ALL_CARD_DEFS } from '../../stores/gameStore'
+import { useGameStore, ALL_CARD_DEFS, ALL_ARTIFACT_DEFS } from '../../stores/gameStore'
 import type { CardType } from '../../stores/gameStore'
 import { PhLightning } from '@phosphor-icons/vue'
+import ArtifactIcon from '../ui/ArtifactIcon.vue'
 
 const game = useGameStore()
 
@@ -164,13 +164,53 @@ watch(() => game.isSkillReady, (ready) => {
         :class="{
           'hud__skill-btn--ready': game.isSkillReady,
           'hud__skill-btn--flash': skillJustReady,
+          'hud__skill-btn--orange': game.selectedShip === 'star_holder',
         }"
       >
-        <span v-if="game.isSkillReady" class="hud__skill-icon"><PhLightning weight="fill" :size="24" /></span>
-        <span v-else class="hud__skill-cd">{{ Math.ceil(game.skillCooldown) }}</span>
+        <!-- Star Holder: fragment counter -->
+        <template v-if="game.selectedShip === 'star_holder'">
+          <span class="hud__skill-frags">{{ game.fragmentCount }}<span class="hud__skill-frags-max">/50</span></span>
+        </template>
+        <!-- Star Keeper: default cooldown / ready -->
+        <template v-else>
+          <span v-if="game.isSkillReady" class="hud__skill-icon"><PhLightning weight="fill" :size="24" /></span>
+          <span v-else class="hud__skill-cd">{{ Math.ceil(game.skillCooldown) }}</span>
+        </template>
       </div>
-      <div class="hud__skill-label">SÓNG<br/>NHIỀT</div>
+      <div class="hud__skill-label" v-html="game.selectedShip === 'star_holder' ? 'LINH<br/>HỒN' : 'SÓNG<br/>NHIỀT'"></div>
       <div class="hud__skill-hint">{{ isTouchDevice ? '2× TAP' : 'RMB' }}</div>
+    </div>
+    <!-- Artifact progress bars (active artifacts only) -->
+    <div
+      v-if="game.isPlaying && !game.isLevelUpPending"
+      class="hud__artifact-bars"
+    >
+      <!-- Neutron Star: 30s vacuum cooldown -->
+      <div
+        v-if="(game.equippedArtifacts[game.selectedShip] ?? []).includes('neutron_star')"
+        class="hud__artifact-bar-row"
+      >
+        <ArtifactIcon id="neutron_star" :size="16" class="hud__artifact-icon" />
+        <div class="hud__artifact-bar-details">
+          <span class="hud__artifact-name">{{ ALL_ARTIFACT_DEFS.find(a => a.id === 'neutron_star')?.name }}</span>
+          <div class="hud__artifact-track">
+            <div class="hud__artifact-fill hud__artifact-fill--gold" :style="{ width: (game.neutronVacuumPct * 100) + '%' }" />
+          </div>
+        </div>
+      </div>
+      <!-- Mana Core: 10-kill overload -->
+      <div
+        v-if="(game.equippedArtifacts[game.selectedShip] ?? []).includes('mana_core')"
+        class="hud__artifact-bar-row"
+      >
+        <ArtifactIcon id="mana_core" :size="16" class="hud__artifact-icon" />
+        <div class="hud__artifact-bar-details">
+          <span class="hud__artifact-name">{{ ALL_ARTIFACT_DEFS.find(a => a.id === 'mana_core')?.name }}</span>
+          <div class="hud__artifact-track">
+            <div class="hud__artifact-fill hud__artifact-fill--purple" :style="{ width: (game.manaCorePct * 100) + '%' }" />
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -581,5 +621,79 @@ watch(() => game.isSkillReady, (ready) => {
   20%  { box-shadow: 0 0 28px rgba(255,180,0,1), 0 0 60px rgba(255,120,0,0.7); border-color: #ffcc00; }
   50%  { box-shadow: 0 0 18px rgba(255,130,0,0.8); border-color: #ff9900; }
   100% { box-shadow: 0 0 10px rgba(255,100,0,0.6); border-color: #ff6600; }
+}
+/* Star Holder fragment counter */
+.hud__skill-btn--orange {
+  border-color: #664400;
+}
+.hud__skill-btn--orange.hud__skill-btn--ready {
+  border-color: #ff8800;
+  box-shadow: 0 0 12px rgba(255, 140, 0, 0.7), inset 0 0 8px rgba(255, 140, 0, 0.18);
+}
+.hud__skill-frags {
+  font-size: 16px;
+  color: #ffaa33;
+  font-family: var(--font-pixel);
+  line-height: 1;
+}
+.hud__skill-frags-max {
+  font-size: 9px;
+  color: #887744;
+}
+
+/* Artifact progress bars */
+.hud__artifact-bars {
+  position: absolute;
+  right: 12px;
+  top: 67%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  pointer-events: none;
+  z-index: 20;
+  align-items: flex-end;
+}
+.hud__artifact-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hud__artifact-icon {
+  flex-shrink: 0;
+}
+.hud__artifact-bar-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-end;
+}
+.hud__artifact-name {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: rgba(255,255,255,0.65);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.hud__artifact-track {
+  width: 46px;
+  height: 5px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.hud__artifact-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.15s linear;
+}
+.hud__artifact-fill--gold {
+  background: linear-gradient(90deg, #cc9900, #ffe566);
+  box-shadow: 0 0 4px #ffd700;
+}
+.hud__artifact-fill--purple {
+  background: linear-gradient(90deg, #6600cc, #cc88ff);
+  box-shadow: 0 0 4px #9933ff;
 }
 </style>
