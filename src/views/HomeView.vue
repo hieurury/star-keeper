@@ -11,10 +11,20 @@ const game = useGameStore()
 const AVATARS = ['🚀', '✈', '⚡', '🔥', '🛸', '⭐']
 
 const showProfileSheet = ref(false)
+const showShipsPanel = ref(false)
 const editingUsername = ref(false)
 const editingShipName = ref(false)
 const usernameInput = ref('')
 const shipNameInput = ref('')
+
+// Dữ liệu phi cơ
+const starKeeperStats = [
+  { label: 'SÁT THƯƠNG',  display: '10 / 100',  pct: 10, color: '#ff4444' },
+  { label: 'TỐC ĐỘ BẮN', display: '1.0 / 1.5', pct: 67, color: '#ff9900' },
+  { label: 'ĐẠN / LỚT',   display: '1 / 3',    pct: 33, color: '#ffcc00' },
+  { label: 'TỐC BAY',     display: '1.0 / 1.5', pct: 67, color: '#44aaff' },
+  { label: 'HP',          display: '100 / 300', pct: 33, color: '#44ff88' },
+]
 
 onMounted(() => {
   game.loadProgress()
@@ -113,7 +123,7 @@ function onShipNameKey(e: KeyboardEvent) {
         <div class="stats-grid">
           <div class="stat-item">
             <span class="stat-label">Cấp độ</span>
-            <span class="stat-value">{{ game.playerLevel }}</span>
+            <span class="stat-value">{{ game.accountLevel }}</span>
           </div>
           <div class="stat-item">
             <span class="stat-label">🪙 Vàng</span>
@@ -124,18 +134,24 @@ function onShipNameKey(e: KeyboardEvent) {
             <span class="stat-value score">{{ game.highScore }}</span>
           </div>
         </div>
-        <!-- EXP bar -->
+        <!-- Account EXP bar -->
         <div class="exp-bar-wrapper">
-          <div class="exp-bar-label">EXP {{ game.playerExp }} / {{ game.expToNextLevel }}</div>
+          <div class="exp-bar-label">EXP TÀI KHOẢN {{ game.accountExp }} / {{ game.accountExpToNextLevel }}</div>
           <div class="exp-bar">
-            <div class="exp-bar__fill" :style="{ width: game.expPercent + '%' }" />
+            <div class="exp-bar__fill" :style="{ width: game.accountExpPercent + '%' }" />
           </div>
+        </div>
+        <!-- Achievements -->
+        <div v-if="game.unlockedAchievements.length > 0" class="ach-summary">
+          <div class="ach-summary__label">🏅 THÀNH TỰU ({{ game.unlockedAchievements.length }})</div>
+          <div class="ach-summary__count">{{ game.unlockedAchievements.length }} / 12 mở khóa</div>
         </div>
       </PixelPanel>
 
       <!-- Menu buttons -->
       <div class="home__menu">
         <PixelButton label="▶ Bắt Đầu" size="lg" @click="startGame" />
+        <PixelButton label="Phi Cơ" variant="secondary" size="md" @click="showShipsPanel = true" />
         <PixelButton label="Nâng Cấp" variant="secondary" size="md" @click="() => {}" />
         <PixelButton label="Bảng Xếp Hạng" variant="secondary" size="md" @click="() => {}" />
       </div>
@@ -202,6 +218,66 @@ function onShipNameKey(e: KeyboardEvent) {
                 :class="{ 'avatar-option--selected': game.avatarId === idx }"
                 @click="selectAvatar(idx)"
               >{{ av }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Ships Panel -->
+    <Transition name="sheet">
+      <div v-if="showShipsPanel" class="sheet-overlay" @click.self="showShipsPanel = false">
+        <div class="ships-sheet">
+          <div class="sheet-header">
+            <div class="sheet-title">PHI CƠ</div>
+            <button class="sheet-close" @click="showShipsPanel = false">✕</button>
+          </div>
+
+          <div class="ships-scroll">
+            <!-- Star Keeper card -->
+            <div class="ship-card">
+              <div class="ship-card__header">
+                <svg class="ship-svg" viewBox="-32 -28 64 58" width="60" height="58">
+                  <!-- Wings -->
+                  <polygon points="-10,0 -28,18 -10,10" fill="#0077bb"/>
+                  <polygon points="10,0 28,18 10,10" fill="#0077bb"/>
+                  <!-- Body -->
+                  <rect x="-10" y="-22" width="20" height="34" fill="#00cfff"/>
+                  <!-- Cockpit -->
+                  <rect x="-5" y="-22" width="10" height="13" fill="#ffd700"/>
+                  <!-- Thruster -->
+                  <rect x="-6" y="12" width="12" height="9" fill="#ff6600" opacity="0.85"/>
+                </svg>
+                <div class="ship-card__info">
+                  <div class="ship-card__name">STAR KEEPER</div>
+                  <div class="ship-card__tag">⭐ Phi cơ cơ bản · Miễn phí</div>
+                  <div class="ship-card__desc">Chiến cơ mức trung bình, cân bằng giữa tốc độ và sức mạnh. Lựa chọn đầu tiên cho mọi phi công.</div>
+                </div>
+              </div>
+
+              <!-- Stats bars -->
+              <div class="ship-stats">
+                <div v-for="stat in starKeeperStats" :key="stat.label" class="ship-stat">
+                  <span class="ship-stat__label">{{ stat.label }}</span>
+                  <div class="ship-stat__track">
+                    <div class="ship-stat__fill" :style="{ width: stat.pct + '%', background: stat.color }" />
+                  </div>
+                  <span class="ship-stat__val">{{ stat.display }}</span>
+                </div>
+              </div>
+
+              <!-- Skill -->
+              <div class="ship-skill">
+                <div class="ship-skill__name">🌊 SÓNG TẦM NHIỀT HUỶ DIỆT</div>
+                <div class="ship-skill__cd">⏱ Hồi chiêu: 30 giây</div>
+                <div class="ship-skill__desc">Toả ra sóng nhiệt tốc độ cao, gây sát thương lên tất cả kẻ địch trên màn hình và huỷ toàn bộ đường đạn của đối phương.</div>
+              </div>
+            </div>
+
+            <!-- Placeholder: phi cơ khác -->
+            <div class="ship-locked">
+              <div class="ship-locked__icon">🔒</div>
+              <div class="ship-locked__text">Phi cơ mới · Sắp ra mắt</div>
             </div>
           </div>
         </div>
@@ -428,6 +504,28 @@ function onShipNameKey(e: KeyboardEvent) {
   box-shadow: 0 0 6px #2ecc71;
 }
 
+/* Achievements summary */
+.ach-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 7px 10px;
+  background: rgba(241, 196, 15, 0.07);
+  border: 1px solid rgba(241, 196, 15, 0.3);
+}
+.ach-summary__label {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #f1c40f;
+  letter-spacing: 1px;
+}
+.ach-summary__count {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+}
+
 /* Menu */
 .home__menu {
   display: flex;
@@ -590,5 +688,156 @@ function onShipNameKey(e: KeyboardEvent) {
 @keyframes sheet-up {
   from { transform: translateY(100%); opacity: 0.6; }
   to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ─── Ships Panel ────────────────────────────────────────────────────────── */
+.ships-sheet {
+  width: 100%;
+  max-width: 420px;
+  max-height: 88dvh;
+  background: var(--color-panel);
+  border-top: 3px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
+  border-right: 3px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ships-scroll {
+  overflow-y: auto;
+  padding: 14px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Ship card */
+.ship-card {
+  background: var(--color-panel-dark);
+  border: 2px solid var(--color-border);
+  box-shadow: 4px 4px 0 var(--color-border-dark);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ship-card__header {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.ship-svg {
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 8px rgba(0, 200, 255, 0.5));
+}
+.ship-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ship-card__name {
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  color: var(--color-accent);
+  letter-spacing: 1px;
+}
+.ship-card__tag {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #f1c40f;
+  letter-spacing: 1px;
+}
+.ship-card__desc {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  line-height: 1.7;
+  letter-spacing: 0.3px;
+}
+
+/* Stats bars */
+.ship-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.ship-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ship-stat__label {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  letter-spacing: 0.5px;
+  min-width: 84px;
+}
+.ship-stat__track {
+  flex: 1;
+  height: 9px;
+  background: #0a0e1e;
+  border: 2px solid #1a2040;
+  overflow: hidden;
+}
+.ship-stat__fill {
+  height: 100%;
+  transition: width 0.6s ease;
+  box-shadow: 0 0 5px currentColor;
+}
+.ship-stat__val {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  min-width: 54px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Skill info */
+.ship-skill {
+  background: rgba(255, 100, 0, 0.07);
+  border: 2px solid rgba(255, 100, 0, 0.4);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ship-skill__name {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #ff8833;
+  letter-spacing: 1px;
+}
+.ship-skill__cd {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #ffaa55;
+  letter-spacing: 0.5px;
+}
+.ship-skill__desc {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  line-height: 1.7;
+  letter-spacing: 0.2px;
+}
+
+/* Locked slot */
+.ship-locked {
+  border: 2px dashed var(--color-border-dark);
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  opacity: 0.45;
+}
+.ship-locked__icon { font-size: 22px; }
+.ship-locked__text {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--color-text-dim);
+  letter-spacing: 1px;
 }
 </style>

@@ -17,6 +17,8 @@ interface Bullet {
 type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer'
 type KamiState = 'descend' | 'aim' | 'charge' | 'prexplode' | 'dead'
 type BossAttack2State = 'ready' | 'locking'
+// Pioneer movement phases: patrol → approach → ram
+type PioneerPhase = 'enter' | 'patrol' | 'approach'
 interface Enemy {
   container: Container
   body: Graphics
@@ -55,6 +57,16 @@ interface Enemy {
   bossDriftTarget?: number
   bossDriftTimer?: number
   bossLabel?: Text
+  // formation / pioneer squad
+  pioneerPhase?: PioneerPhase
+  formTargetX?: number   // patrol/hover destination X
+  formTargetY?: number   // patrol/hover destination Y
+  enterTargetX?: number  // entry landing X
+  enterTargetY?: number  // entry landing Y
+  approachTimer?: number // countdown before charging
+  squadId?: number       // which flock this pioneer belongs to
+  formOffsetX?: number   // offset from squad anchor X
+  formOffsetY?: number   // offset from squad anchor Y
 }
 interface EnemyBullet {
   gfx: Graphics
@@ -98,13 +110,29 @@ let gameLayer: Container
 let bgLayer: Container
 let uiLayer: Container
 
-let enemySpawnTimer = 0
 let shootTimer = 0
-let playTimeFrames = 0
-let bossSpawnTimer = 0
+const TOUCH_Y_OFFSET = 90  // ship floats this many px above the finger
 let isDragging = false
 let touchX = 0
 let touchY = 0
+
+// ── Wave / Stage state ─────────────────────────────────────────────────────
+// waveQueue: list of spawn functions to call for the current stage
+type WaveSpawner = () => void
+let waveQueue: WaveSpawner[] = []
+let waveDispatchTimer = 0          // frames between group dispatches
+let waveIsClearing = false         // waiting for enemies to die
+let stageClearTimer = 0            // short pause between stages
+let stageAnnouncePending = false   // show stage title next frame
+
+// ── Flock / squad state ──────────────────────────────────────────────────────
+interface FlockState {
+  x: number; y: number    // current anchor position
+  tx: number; ty: number  // roam target
+  timer: number           // countdown to pick next target
+}
+const flockStates = new Map<number, FlockState>()
+let nextSquadId = 0
 
 // Intro / phase state
 let gamePhase: GamePhase = 'intro'
@@ -113,7 +141,6 @@ let stageTitleText: Text | null = null
 let stageTitleTimer = 0
 const INTRO_FRAMES = 90
 const STAGE_TITLE_FRAMES = 130
-const SPAWN_DELAY_AFTER_INTRO = 120 // 2 seconds at ~60fps
 
 const GAME_W = 390
 const GAME_H = 844
@@ -289,6 +316,107 @@ function screenFlash(color = 0xff2222, intensity = 0.38, durationMs = 160) {
   app.ticker.add(tick)
 }
 
+function showStageClearBanner() {
+  if (!app || !uiLayer) return
+  const style = new TextStyle({
+    fill: 0x44ff88, fontSize: 20,
+    fontFamily: "'Chakra Petch', sans-serif",
+    fontWeight: 'bold',
+    stroke: { color: 0x002200, width: 4 },
+  })
+  const txt = new Text({ text: '✓ STAGE CLEAR!', style })
+  txt.anchor.set(0.5, 0.5)
+  txt.x = GAME_W / 2
+  txt.y = GAME_H * 0.45
+  txt.alpha = 0
+  uiLayer.addChild(txt)
+  let f = 0
+  const tick = () => {
+    f++
+    if (f < 20) txt.alpha = f / 20
+    else if (f < 120) txt.alpha = 1
+    else txt.alpha = Math.max(0, 1 - (f - 120) / 20)
+    if (f >= 140) { uiLayer.removeChild(txt); app?.ticker.remove(tick) }
+  }
+  app.ticker.add(tick)
+}
+
+// Sóng tầm nhiệt huỷ diệt: hiệu ứng vòng sóng toả rộng
+function spawnHeatWave(px: number, py: number) {
+  if (!app || !gameLayer) return
+  for (let w = 0; w < 3; w++) {
+    const ring = new Graphics()
+    ring.x = px
+    ring.y = py
+    gameLayer.addChild(ring)
+    let frame = 0
+    const delay = w * 7
+    const maxR = Math.max(GAME_W, GAME_H) * 0.9
+    const maxFrames = 40
+    const waveColor = w === 0 ? 0xff6600 : w === 1 ? 0xffaa00 : 0xffdd44
+    const wTick = () => {
+      if (frame < delay) { frame++; return }
+      const f = frame - delay
+      ring.clear()
+      const r = (f / maxFrames) * maxR
+      const alpha = Math.max(0, 0.75 - f / maxFrames)
+      ring.circle(0, 0, r).stroke({ color: waveColor, width: Math.max(1, 4 - w), alpha })
+      ring.circle(0, 0, r * 0.9).stroke({ color: 0xffffff, width: 1, alpha: alpha * 0.4 })
+      frame++
+      if (f >= maxFrames) {
+        if (!ring.destroyed) gameLayer.removeChild(ring)
+        app?.ticker.remove(wTick)
+      }
+    }
+    app.ticker.add(wTick)
+  }
+}
+
+function activateHeatWave() {
+  if (!playerShip || !app) return
+  const px = playerShip.x
+  const py = playerShip.y
+  screenFlash(0xff6600, 0.55, 450)
+  spawnHeatWave(px, py)
+
+  // Huỷ tất cả đường đạn kẻ địch
+  for (const b of enemyBullets) {
+    if (!b.gfx.destroyed) gameLayer.removeChild(b.gfx)
+  }
+  enemyBullets = []
+
+  // Gây sát thương lên tất cả kẻ địch
+  const waveDamage = 150
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i]
+    e.hp = Math.max(0, e.hp - waveDamage)
+    hitFlash(e.body)
+    spawnDamageText(e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' ? 60 : 16), waveDamage)
+    redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+    if (e.hp <= 0) {
+      if (e.kind === 'boss_stardestroyer') {
+        spawnExplosion(e.container.x, e.container.y, 50, 0x4466ff, 0xaaccff)
+        spawnExplosion(e.container.x - 30, e.container.y + 20, 28, 0xff4400, 0xffee44)
+        spawnExplosion(e.container.x + 30, e.container.y - 10, 24, 0xff8800, 0xffee44)
+        screenFlash(0x4466ff, 0.65, 800)
+        spawnEnemyOrbs(e.container.x, e.container.y, 'boss_stardestroyer')
+        if (e.laserLine) e.laserLine.clear()
+        game.addScore(300 + game.currentStage * 50)
+      } else {
+        spawnExplosion(e.container.x, e.container.y, e.kind === 'kamikaze' ? 18 : 14)
+        spawnEnemyOrbs(e.container.x, e.container.y, e.kind)
+        const pts = e.kind === 'sniper' ? 20 + game.currentStage * 7
+          : e.kind === 'kamikaze' ? 15 + game.currentStage * 6
+          : 10 + game.currentStage * 5
+        game.addScore(pts)
+      }
+      gameLayer.removeChild(e.container)
+      enemies.splice(i, 1)
+      game.stageEnemiesKilled++
+    }
+  }
+}
+
 const ORB_CONFIG: Record<OrbTier, { outer: number; inner: number; exp: number; r: number }> = {
   white:  { outer: 0xffffff, inner: 0xdddddd, exp: 10, r: 4.5 },
   blue:   { outer: 0x44aaff, inner: 0xaaddff, exp: 20, r: 5.0 },
@@ -326,70 +454,132 @@ function spawnEnemyOrbs(x: number, y: number, kind: EnemyKind) {
 }
 
 // ─── Spawn enemies ────────────────────────────────────────────────────────────
-function spawnPioneer() {
+function makePioneer(startX: number, startY: number, formX: number, formY: number): Enemy {
   const size = Math.random() * 6 + 13
   const barW = size * 2.4
-
+  const maxHp = 28 + game.currentStage * 18
   const body = new Graphics()
   drawPioneer(body, size)
-
   const hpBarBg = new Graphics()
   const hpBar = new Graphics()
-  const maxHp = 18 + game.currentStage * 14
   redrawHpBar(hpBarBg, hpBar, 1, barW)
   hpBarBg.y = -size - 8
   hpBar.y = -size - 8
-
   const container = new Container()
   container.addChild(body, hpBarBg, hpBar)
-  container.x = Math.random() * (GAME_W - 60) + 30
-  container.y = -35
+  container.x = startX
+  container.y = startY
   gameLayer.addChild(container)
-
-  enemies.push({
+  return {
     container, body, hpBarBg, hpBar,
     kind: 'pioneer',
-    vy: Math.random() * 1.3 + 1.0 + game.currentStage * 0.12,
+    vy: 2.0 + game.currentStage * 0.1,
     vx: 0,
     hp: maxHp, maxHp, barW,
+    pioneerPhase: 'enter',
+    enterTargetX: formX,
+    enterTargetY: formY,
+    formTargetX: formX,
+    formTargetY: formY,
+    approachTimer: 0,
+  }
+}
+
+// Spawn 1 squad of pioneers (4-6) in a formation pattern
+// formation: 'line' | 'diamond' | 'box'
+// entry: 'top' | 'left' | 'right'
+function spawnPioneerSquad(formation: 'line' | 'diamond' | 'box' = 'line', entry: 'top' | 'left' | 'right' = 'top') {
+  const count = 6 + Math.floor(Math.random() * 4)   // 6-9
+  const stage = game.currentStage
+  // Formation positions relative to center anchor
+  const positions: [number, number][] = []
+  const spacing = 44
+  if (formation === 'line') {
+    for (let i = 0; i < count; i++) positions.push([(i - (count - 1) / 2) * spacing, 0])
+  } else if (formation === 'diamond') {
+    const rows = Math.ceil(count / 2)
+    let idx = 0
+    for (let r = 0; r < rows && idx < count; r++) {
+      const inRow = r === 0 || r === rows - 1 ? 1 : 2
+      for (let c = 0; c < inRow && idx < count; c++) {
+        positions.push([(c - (inRow - 1) / 2) * spacing, (r - (rows - 1) / 2) * spacing])
+        idx++
+      }
+    }
+  } else {
+    // box
+    const cols = Math.ceil(Math.sqrt(count))
+    for (let i = 0; i < count; i++) {
+      const r = Math.floor(i / cols), c = i % cols
+      positions.push([(c - (cols - 1) / 2) * spacing, r * spacing])
+    }
+  }
+
+  // Anchor = formation centre in the play field
+  const anchorX = GAME_W * 0.2 + Math.random() * GAME_W * 0.6
+  const anchorY = GAME_H * 0.12 + Math.random() * GAME_H * 0.18
+
+  // Assign a shared squad ID so all members share one flock anchor
+  const squadId = nextSquadId++
+  flockStates.set(squadId, {
+    x: anchorX, y: anchorY,
+    tx: GAME_W * 0.1 + Math.random() * GAME_W * 0.8,
+    ty: GAME_H * 0.08 + Math.random() * GAME_H * 0.70,
+    timer: 150 + Math.random() * 100,
   })
+
+  for (const [rx, ry] of positions) {
+    const formX = anchorX + rx
+    const formY = anchorY + Math.abs(ry)
+    let startX: number, startY: number
+    if (entry === 'top') {
+      startX = formX + (Math.random() - 0.5) * 30
+      startY = -40
+    } else if (entry === 'left') {
+      startX = -40
+      startY = formY
+    } else {
+      startX = GAME_W + 40
+      startY = formY
+    }
+    const e = makePioneer(startX, startY, formX, formY)
+    e.squadId = squadId
+    e.formOffsetX = rx
+    e.formOffsetY = Math.abs(ry)
+    // Stagger approach timer — back rows wait longer
+    e.approachTimer = 80 + Math.abs(ry / spacing) * 40 + stage * 2
+    enemies.push(e)
+    game.stageEnemiesTotal++
+  }
 }
 
 function spawnKamikaze() {
   const size = Math.random() * 5 + 16
   const barW = size * 2.8
-
   const body = new Graphics()
   drawKamikaze(body, size)
-
   const hpBarBg = new Graphics()
   const hpBar = new Graphics()
   const maxHp = 30 + game.currentStage * 22
   redrawHpBar(hpBarBg, hpBar, 1, barW)
   hpBarBg.y = -size - 10
   hpBar.y = -size - 10
-
   const warnStyle = new TextStyle({
-    fill: 0xffdd00,
-    fontSize: 16,
-    fontFamily: "'Chakra Petch', sans-serif",
-    fontWeight: 'bold',
+    fill: 0xffdd00, fontSize: 16,
+    fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold',
   })
   const warnSign = new Text({ text: '!!', style: warnStyle })
   warnSign.anchor.set(0.5, 1)
   warnSign.y = -size - 14
   warnSign.visible = false
-
   const aimLine = new Graphics()
   aimLine.visible = false
-
   const container = new Container()
   container.addChild(body, hpBarBg, hpBar, warnSign, aimLine)
   container.x = Math.random() * (GAME_W - 80) + 40
   container.y = -40
   gameLayer.addChild(container)
-
-  enemies.push({
+  const e: Enemy = {
     container, body, hpBarBg, hpBar,
     kind: 'kamikaze',
     vy: 1.2 + Math.random() * 0.6 + game.currentStage * 0.08,
@@ -397,34 +587,33 @@ function spawnKamikaze() {
     hp: maxHp, maxHp, barW,
     kamiState: 'descend',
     kamiTimer: 0,
-    warnSign,
-    aimLine,
-    targetX: 0,
-    targetY: 0,
-  })
+    warnSign, aimLine,
+    targetX: 0, targetY: 0,
+  }
+  enemies.push(e)
+  game.stageEnemiesTotal++
 }
 
-function spawnSniper() {
+// Spawn a sniper optionally with pioneer escort
+function spawnSniperGroup(withEscort = false) {
   const size = Math.random() * 5 + 14
   const barW = size * 2.8
-
   const body = new Graphics()
   drawSniper(body, size)
-
   const hpBarBg = new Graphics()
   const hpBar = new Graphics()
   const maxHp = 12 + game.currentStage * 10
   redrawHpBar(hpBarBg, hpBar, 1, barW)
   hpBarBg.y = -size - 10
   hpBar.y = -size - 10
-
   const container = new Container()
   container.addChild(body, hpBarBg, hpBar)
-  container.x = Math.random() * (GAME_W - 80) + 40
+  const sniperX = GAME_W * 0.2 + Math.random() * GAME_W * 0.6
+  const sniperY = GAME_H * 0.10 + Math.random() * GAME_H * 0.12
+  container.x = sniperX
   container.y = -40
   gameLayer.addChild(container)
-
-  enemies.push({
+  const sniper: Enemy = {
     container, body, hpBarBg, hpBar,
     kind: 'sniper',
     vy: 0.4 + Math.random() * 0.3,
@@ -432,12 +621,35 @@ function spawnSniper() {
     hp: maxHp, maxHp, barW,
     shootTimer: 200 + Math.random() * 100,
     dodgeCooldown: 0,
-  })
+    formTargetX: sniperX,
+    formTargetY: sniperY,
+    pioneerPhase: 'enter',
+    enterTargetX: sniperX,
+    enterTargetY: sniperY,
+    approachTimer: 999999, // sniper never approaches on its own
+  }
+  enemies.push(sniper)
+  game.stageEnemiesTotal++
+
+  if (withEscort) {
+    // 2-4 pioneers flanking the sniper
+    const escortCount = 2 + Math.floor(Math.random() * 3)
+    for (let i = 0; i < escortCount; i++) {
+      const side = i % 2 === 0 ? -1 : 1
+      const rank = Math.floor(i / 2)
+      const formX = sniperX + side * (55 + rank * 44)
+      const formY = sniperY + rank * 30
+      const e = makePioneer(-40 + (side < 0 ? 0 : GAME_W + 80), formY - 80, formX, formY)
+      e.approachTimer = 999999  // escorts stay until sniper is killed or they are shot
+      enemies.push(e)
+      game.stageEnemiesTotal++
+    }
+  }
 }
 
 function spawnStarDestroyer() {
   const size = 50
-  const maxHp = 1000 + game.currentStage * 250
+  const maxHp = 1600 + game.currentStage * 400
   const barW = 260
   const body = new Graphics()
   drawStarDestroyer(body, size)
@@ -485,7 +697,7 @@ function spawnStarDestroyer() {
   }
   app?.ticker.add(alertTick)
   screenFlash(0xff2222, 0.3, 500)
-  enemies.push({
+  const e: Enemy = {
     container, body, hpBarBg, hpBar,
     kind: 'boss_stardestroyer',
     vy: 0, vx: 0,
@@ -494,33 +706,85 @@ function spawnStarDestroyer() {
     bossEntered: false,
     bossTargetY: GAME_H * 0.18,
     bossPhase: 1,
-    attack1Timer: 180,
-    attack2Timer: 420,
+    attack1Timer: 100,
+    attack2Timer: 280,
     bossAttack2State: 'ready',
     laserLockTimer: 0,
     pendingMissiles: 0,
     missileFireTimer: 0,
     bossDriftTarget: GAME_W / 2,
     bossDriftTimer: 200,
-  })
+  }
+  enemies.push(e)
+  game.stageEnemiesTotal++
 }
 
-function spawnEnemy() {
-  const stage = game.currentStage
-  // Weighted spawn: more variety at higher stages
-  const rand = Math.random()
-  if (stage <= 1) {
-    // Stage 1: mostly pioneer
-    if (rand < 0.8) spawnPioneer(); else spawnKamikaze()
-  } else if (stage <= 3) {
-    if (rand < 0.5) spawnPioneer()
-    else if (rand < 0.8) spawnKamikaze()
-    else spawnSniper()
-  } else {
-    if (rand < 0.35) spawnPioneer()
-    else if (rand < 0.65) spawnKamikaze()
-    else spawnSniper()
+// ─── Wave builder ─────────────────────────────────────────────────────────────
+// Returns an array of spawner functions for stage N
+function buildWave(stage: number): WaveSpawner[] {
+  const wave: WaveSpawner[] = []
+  const isBossStage = stage % 5 === 0
+
+  if (isBossStage) {
+    // Boss stage: bigger escort waves before boss appears
+    const escortGroups = 2 + Math.floor(stage / 5)
+    for (let g = 0; g < escortGroups; g++) {
+      const entries: Array<'top' | 'left' | 'right'> = ['top', 'left', 'right']
+      wave.push(() => spawnPioneerSquad('diamond', entries[g % 3]!))
+    }
+    wave.push(() => spawnStarDestroyer())
+    return wave
   }
+
+  // Scale with stage: every 5 stages is a harder tier
+  const tier  = Math.floor((stage - 1) / 5)  // 0,1,2...
+  const difficulty = 1 + tier * 0.4
+
+  // Pioneer squads (always present, count scales strongly)
+  const squadCount = Math.min(10, 2 + Math.floor(stage / 2))
+  for (let i = 0; i < squadCount; i++) {
+    const formations: Array<'line' | 'diamond' | 'box'> = ['line', 'diamond', 'box']
+    const entries: Array<'top' | 'left' | 'right'> = ['top', 'left', 'right']
+    const form = formations[Math.floor(Math.random() * (stage < 4 ? 1 : stage < 7 ? 2 : 3))]
+    const entry = entries[Math.floor(Math.random() * (stage < 3 ? 1 : 3))]
+    wave.push(() => spawnPioneerSquad(form, entry))
+  }
+
+  // Sniper groups — balanced with Pioneer squads
+  if (stage >= 2) {
+    const sniperCount = Math.min(10, 2 + Math.floor(stage / 2))
+    for (let i = 0; i < sniperCount; i++) {
+      const withEscort = stage >= 3 && Math.random() < 0.65
+      wave.push(() => spawnSniperGroup(withEscort))
+    }
+  }
+
+  // Kamikaze — elite unit, only stage 4+
+  if (stage >= 4 && difficulty >= 1) {
+    const kamiCount = Math.min(6, stage - 3)
+    for (let i = 0; i < kamiCount; i++) {
+      wave.push(() => spawnKamikaze())
+    }
+  }
+
+  // Shuffle groups so it's not always pioneer → sniper → kamikaze
+  for (let i = wave.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [wave[i], wave[j]] = [wave[j]!, wave[i]!]
+  }
+
+  return wave
+}
+
+function launchWave() {
+  game.stageEnemiesTotal = 0
+  game.stageEnemiesKilled = 0
+  game.stageComplete = false
+  waveQueue = buildWave(game.currentStage)
+  waveIsClearing = false
+  waveDispatchTimer = 0
+  flockStates.clear()
+  nextSquadId = 0
 }
 
 // ─── Shoot ────────────────────────────────────────────────────────────────────
@@ -604,13 +868,12 @@ function gameLoop(ticker: Ticker) {
         stageTitleText = null
       }
       gamePhase = 'playing'
-      // Negative timer = spawn delay of 2s (~120 frames)
-      enemySpawnTimer = -SPAWN_DELAY_AFTER_INTRO
+      launchWave()  // kick off stage 1 wave
     }
     // Allow player movement during stage title but no enemy spawn
     if (playerShip && isDragging) {
       const dx = touchX - playerShip.x
-      const dy = touchY - playerShip.y
+      const dy = (touchY - TOUCH_Y_OFFSET) - playerShip.y
       const hpPenalty = Math.max(0.7, Math.pow(100 / game.playerMaxHp, 0.15))
       const spd = 5.5 * game.upgrades.shipSpeed * hpPenalty
       playerShip.x += dx * 0.055 * spd * dt * 0.5
@@ -624,10 +887,17 @@ function gameLoop(ticker: Ticker) {
   // ── PLAYING PHASE ────────────────────────────────────────────────────────
   if (game.isPaused) return
 
+  // Tick skill cooldown
+  game.tickSkillCooldown(dt / 60)
+  // Kiểm tra skill activation
+  if (game.consumeSkillActivation()) {
+    activateHeatWave()
+  }
+
   // Player move
   if (isDragging && playerShip) {
     const dx = touchX - playerShip.x
-    const dy = touchY - playerShip.y
+    const dy = (touchY - TOUCH_Y_OFFSET) - playerShip.y
     const hpPenalty = Math.max(0.7, Math.pow(100 / game.playerMaxHp, 0.15))
     const spd = 5.5 * game.upgrades.shipSpeed * hpPenalty
     playerShip.x += dx * 0.055 * spd * dt * 0.5
@@ -700,33 +970,114 @@ function gameLoop(ticker: Ticker) {
     }
   }
 
-  // Spawn enemies (only when timer >= 0)
-  // Spawn rate: decreases faster at higher stages; floor is 25 frames
-  const spawnRate = Math.max(25, 120 - game.currentStage * 12)
-  enemySpawnTimer += dt
-  if (enemySpawnTimer >= spawnRate) {
-    enemySpawnTimer = 0
-    spawnEnemy()
-    // Extra spawns scale aggressively with stage
-    const extras = Math.floor(game.currentStage / 2)
-    for (let s = 0; s < extras; s++) {
-      if (Math.random() < 0.55) spawnEnemy()
+  // Wave dispatch — pop one group from waveQueue every N frames
+  if (!waveIsClearing && waveQueue.length > 0) {
+    waveDispatchTimer += dt
+    const dispatchInterval = Math.max(60, 180 - game.currentStage * 8)
+    if (waveDispatchTimer >= dispatchInterval) {
+      waveDispatchTimer = 0
+      const spawner = waveQueue.shift()!
+      spawner()
+      if (waveQueue.length === 0) waveIsClearing = true
+    }
+  }
+
+  // Stage clear check — all dispatched enemies dead?
+  if (waveIsClearing && enemies.length === 0) {
+    if (stageClearTimer === 0) {
+      game.stageComplete = true
+      stageClearTimer = 180  // 3 s pause before next stage
+      if (!stageAnnouncePending) {
+        stageAnnouncePending = true
+        showStageClearBanner()
+      }
+    }
+  }
+  if (stageClearTimer > 0) {
+    stageClearTimer -= dt
+    if (stageClearTimer <= 0) {
+      stageClearTimer = 0
+      stageAnnouncePending = false
+      game.currentStage++
+      launchWave()
     }
   }
   // Pre-compute bullet damage scaled by bullet count (more bullets = less per-bullet damage, higher total)
   const bulletDmg = Math.round(
     game.upgrades.damage * Math.pow(1.2, game.upgrades.bulletCount - 1) / game.upgrades.bulletCount
   )
+  // ── Advance flock anchors (shared per squad) ─────────────────────────────
+  const flockSpeed = 1.4 + game.currentStage * 0.05
+  for (const fs of flockStates.values()) {
+    fs.timer -= dt
+    const dx = fs.tx - fs.x
+    const dy = fs.ty - fs.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist < 18 || fs.timer <= 0) {
+      // Pick new roam target — stay within playfield
+      fs.tx = GAME_W * 0.10 + Math.random() * GAME_W * 0.80
+      fs.ty = GAME_H * 0.06 + Math.random() * GAME_H * 0.72
+      fs.timer = 140 + Math.random() * 100
+    }
+    const nx = dx / (dist || 1)
+    const ny = dy / (dist || 1)
+    fs.x += nx * flockSpeed * dt
+    fs.y += ny * flockSpeed * dt
+    // Keep anchor inside screen bounds
+    fs.x = Math.max(40, Math.min(GAME_W - 40, fs.x))
+    fs.y = Math.max(40, Math.min(GAME_H - 120, fs.y))
+  }
   // ── Update enemies ───────────────────────────────────────────────────────
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i]
 
-    // ── Pioneer: straight down ──
+    // ── Pioneer: enter → patrol → approach phases ──
     if (e.kind === 'pioneer') {
-      e.container.y += e.vy * dt
-      if (e.container.y > GAME_H + 40) {
+      if (e.pioneerPhase === 'enter') {
+        // Fly toward formation slot at moderate speed
+        const dx = (e.enterTargetX ?? e.formTargetX ?? e.container.x) - e.container.x
+        const dy = (e.enterTargetY ?? e.formTargetY ?? e.container.y) - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const speed = 2.2 + game.currentStage * 0.05
+        if (dist < speed * dt * 2) {
+          e.container.x = e.enterTargetX ?? e.formTargetX ?? e.container.x
+          e.container.y = e.enterTargetY ?? e.formTargetY ?? e.container.y
+          e.pioneerPhase = 'patrol'
+          e.approachTimer = (e.approachTimer ?? 0) || (180 + Math.random() * 120)
+        } else {
+          e.container.x += (dx / dist) * speed * dt
+          e.container.y += (dy / dist) * speed * dt
+        }
+      } else if (e.pioneerPhase === 'patrol') {
+        // Small drift around formation position
+        const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.01
+        e.container.x += Math.sin(t * 1.3) * 0.4 * dt
+        e.container.y += Math.cos(t * 0.9) * 0.25 * dt
+        // Count down before approaching
+        if ((e.approachTimer ?? 0) > 0) {
+          e.approachTimer = (e.approachTimer ?? 0) - dt
+          if ((e.approachTimer ?? 0) <= 0) e.pioneerPhase = 'approach'
+        }
+      } else {
+        // approach: flock roam — all squad members share one anchor, each keeps its formation offset
+        const fs = e.squadId != null ? flockStates.get(e.squadId) : null
+        if (fs) {
+          const tx = fs.x + (e.formOffsetX ?? 0)
+          const ty = fs.y + (e.formOffsetY ?? 0)
+          const dx = tx - e.container.x
+          const dy = ty - e.container.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          const speed = 1.6 + game.currentStage * 0.06
+          if (dist > 3) {
+            e.container.x += (dx / dist) * speed * dt
+            e.container.y += (dy / dist) * speed * dt
+          }
+        }
+      }
+      if (e.container.y > GAME_H + 60 || e.container.x < -60 || e.container.x > GAME_W + 60) {
         gameLayer.removeChild(e.container)
         enemies.splice(i, 1)
+        game.stageEnemiesKilled++  // count as cleared (flew off screen)
         continue
       }
     }
@@ -825,6 +1176,7 @@ function gameLoop(ticker: Ticker) {
           }
         }
         game.addScore(15 + game.currentStage * 6)
+        game.stageEnemiesKilled++
         gameLayer.removeChild(e.container)
         enemies.splice(i, 1)
         continue
@@ -833,8 +1185,24 @@ function gameLoop(ticker: Ticker) {
 
     // ── Sniper: slow descent, shoots every ~5s, dodge by instant sidestep ──
     else if (e.kind === 'sniper') {
-      e.container.y += e.vy * dt
-      // sniper stays still horizontally — only moves via dodge
+      // Enter phase — fly to formation position
+      if (e.pioneerPhase === 'enter') {
+        const dx = (e.enterTargetX ?? e.container.x) - e.container.x
+        const dy = (e.enterTargetY ?? e.container.y) - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const speed = 2.8
+        if (dist < speed * dt * 2) {
+          e.container.x = e.enterTargetX ?? e.container.x
+          e.container.y = e.enterTargetY ?? e.container.y
+          e.pioneerPhase = 'patrol'
+        } else {
+          e.container.x += (dx / dist) * speed * dt
+          e.container.y += (dy / dist) * speed * dt
+        }
+      } else {
+        // patrol/approach: gentle slow drift downward
+        e.container.y += e.vy * dt
+      }
 
       // Shoot at player every 300 frames (~5s)
       e.shootTimer = (e.shootTimer ?? 300) - dt
@@ -882,6 +1250,7 @@ function gameLoop(ticker: Ticker) {
       if (e.container.y > GAME_H + 40) {
         gameLayer.removeChild(e.container)
         enemies.splice(i, 1)
+        game.stageEnemiesKilled++
         continue
       }
     }
@@ -918,17 +1287,17 @@ function gameLoop(ticker: Ticker) {
         }
         if (e.bossDriftTarget !== undefined) {
           const ddx = e.bossDriftTarget - e.container.x
-          e.container.x += Math.min(Math.abs(ddx), 1.5 * dt) * Math.sign(ddx)
+          e.container.x += Math.min(Math.abs(ddx), 2.5 * dt) * Math.sign(ddx)
         }
-        // Attack 1 — 4-bullet scatter burst, each hit heals boss 5% maxHp
-        e.attack1Timer = (e.attack1Timer ?? 120) - dt
+        // Attack 1 — 6-bullet scatter burst, each hit heals boss 5% maxHp
+        e.attack1Timer = (e.attack1Timer ?? 100) - dt
         if ((e.attack1Timer ?? 0) <= 0) {
-          e.attack1Timer = 130
+          e.attack1Timer = 85
           if (playerShip) {
             const baseAngle = Math.atan2(playerShip.y - e.container.y, playerShip.x - e.container.x)
             const capturedEnemy = e
-            for (let k = 0; k < 4; k++) {
-              const angle = baseAngle + (k - 1.5) * 0.22
+            for (let k = 0; k < 6; k++) {
+              const angle = baseAngle + (k - 2.5) * 0.20
               const bg = new Graphics()
               drawBossBullet(bg)
               bg.x = e.container.x
@@ -936,8 +1305,8 @@ function gameLoop(ticker: Ticker) {
               gameLayer.addChild(bg)
               enemyBullets.push({
                 gfx: bg,
-                vx: Math.cos(angle) * 4.5,
-                vy: Math.sin(angle) * 4.5,
+                vx: Math.cos(angle) * 5.5,
+                vy: Math.sin(angle) * 5.5,
                 onHitPlayer: () => {
                   if (!capturedEnemy.body || capturedEnemy.body.destroyed) return
                   capturedEnemy.hp = Math.min(capturedEnemy.maxHp, capturedEnemy.hp + capturedEnemy.maxHp * 0.05)
@@ -954,7 +1323,7 @@ function gameLoop(ticker: Ticker) {
             e.attack2Timer = (e.attack2Timer ?? 600) - dt
             if ((e.attack2Timer ?? 0) <= 0) {
               e.bossAttack2State = 'locking'
-              e.laserLockTimer = 120
+              e.laserLockTimer = 80
               if (e.laserLine) e.laserLine.visible = true
             }
           } else {
@@ -981,10 +1350,10 @@ function gameLoop(ticker: Ticker) {
                 mg.x = e.container.x + offX
                 mg.y = e.container.y + 20
                 gameLayer.addChild(mg)
-                enemyBullets.push({ gfx: mg, vx: (mlx / mmag) * 3.5, vy: (mly / mmag) * 3.5, homing: true, homingLife: 180, homingSpeed: 3.5 })
+                enemyBullets.push({ gfx: mg, vx: (mlx / mmag) * 4.5, vy: (mly / mmag) * 4.5, homing: true, homingLife: 180, homingSpeed: 4.5 })
               }
               e.bossAttack2State = 'ready'
-              e.attack2Timer = 600
+              e.attack2Timer = 380
             }
           }
         } else {
@@ -1001,16 +1370,16 @@ function gameLoop(ticker: Ticker) {
               smg.x = e.container.x + mox
               smg.y = e.container.y + 20
               gameLayer.addChild(smg)
-              enemyBullets.push({ gfx: smg, vx: (mdx / mmag) * 2.0, vy: (mdy / mmag) * 2.0, homing: true, homingLife: 300, homingSpeed: 2.0 })
+              enemyBullets.push({ gfx: smg, vx: (mdx / mmag) * 3.0, vy: (mdy / mmag) * 3.0, homing: true, homingLife: 240, homingSpeed: 3.0 })
               e.pendingMissiles!--
-              e.missileFireTimer = 6
+              e.missileFireTimer = 4
             }
           }
           e.attack2Timer = (e.attack2Timer ?? 600) - dt
           if ((e.attack2Timer ?? 0) <= 0 && (e.pendingMissiles ?? 0) === 0) {
-            e.pendingMissiles = 10
+            e.pendingMissiles = 14
             e.missileFireTimer = 0
-            e.attack2Timer = 600
+            e.attack2Timer = 320
           }
         }
       }
@@ -1037,6 +1406,8 @@ function gameLoop(ticker: Ticker) {
             spawnEnemyOrbs(e.container.x, e.container.y, 'boss_stardestroyer')
             if (e.laserLine) e.laserLine.clear()
             game.addScore(300 + game.currentStage * 50)
+            game.unlockAchievement('kill_boss')
+            game.stageEnemiesKilled++
           } else {
             const explR = e.kind === 'kamikaze' ? 18 : 14
             spawnExplosion(e.container.x, e.container.y, explR)
@@ -1045,6 +1416,7 @@ function gameLoop(ticker: Ticker) {
               : e.kind === 'kamikaze' ? 15 + game.currentStage * 6
                 : 10 + game.currentStage * 5
             game.addScore(pts)
+            game.stageEnemiesKilled++
           }
           gameLayer.removeChild(e.container)
           enemies.splice(i, 1)
@@ -1063,6 +1435,7 @@ function gameLoop(ticker: Ticker) {
       game.takeDamage(25)
       screenFlash()
       spawnDamageText(playerShip.x, playerShip.y - 20, 25)
+      game.stageEnemiesKilled++
       gameLayer.removeChild(e.container)
       enemies.splice(i, 1)
     }
@@ -1098,19 +1471,7 @@ function gameLoop(ticker: Ticker) {
     }
   }
 
-  // Stage progression — every 30 seconds of play time
-  playTimeFrames += dt
-  game.survivalSeconds += dt / 60
-  if (playTimeFrames >= 1800) {
-    playTimeFrames -= 1800
-    game.currentStage++
-  }
-  // Boss spawn — every 5 minutes (18000 frames ≈ 5 min at 60fps)
-  bossSpawnTimer += dt
-  if (bossSpawnTimer >= 18000) {
-    bossSpawnTimer = 0
-    if (!enemies.some(e => e.kind === 'boss_stardestroyer')) spawnStarDestroyer()
-  }
+  // (Stage progression now handled by wave-based clear logic above)
 }
 
 // ─── Setup ───────────────────────────────────────────────────────────────────
@@ -1272,7 +1633,8 @@ watch(() => game.isPlaying, (val, old) => {
     for (const o of expOrbs) gameLayer?.removeChild(o.gfx)
     if (stageTitleText) { uiLayer?.removeChild(stageTitleText); stageTitleText = null }
     bullets = []; enemies = []; enemyBullets = []; damageTexts = []; expOrbs = []
-    enemySpawnTimer = 0; shootTimer = 0; playTimeFrames = 0; bossSpawnTimer = 0
+    shootTimer = 0
+    waveQueue = []; waveDispatchTimer = 0; waveIsClearing = false; stageClearTimer = 0; stageAnnouncePending = false
     // Restart intro animation
     gamePhase = 'intro'
     introTimer = 0

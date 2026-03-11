@@ -1,12 +1,22 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { useGameStore } from '../../stores/gameStore'
 import type { UpgradeRarity } from '../../stores/gameStore'
 
 const game = useGameStore()
 
 function rarityLabel(r: UpgradeRarity) {
-  return { white: 'THƯỜNG', blue: 'HIẾM', purple: 'SỬ THI', gold: 'HUYỀN THOẠI' }[r]
+  return { white: 'THƯỜNG', blue: 'HIẾM', purple: 'Sử THI', gold: 'HUYỀN THOẠI' }[r]
 }
+
+// Flash kéo sự chú ý khi cooldown xong
+const skillJustReady = ref(false)
+watch(() => game.isSkillReady, (ready) => {
+  if (ready) {
+    skillJustReady.value = true
+    setTimeout(() => { skillJustReady.value = false }, 900)
+  }
+})
 </script>
 
 <template>
@@ -34,8 +44,15 @@ function rarityLabel(r: UpgradeRarity) {
         <span class="hud__score-value">{{ game.currentScore }}</span>
       </div>
       <div class="hud__stage">
-        <span class="hud__stage-label">TIME</span>
-        <span class="hud__stage-value">{{ game.survivalTimeFormatted }}</span>
+        <span class="hud__stage-label">STAGE</span>
+        <span class="hud__stage-value">{{ game.currentStage }}</span>
+      </div>
+      <div class="hud__enemies">
+        <span class="hud__enemies-label">TIÊU DIỆT</span>
+        <div class="hud__enemies-track">
+          <div class="hud__enemies-fill" :style="{ width: game.stageProgress + '%' }" />
+        </div>
+        <span class="hud__enemies-num">{{ game.stageEnemiesKilled }}/{{ game.stageEnemiesTotal }}</span>
       </div>
     </div>
 
@@ -78,6 +95,26 @@ function rarityLabel(r: UpgradeRarity) {
     </div>
 
     <!-- Game over overlay removed — handled by InfiniteGameView -->
+
+    <!-- Skill button: bên trái, ngang vị trí máy bay xuất hiện -->
+    <div
+      v-if="game.isPlaying && !game.isLevelUpPending"
+      class="hud__skill-wrap"
+    >
+      <button
+        class="hud__skill-btn"
+        :class="{
+          'hud__skill-btn--ready': game.isSkillReady,
+          'hud__skill-btn--flash': skillJustReady,
+        }"
+        :disabled="!game.isSkillReady || game.isPaused"
+        @click="game.activateSkill()"
+      >
+        <span v-if="game.isSkillReady" class="hud__skill-icon">🌊</span>
+        <span v-else class="hud__skill-cd">{{ Math.ceil(game.skillCooldown) }}</span>
+      </button>
+      <div class="hud__skill-label">SÓNG<br/>NHIỀT</div>
+    </div>
   </div>
 </template>
 
@@ -158,8 +195,36 @@ function rarityLabel(r: UpgradeRarity) {
   font-size: 16px;
   color: #f1c40f;
 }
+.hud__enemies {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 72px;
+}
+.hud__enemies-label {
+  font-size: 7px;
+  color: var(--color-text-dim);
+  letter-spacing: 1px;
+}
+.hud__enemies-track {
+  width: 64px;
+  height: 6px;
+  background: #111;
+  border: 1px solid #444;
+  overflow: hidden;
+}
+.hud__enemies-fill {
+  height: 100%;
+  background: #2ecc71;
+  transition: width 0.3s;
+}
+.hud__enemies-num {
+  font-size: 7px;
+  color: #aaa;
+}
 
-/* Pause overlay */
+
 .hud__pause-overlay {
   position: absolute;
   inset: 0;
@@ -294,4 +359,64 @@ function rarityLabel(r: UpgradeRarity) {
 .rarity-purple .hud__levelup-card-rarity { color: #aa44ff; }
 .rarity-gold   { border-color: #f1c40f; box-shadow: 3px 3px 0 #7d6608, 0 0 12px rgba(241,196,15,0.3); }
 .rarity-gold   .hud__levelup-card-rarity { color: #f1c40f; }
+
+/* Skill button */
+.hud__skill-wrap {
+  position: absolute;
+  left: 12px;
+  top: 67%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  pointer-events: all;
+  z-index: 20;
+}
+.hud__skill-btn {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 3px solid #334;
+  background: rgba(5, 12, 35, 0.88);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-pixel);
+  transition: border-color 0.25s, box-shadow 0.25s;
+  backdrop-filter: blur(4px);
+}
+.hud__skill-btn:disabled {
+  cursor: default;
+}
+.hud__skill-btn--ready {
+  border-color: #ff6600;
+  box-shadow: 0 0 10px rgba(255, 100, 0, 0.6), inset 0 0 8px rgba(255, 100, 0, 0.15);
+}
+.hud__skill-btn--flash {
+  animation: skill-flash 0.9s ease-out;
+}
+.hud__skill-icon {
+  font-size: 22px;
+  filter: drop-shadow(0 0 6px #ff8800);
+}
+.hud__skill-cd {
+  font-size: 15px;
+  color: #778899;
+  letter-spacing: 0;
+}
+.hud__skill-label {
+  font-size: 7px;
+  color: var(--color-text-dim);
+  letter-spacing: 1px;
+  text-align: center;
+  line-height: 1.4;
+}
+@keyframes skill-flash {
+  0%   { box-shadow: 0 0 6px rgba(255,100,0,0.5); }
+  20%  { box-shadow: 0 0 28px rgba(255,180,0,1), 0 0 60px rgba(255,120,0,0.7); border-color: #ffcc00; }
+  50%  { box-shadow: 0 0 18px rgba(255,130,0,0.8); border-color: #ff9900; }
+  100% { box-shadow: 0 0 10px rgba(255,100,0,0.6); border-color: #ff6600; }
+}
 </style>

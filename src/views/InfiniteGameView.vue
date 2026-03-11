@@ -106,8 +106,8 @@ onUnmounted(() => window.removeEventListener('beforeunload', handleBeforeUnload)
                 <span class="gameover-stat-value">{{ game.highScore }}</span>
               </div>
               <div class="gameover-stat-row">
-                <span class="gameover-stat-label">THỜI GIAN</span>
-                <span class="gameover-stat-value">{{ game.survivalTimeFormatted }}</span>
+                <span class="gameover-stat-label">STAGE ĐẠT</span>
+                <span class="gameover-stat-value">{{ game.currentStage }}</span>
               </div>
               <div class="gameover-stat-row gold-row">
                 <span class="gameover-stat-label">VÀNG NHẬN</span>
