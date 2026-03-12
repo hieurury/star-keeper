@@ -40,7 +40,7 @@ export function spawnThuHoSwarm(ctx: GameContext, game: GameStore): void {
     const startX = side === 'left' ? -50 : GAME_W + 50
     const size = 12 + Math.random() * 4
     const barW = size * 2.8
-    const maxHp = 55 + game.currentStage * 28
+    const maxHp = 64 + game.currentStage * 33
     const body = new Graphics()
     drawThuHo(body, size)
     const hpBarBg = new Graphics()

@@ -43,7 +43,7 @@ export function spawnDaiLienPair(ctx: GameContext, game: GameStore): void {
     const formY = anchorY
     const size = 11 + Math.random() * 4
     const barW = size * 2.5
-    const maxHp = 40 + game.currentStage * 20  // cao cấp
+    const maxHp = 32 + game.currentStage * 17  // trung bình
     const body = new Graphics()
     drawDaiLien(body, size)
     const hpBarBg = new Graphics()

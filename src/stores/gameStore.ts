@@ -67,6 +67,13 @@ export interface CardStats {
   turboFireRatePct: number
   // Mưa Bom Liên Hoàn (ultimate)
   cbTurboBoost: boolean
+  // Kho Vũ Khí - Star Shooter
+  shooterMissileBonus: number
+  shooterMissileAoe: boolean
+  shooterMissileSpdMult: number
+  shooterMissileDmgMult: number
+  shooterMissileAoeSizeBonus: number
+  shooterMissileKillCdReduce: number
 }
 
 export const ALL_CARD_DEFS: CardDef[] = [
@@ -122,7 +129,16 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'weapon_cache_holder', name: 'Kho Vũ Khí - Star Holder', type: 'attack', icon: 'PhFire', maxLevel: 5, shipId: 'star_holder',
+    id: 'weapon_cache_shooter', name: 'Kho Vũ Khí - Star Shooter', type: 'attack', icon: 'PhRocketLaunch', maxLevel: 5, shipId: 'star_shooter',
+    levels: [
+      { desc: 'Tăng thêm 1 tên lửa bắn ra.' },
+      { desc: 'Tên lửa bây giờ gây sát thương AOE khi nổ.' },
+      { desc: 'Tăng 30% tốc độ bay và 40% sát thương cho tên lửa.' },
+      { desc: 'Tăng phạm vi nổ AOE lên 25%.' },
+      { desc: 'Thêm 2 tên lửa bắn ra, tăng thêm 30% sát thương.' },
+    ],
+  },
+  { id: 'weapon_cache_holder', name: 'Kho Vũ Khí - Star Holder', type: 'attack', icon: 'PhFire', maxLevel: 5, shipId: 'star_holder',
     levels: [
       { desc: 'Tăng kích thước tia lazer +25%.' },
       { desc: 'Bắn thêm 1 tia lazer song song.' },
@@ -173,6 +189,13 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   // ── Tối thượng ──────────────────────────────────────────────────────────────
+  {
+    id: 'weapon_cache_shooter_ult', name: 'Tên Lửa Lạnh Lùng', type: 'ultimate', icon: 'PhTarget', maxLevel: 1, shipId: 'star_shooter',
+    requiresAttackId: 'weapon_cache_shooter',
+    levels: [
+      { desc: 'Kẻ địch bị tên lửa tiêu diệt giảm 0.5s hồi chiêu kỹ năng. (Yêu cầu: Kho Vũ Khí - Star Shooter Lv5)' },
+    ],
+  },
   {
     id: 'weapon_cache_star_ult', name: 'Đạn Xuyên Phá', type: 'ultimate', icon: 'PhDiamondsFour', maxLevel: 1, shipId: 'star_keeper',
     requiresAttackId: 'weapon_cache_star',
@@ -309,8 +332,8 @@ export const ALL_ARTIFACT_DEFS: ArtifactDef[] = [
   { id: 'mana_core',    name: 'Lõi Mana',      icon: '💠', cost: 3500, desc: '+1 đạn (vượt giới hạn); mỗi 10 tiêu diệt → nổ diện rộng' },
 ]
 
-export const SHIP_ARTIFACT_SLOTS: Record<string, number> = { star_keeper: 1, star_holder: 1 }
-export const SHIP_DURABILITY_MAX: Record<string, number> = { star_keeper: 100, star_holder: 90 }
+export const SHIP_ARTIFACT_SLOTS: Record<string, number> = { star_keeper: 1, star_holder: 1, star_shooter: 1 }
+export const SHIP_DURABILITY_MAX: Record<string, number> = { star_keeper: 100, star_holder: 90, star_shooter: 95 }
 
 // ─── Upgrade definitions ──────────────────────────────────────────────────────
 export type UpgradeRarity = 'white' | 'blue' | 'purple' | 'gold'
@@ -373,6 +396,10 @@ const MISSION_POOL: Array<{
   { kind: 'play_with_ship', shipId: 'star_holder', variants: [
     { target: 2, desc: 'Chơi 2 ván với Star Holder', reward: { coins: 70 } },
     { target: 4, desc: 'Chơi 4 ván với Star Holder', reward: { coins: 120 } },
+  ]},
+  { kind: 'play_with_ship', shipId: 'star_shooter', variants: [
+    { target: 2, desc: 'Chơi 2 ván với Star Shooter', reward: { coins: 80 } },
+    { target: 4, desc: 'Chơi 4 ván với Star Shooter', reward: { coins: 130 } },
   ]},
   { kind: 'play_time', variants: [
     { target: 120, desc: 'Chơi liên tục 2 phút trong 1 ván',   reward: { accountExp: 60 } },
@@ -517,6 +544,12 @@ export const useGameStore = defineStore('game', () => {
       speedCardPct: 0,
       turboFireRatePct: 0,
       cbTurboBoost: false,
+      shooterMissileBonus: 0,
+      shooterMissileAoe: false,
+      shooterMissileSpdMult: 1.0,
+      shooterMissileDmgMult: 1.0,
+      shooterMissileAoeSizeBonus: 0,
+      shooterMissileKillCdReduce: 0,
     }
     const c = activeCards.value
 
@@ -614,6 +647,15 @@ export const useGameStore = defineStore('game', () => {
     // turbo_fire_card (support)
     stats.turboFireRatePct = (c['turbo_fire_card'] ?? 0) * 10
 
+    // weapon_cache_shooter (Star Shooter)
+    const sc = c['weapon_cache_shooter'] ?? 0
+    if (sc >= 1) stats.shooterMissileBonus = 1
+    if (sc >= 2) stats.shooterMissileAoe = true
+    if (sc >= 3) { stats.shooterMissileSpdMult = 1.3; stats.shooterMissileDmgMult = 1.4 }
+    if (sc >= 4) stats.shooterMissileAoeSizeBonus = 0.25
+    if (sc >= 5) { stats.shooterMissileBonus = 3; stats.shooterMissileDmgMult = (sc >= 3 ? 1.4 : 1.0) * 1.3 }
+    if ((c['weapon_cache_shooter_ult'] ?? 0) >= 1) stats.shooterMissileKillCdReduce = 0.5
+
     // bullet_rain_ult: cluster bomb halved interval + always double
     if ((c['bullet_rain_ult'] ?? 0) >= 1) {
       stats.cbTurboBoost = true
@@ -632,7 +674,7 @@ export const useGameStore = defineStore('game', () => {
   // ─── Artifact & Durability state ─────────────────────────────────────────────
   const ownedArtifacts = ref<string[]>([])
   const equippedArtifacts = ref<Record<string, string[]>>({})  // shipId → artifactId[]
-  const shipDurabilities = ref<Record<string, number>>({ star_keeper: 100, star_holder: 90 })
+  const shipDurabilities = ref<Record<string, number>>({ star_keeper: 100, star_holder: 90, star_shooter: 95 })
   // Runtime artifact progress (0–1), written by GameCanvas each frame for HUD
   const neutronVacuumPct = ref(0)
   const manaCorePct = ref(0)
@@ -941,8 +983,13 @@ export const useGameStore = defineStore('game', () => {
       if (skillCooldown.value > 0) return
       unlockAchievement('skill_use')
       skillActivationPending.value = true
-      skillCooldown.value = 30 * (1 - cardStats.value.cdReductionPct)
+      const baseCd = selectedShip.value === 'star_shooter' ? 35 : 30
+      skillCooldown.value = baseCd * (1 - cardStats.value.cdReductionPct)
     }
+  }
+
+  function reduceSkillCooldown(seconds: number) {
+    if (skillCooldown.value > 0) skillCooldown.value = Math.max(0, skillCooldown.value - seconds)
   }
 
   function tickSkillCooldown(deltaSeconds: number) {
@@ -971,18 +1018,23 @@ export const useGameStore = defineStore('game', () => {
     playerExp.value = 0
     // Áp dụng nâng cấp vĩnh viễn + cổ vật vào chỉ số bắt đầu
     const isHolder = selectedShip.value === 'star_holder'
+    const isShooter = selectedShip.value === 'star_shooter'
     const aStats = artifactStats.value
-    playerMaxHp.value = Math.min(300, (isHolder ? 180 : 100) + permUpgrades.value.baseHp * 25)
+    const baseHp = isShooter ? 220 : (isHolder ? 180 : 100)
+    const maxHpCap = isShooter ? 400 : 300
+    playerMaxHp.value = Math.min(maxHpCap, baseHp + permUpgrades.value.baseHp * 25)
     playerHp.value = playerMaxHp.value
-    const baseDmg = isHolder ? 25 : 10
-    const baseSpd = isHolder ? 1.2 : 1.0
+    const baseDmg = isShooter ? 40 : (isHolder ? 25 : 10)
+    const maxDmg = isShooter ? 200 : (isHolder ? 150 : 100)
+    const baseSpd = isShooter ? 1.0 : (isHolder ? 1.2 : 1.0)
+    const maxSpd = isShooter ? 1.6 : (isHolder ? 1.75 : 1.5)
     upgrades.value = {
       bulletSpeed: isHolder ? 1.2 : 1,
       bulletCount: 1 + permUpgrades.value.bulletCount + aStats.extraBullet,
-      shipSpeed: Math.min(isHolder ? 1.75 : 1.5, (baseSpd + permUpgrades.value.baseSpeed * 0.05) * (1 + aStats.speedBonus)),
+      shipSpeed: Math.min(maxSpd, (baseSpd + permUpgrades.value.baseSpeed * 0.05) * (1 + aStats.speedBonus)),
       shield: 0,
       bombCount: 0,
-      damage: Math.min(isHolder ? 150 : 100, (baseDmg + permUpgrades.value.baseDamage * 5) * (1 + aStats.damageBonus)),
+      damage: Math.min(maxDmg, (baseDmg + permUpgrades.value.baseDamage * 5) * (1 + aStats.damageBonus)),
       collectRange: 40,
       hpRegen: 0,
     }
@@ -1421,6 +1473,7 @@ export const useGameStore = defineStore('game', () => {
     activateSkill,
     tickSkillCooldown,
     consumeSkillActivation,
+    reduceSkillCooldown,
     tickShield,
     absorbShieldHit,
     buyShip,

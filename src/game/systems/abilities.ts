@@ -357,7 +357,23 @@ export function updatePeriodicAbilities(ctx: GameContext, game: GameStore, dt: n
   updateStaticField(ctx, game, dt)
 }
 
-// ─── Heat wave (Star Keeper skill) ────────────────────────────────────────────
+// ─── Black hole (Star Shooter skill) ──────────────────────────────────────────
+export function activateBlackHole(ctx: GameContext, _game: GameStore): void {
+  if (!ctx.app || !ctx.gameLayer) return
+  // Remove previous black hole if still active
+  if (ctx.shooterBlackHoleGfx) {
+    if (!ctx.shooterBlackHoleGfx.destroyed) ctx.gameLayer.removeChild(ctx.shooterBlackHoleGfx)
+    ctx.shooterBlackHoleGfx = null
+  }
+  const x = GAME_W / 2
+  const y = GAME_H * 0.38
+  const g = new Graphics()
+  g.x = x; g.y = y
+  ctx.gameLayer.addChild(g)
+  ctx.shooterBlackHoleGfx = g
+  ctx.shooterBlackHoleTimer = 300  // 5 seconds at 60 fps
+  screenFlash(ctx, 0x220044, 0.55, 500)
+}
 export function activateHeatWave(ctx: GameContext, game: GameStore): void {
   if (!ctx.playerShip || !ctx.app) return
   const px = ctx.playerShip.x

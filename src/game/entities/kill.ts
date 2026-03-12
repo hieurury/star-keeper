@@ -5,6 +5,7 @@ import { spawnExplosion, screenFlash } from '../systems/effects'
 import { spawnEnemyOrbs, spawnFragmentOrb } from '../systems/orbs'
 import { cleanupBossInvaderTurrets } from './BossInvader'
 import { cleanupBossTinhVan } from './BossTinhVan'
+import { cleanupBossTrumSo } from './BossTrumSo'
 import { drawThuatSiMeteor } from './ThuatSi'
 
 type GameStore = ReturnType<typeof useGameStore>
@@ -45,6 +46,16 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
     spawnEnemyOrbs(ctx, e.container.x, e.container.y, 'boss_tinhvan')
     cleanupBossTinhVan(ctx, e)
     game.addScore(600 + game.currentStage * 80)
+    game.addBossKill()
+  } else if (e.kind === 'boss_trumso') {
+    spawnExplosion(ctx, e.container.x, e.container.y, 60, 0x7700cc, 0xcc44ff)
+    spawnExplosion(ctx, e.container.x - 45, e.container.y + 20, 30, 0x5500aa, 0xee88ff)
+    spawnExplosion(ctx, e.container.x + 45, e.container.y - 15, 26, 0x4400aa, 0xcc77ff)
+    spawnExplosion(ctx, e.container.x, e.container.y + 45, 22, 0x6600cc, 0xff88ff)
+    screenFlash(ctx, 0x6600cc, 0.7, 900)
+    spawnEnemyOrbs(ctx, e.container.x, e.container.y, 'boss_trumso')
+    cleanupBossTrumSo(ctx, e)
+    game.addScore(500 + game.currentStage * 70)
     game.addBossKill()
   } else {
     // Thủ Hộ (guardian) dies with a gold flash

@@ -23,7 +23,7 @@ const AVATARS = ['PhRocketLaunch', 'PhAirplaneTilt', 'PhLightning', 'PhFire', 'P
 const showProfileSheet = ref(false)
 const showShipsPanel = ref(false)
 const shipIndex = ref(0)
-const SHIP_COUNT = 2
+const SHIP_COUNT = 3
 
 function prevShip() { shipIndex.value = (shipIndex.value - 1 + SHIP_COUNT) % SHIP_COUNT }
 function nextShip() { shipIndex.value = (shipIndex.value + 1) % SHIP_COUNT }
@@ -164,6 +164,14 @@ const starHolderStats = [
   { label: 'HP',          display: '180 / 300', pct: 60, color: '#44ff88' },
 ]
 
+const starShooterStats = [
+  { label: 'SÁT THƯƠNG',  display: '40 / 200',  pct: 20, color: '#ff4444' },
+  { label: 'TỐC ĐỘ BẮN', display: '0.75 / 1.5', pct: 50, color: '#ff9900' },
+  { label: 'ĐẠN / LỚT',   display: '1 / 4',    pct: 25, color: '#ffcc00' },
+  { label: 'TỐC BAY',     display: '1.0 / 1.6', pct: 63, color: '#44aaff' },
+  { label: 'HP',          display: '220 / 400', pct: 55, color: '#44ff88' },
+]
+
 function buyShip(id: string, cost: number) {
   game.buyShip(id, cost)
 }
@@ -302,6 +310,19 @@ function onShipNameKey(e: KeyboardEvent) {
                 <rect x="-10" y="-22" width="20" height="34" fill="#00cfff"/>
                 <rect x="-5" y="-22" width="10" height="13" fill="#ffd700"/>
                 <rect x="-6" y="12" width="12" height="9" fill="#ff6600" opacity="0.85"/>
+              </svg>
+            </template>
+            <template v-else-if="game.selectedShip === 'star_shooter'">
+              <svg viewBox="-36 -30 72 62" width="56" height="54">
+                <polygon points="-7,2 -30,16 -7,12" fill="#cc2222"/>
+                <polygon points="-25,14 -30,16 -22,20" fill="#ff4444"/>
+                <polygon points="7,2 30,16 7,12" fill="#cc2222"/>
+                <polygon points="25,14 30,16 22,20" fill="#ff4444"/>
+                <rect x="-8" y="-24" width="16" height="36" fill="#ffffff"/>
+                <polygon points="0,-28 7,-18 -7,-18" fill="#ff4444"/>
+                <rect x="-13" y="-6" width="8" height="10" fill="#dddddd"/>
+                <rect x="5" y="-6" width="8" height="10" fill="#dddddd"/>
+                <rect x="-5" y="16" width="10" height="8" fill="#ff3333" opacity="0.9"/>
               </svg>
             </template>
             <template v-else>
@@ -552,6 +573,55 @@ function onShipNameKey(e: KeyboardEvent) {
                     </template>
                     <template v-else>
                       <button v-if="game.selectedShip !== 'star_holder'" class="ship-btn ship-btn--select" @click="selectShip('star_holder')"><PhCheck :size="11" style="vertical-align:middle;margin-right:4px"/>Chọn phi cơ này</button>
+                      <div v-else class="ship-btn ship-btn--active"><PhLightning weight="fill" :size="11" style="vertical-align:middle;margin-right:4px"/>Đang sử dụng</div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Slide 2: Star Shooter -->
+              <div class="ship-carousel__slide">
+                <div class="ship-card" :class="{ 'ship-card--selected': game.selectedShip === 'star_shooter' }">
+                  <div class="ship-card__header">
+                    <svg class="ship-svg" viewBox="-36 -30 72 62" width="60" height="58">
+                      <polygon points="-7,2 -30,16 -7,12" fill="#cc2222"/>
+                      <polygon points="-25,14 -30,16 -22,20" fill="#ff4444"/>
+                      <polygon points="7,2 30,16 7,12" fill="#cc2222"/>
+                      <polygon points="25,14 30,16 22,20" fill="#ff4444"/>
+                      <rect x="-8" y="-24" width="16" height="36" fill="#ffffff"/>
+                      <polygon points="0,-28 7,-18 -7,-18" fill="#ff4444"/>
+                      <rect x="-13" y="-6" width="8" height="10" fill="#dddddd"/>
+                      <rect x="5" y="-6" width="8" height="10" fill="#dddddd"/>
+                      <rect x="-5" y="16" width="10" height="8" fill="#ff3333" opacity="0.9"/>
+                    </svg>
+                    <div class="ship-card__info">
+                      <div class="ship-card__name">STAR SHOOTER</div>
+                      <div class="ship-card__tag" :class="game.ownedShips.includes('star_shooter') ? 'tag--owned' : 'tag--locked'">
+                        {{ game.ownedShips.includes('star_shooter') ? '✅ Đã sở hữu' : '🔒 Cần mở khoá · 15,000 🪙' }}
+                      </div>
+                      <div class="ship-card__desc">Chiến cơ 4 cánh với pod tên lửa hạng nặng. Tên lửa tự dẫn bám sát đối thủ, kỹ năng hố đen hấp thụ kẻ địch.</div>
+                    </div>
+                  </div>
+                  <div class="ship-stats">
+                    <div v-for="stat in starShooterStats" :key="stat.label" class="ship-stat">
+                      <span class="ship-stat__label">{{ stat.label }}</span>
+                      <div class="ship-stat__track"><div class="ship-stat__fill" :style="{ width: stat.pct + '%', background: stat.color }" /></div>
+                      <span class="ship-stat__val">{{ stat.display }}</span>
+                    </div>
+                  </div>
+                  <div class="ship-skill ship-skill--purple">
+                    <div class="ship-skill__name">🌑 HỐ ĐEN HẤP DẪN</div>
+                    <div class="ship-skill__cd"><PhTimer :size="11" style="vertical-align:middle;margin-right:4px"/>Hồi chiêu: 35 giây</div>
+                    <div class="ship-skill__desc">Triệu hồi hố đen trong 5 giây — hút kẻ địch thường lại gần, gây 10% HP/s sát thương liên tục (trùm 2%) và hấp thụ toàn bộ đạn kẻ địch.</div>
+                  </div>
+                  <div class="ship-card__actions">
+                    <template v-if="!game.ownedShips.includes('star_shooter')">
+                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < 15000" @click="buyShip('star_shooter', 15000)">
+                        {{ game.playerCoins >= 15000 ? 'Mua — 15,000 🪙' : 'Không đủ vàng' }}
+                      </button>
+                    </template>
+                    <template v-else>
+                      <button v-if="game.selectedShip !== 'star_shooter'" class="ship-btn ship-btn--select" @click="selectShip('star_shooter')"><PhCheck :size="11" style="vertical-align:middle;margin-right:4px"/>Chọn phi cơ này</button>
                       <div v-else class="ship-btn ship-btn--active"><PhLightning weight="fill" :size="11" style="vertical-align:middle;margin-right:4px"/>Đang sử dụng</div>
                     </template>
                   </div>
@@ -1536,6 +1606,10 @@ function onShipNameKey(e: KeyboardEvent) {
 .ship-skill--orange {
   background: rgba(255, 140, 0, 0.09);
   border-color: rgba(255, 140, 0, 0.5);
+}
+.ship-skill--purple {
+  background: rgba(160, 60, 255, 0.09);
+  border-color: rgba(160, 60, 255, 0.5);
 }
 .ship-card__actions {
   display: flex;

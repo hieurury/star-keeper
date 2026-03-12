@@ -133,3 +133,29 @@ export function spawnHeatWave(ctx: GameContext, px: number, py: number): void {
     ctx.app.ticker.add(wTick)
   }
 }
+
+/** Flashing AOE warning ring at a position (used for boss missile target indicator). */
+export function spawnMissileWarning(ctx: GameContext, x: number, y: number): void {
+  if (!ctx.app || !ctx.uiLayer) return
+  const g = new Graphics()
+  g.x = x; g.y = y
+  ctx.uiLayer.addChild(g)
+  let frame = 0
+  const maxFrames = 90
+  const tick = () => {
+    frame++
+    const progress = frame / maxFrames
+    const r = 18 + progress * 18
+    const alpha = (1 - progress) * 0.85
+    g.clear()
+    if (Math.floor(frame / 7) % 2 === 0) {
+      g.circle(0, 0, r).stroke({ color: 0xff44ff, width: 2, alpha })
+      g.circle(0, 0, 5).fill({ color: 0xff44ff, alpha: alpha * 0.9 })
+    }
+    if (frame >= maxFrames) {
+      if (!g.destroyed) ctx.uiLayer.removeChild(g)
+      ctx.app?.ticker.remove(tick)
+    }
+  }
+  ctx.app.ticker.add(tick)
+}

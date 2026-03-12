@@ -7,6 +7,7 @@ import { spawnSniperGroup } from '../entities/Sniper'
 import { spawnStarDestroyer } from '../entities/BossStarDestroyer'
 import { spawnBossInvader } from '../entities/BossInvader'
 import { spawnBossTinhVan } from '../entities/BossTinhVan'
+import { spawnBossTrumSo } from '../entities/BossTrumSo'
 import { spawnDaiLienPair } from '../entities/DaiLien'
 import { spawnThuHoSwarm } from '../entities/ThuHo'
 import { spawnThuatSi } from '../entities/ThuatSi'
@@ -56,16 +57,18 @@ function buildAnoxWave(ctx: GameContext, game: GameStore, wave: WaveSpawner[]): 
 function buildBnoxWave(ctx: GameContext, game: GameStore, wave: WaveSpawner[]): void {
   const stage = game.currentStage
 
-  const dlCount = Math.min(6, 2 + Math.floor(stage / 3))
+  const dlCount = Math.min(3, 1 + Math.floor(stage / 5))
   for (let i = 0; i < dlCount; i++) {
     wave.push(() => spawnDaiLienPair(ctx, game))
   }
 
-  if (Math.random() < 0.65) {
+  wave.push(() => spawnThuHoSwarm(ctx, game))
+  wave.push(() => spawnThuHoSwarm(ctx, game))
+  if (stage >= 4 && Math.random() < 0.55) {
     wave.push(() => spawnThuHoSwarm(ctx, game))
   }
 
-  const tsCount = Math.min(3, 1 + Math.floor(stage / 5))
+  const tsCount = Math.min(7, 2 + Math.floor(stage / 3))
   for (let i = 0; i < tsCount; i++) {
     wave.push(() => spawnThuatSi(ctx, game))
   }
@@ -99,28 +102,19 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
     ctx.factionBlock = block
   }
 
-  const isTinhVanBossStage = stage % 15 === 0
-  const isInvaderBossStage = stage % 10 === 0 && !isTinhVanBossStage
-  const isBossStage = stage % 5 === 0 && !isInvaderBossStage && !isTinhVanBossStage
-
-  if (isTinhVanBossStage) {
-    const escortCount = 1 + Math.floor(stage / 15)
-    spawnBossEscort(ctx, game, wave, escortCount)
-    wave.push(() => spawnBossTinhVan(ctx, game))
-    return wave
-  }
-
-  if (isInvaderBossStage) {
-    const escortCount = 2 + Math.floor(stage / 10)
-    spawnBossEscort(ctx, game, wave, escortCount)
-    wave.push(() => spawnBossInvader(ctx, game))
-    return wave
-  }
+  const isBossStage = stage % 5 === 0
 
   if (isBossStage) {
-    const escortCount = 2 + Math.floor(stage / 5)
+    const bossIdx = Math.floor(stage / 5)
+    const escortCount = Math.min(4, 1 + Math.floor(stage / 10))
     spawnBossEscort(ctx, game, wave, escortCount)
-    wave.push(() => spawnStarDestroyer(ctx, game))
+    if (ctx.activeFaction === 'anox') {
+      if (bossIdx % 2 === 1) wave.push(() => spawnBossInvader(ctx, game))
+      else wave.push(() => spawnStarDestroyer(ctx, game))
+    } else {
+      if (bossIdx % 2 === 1) wave.push(() => spawnBossTinhVan(ctx, game))
+      else wave.push(() => spawnBossTrumSo(ctx, game))
+    }
     return wave
   }
 

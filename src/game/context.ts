@@ -78,6 +78,12 @@ export interface GameContext {
   stageTitleText: Text | null
   stageTitleTimer: number
 
+  // Star Shooter
+  shooterMissiles: PlayerMissile[]
+  shooterMissileTimer: number
+  shooterBlackHoleGfx: Graphics | null
+  shooterBlackHoleTimer: number
+
   // Input
   isDragging: boolean
   touchX: number
@@ -135,6 +141,10 @@ export function createGameContext(): GameContext {
     introTimer: 0,
     stageTitleText: null,
     stageTitleTimer: 0,
+    shooterMissiles: [],
+    shooterMissileTimer: 0,
+    shooterBlackHoleGfx: null,
+    shooterBlackHoleTimer: 0,
     isDragging: false,
     touchX: 0,
     touchY: 0,

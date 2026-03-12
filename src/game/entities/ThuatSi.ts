@@ -66,7 +66,7 @@ export function spawnThuatSi(ctx: GameContext, game: GameStore): void {
   const targetY = GAME_H * 0.07 + Math.random() * GAME_H * 0.14
   const size = 10 + Math.random() * 4
   const barW = size * 2.4
-  const maxHp = 22 + game.currentStage * 12  // trung bình
+  const maxHp = 28 + game.currentStage * 15  // trung bình
   const body = new Graphics()
   drawThuatSi(body, size)
   const hpBarBg = new Graphics()
@@ -94,7 +94,7 @@ export function spawnThuatSi(ctx: GameContext, game: GameStore): void {
     formTargetY: targetY,
     approachTimer: 999999,
     healBeamGfx,
-    healTargetIdx: -1,
+    healTarget: null,
   }
   ctx.enemies.push(e)
   game.stageEnemiesTotal++

@@ -166,6 +166,7 @@ watch(() => game.isSkillReady, (ready) => {
           'hud__skill-btn--ready': game.isSkillReady,
           'hud__skill-btn--flash': skillJustReady,
           'hud__skill-btn--orange': game.selectedShip === 'star_holder',
+          'hud__skill-btn--purple': game.selectedShip === 'star_shooter',
         }"
       >
         <!-- Star Holder: fragment counter -->
@@ -178,7 +179,7 @@ watch(() => game.isSkillReady, (ready) => {
           <span v-else class="hud__skill-cd">{{ Math.ceil(game.skillCooldown) }}</span>
         </template>
       </div>
-      <div class="hud__skill-label" v-html="game.selectedShip === 'star_holder' ? 'LINH<br/>HỒN' : 'SÓNG<br/>NHIỀT'"></div>
+      <div class="hud__skill-label" v-html="game.selectedShip === 'star_holder' ? 'LINH<br/>HồN' : (game.selectedShip === 'star_shooter' ? 'HỐ<br/>ĐEN' : 'SÓNG<br/>NHIỬT')"></div>
       <div class="hud__skill-hint">{{ isTouchDevice ? '2× TAP' : 'RMB' }}</div>
     </div>
     <!-- Artifact progress bars (active artifacts only) -->
@@ -630,6 +631,14 @@ watch(() => game.isSkillReady, (ready) => {
 .hud__skill-btn--orange.hud__skill-btn--ready {
   border-color: #ff8800;
   box-shadow: 0 0 12px rgba(255, 140, 0, 0.7), inset 0 0 8px rgba(255, 140, 0, 0.18);
+}
+/* Star Shooter black hole */
+.hud__skill-btn--purple {
+  border-color: #440077;
+}
+.hud__skill-btn--purple.hud__skill-btn--ready {
+  border-color: #aa44ff;
+  box-shadow: 0 0 12px rgba(160, 60, 255, 0.7), inset 0 0 8px rgba(140, 40, 255, 0.18);
 }
 .hud__skill-frags {
   font-size: 16px;

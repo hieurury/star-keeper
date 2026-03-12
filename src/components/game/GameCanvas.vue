@@ -8,14 +8,14 @@ import { createGameContext } from '../../game/context'
 import { GAME_W, GAME_H, TOUCH_Y_OFFSET, INTRO_FRAMES, STAGE_TITLE_FRAMES } from '../../game/constants'
 import { dist2, redrawHpBar, findNearestEnemy } from '../../game/utils'
 
-import { drawShip, drawBullet, spawnHolderLaser } from '../../game/ship/index'
+import { drawShip, drawBullet, spawnHolderLaser, drawShooterMissile } from '../../game/ship/index'
 import { drawFragmentMissile } from '../../game/projectiles/index'
 import { drawEnemyBullet, drawBossBullet, drawBossMissile } from '../../game/projectiles/index'
 
-import { spawnExplosion, screenFlash, spawnDamageText, hitFlash, showStageClearBanner } from '../../game/systems/effects'
+import { spawnExplosion, screenFlash, spawnDamageText, hitFlash, showStageClearBanner, spawnMissileWarning } from '../../game/systems/effects'
 import { spawnEnemyOrbs } from '../../game/systems/orbs'
 import { createStar } from '../../game/systems/background'
-import { updateMissileLaunchers, updatePeriodicAbilities, activateHeatWave } from '../../game/systems/abilities'
+import { updateMissileLaunchers, updatePeriodicAbilities, activateHeatWave, activateBlackHole } from '../../game/systems/abilities'
 import { drawArtifactGfx, initArtifactGfx, activateNeutronVacuum, activateManaCoreOverload, activateSoulHarvest } from '../../game/systems/artifacts'
 import { launchWave } from '../../game/systems/wave'
 import { killEnemy } from '../../game/entities/kill'
@@ -23,12 +23,39 @@ import { spawnKamikazeAt } from '../../game/entities/Kamikaze'
 import { drawDaiLienBullet, spawnDaiLienPair } from '../../game/entities/DaiLien'
 import { drawThuHo, spawnThuHoSwarm } from '../../game/entities/ThuHo'
 import { drawHealBeam, spawnThuatSi } from '../../game/entities/ThuatSi'
+import type { Enemy } from '../../game/types'
 
 const canvasWrapper = ref<HTMLDivElement>()
 const game = useGameStore()
 
 let app: Application | null = null
+let autoPaused = false   // tracks pauses triggered by visibility/blur
 const ctx = createGameContext()
+
+// ─── Auto-pause on tab switch / window blur ───────────────────────────────────
+function handleVisibilityChange() {
+  if (document.hidden) {
+    if (game.isPlaying && !game.isPaused) {
+      game.isPaused = true
+      autoPaused = true
+    }
+  } else if (autoPaused) {
+    game.isPaused = false
+    autoPaused = false
+  }
+}
+function handleWindowBlur() {
+  if (game.isPlaying && !game.isPaused) {
+    game.isPaused = true
+    autoPaused = true
+  }
+}
+function handleWindowFocus() {
+  if (autoPaused) {
+    game.isPaused = false
+    autoPaused = false
+  }
+}
 
 // ─── Shoot ────────────────────────────────────────────────────────────────────
 function shoot(offsetX = 0, vxDrift = 0) {
@@ -159,6 +186,8 @@ function gameLoop(ticker: Ticker) {
   if (game.consumeSkillActivation()) {
     if (game.selectedShip === 'star_holder') {
       activateSoulHarvest(ctx, game)
+    } else if (game.selectedShip === 'star_shooter') {
+      activateBlackHole(ctx, game)
     } else {
       activateHeatWave(ctx, game)
     }
@@ -218,13 +247,16 @@ function gameLoop(ticker: Ticker) {
 
   // Shooting
   const isHolder = game.selectedShip === 'star_holder'
-  const effectiveBulletCount = game.upgrades.bulletCount + game.cardStats.arsenalBulletBonus
+  const isShooter = game.selectedShip === 'star_shooter'
+  const effectiveBulletCount = isShooter ? 1 : (game.upgrades.bulletCount + game.cardStats.arsenalBulletBonus)
+  const effectiveMissileCount = isShooter ? (game.upgrades.bulletCount + game.cardStats.shooterMissileBonus) : 1
   ctx.shootTimer += dt
-  const baseShootInterval = isHolder ? 60 : 18
-  const shootInterval = (baseShootInterval / Math.sqrt(effectiveBulletCount)) / (1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100)
+  const baseShootInterval = isHolder ? 60 : (isShooter ? 80 : 18)
+  const shootCount = isShooter ? effectiveMissileCount : effectiveBulletCount
+  const shootInterval = (baseShootInterval / Math.sqrt(shootCount)) / (1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100)
   if (ctx.shootTimer >= shootInterval) {
     ctx.shootTimer = 0
-    const cnt = effectiveBulletCount
+    const cnt = isShooter ? effectiveMissileCount : effectiveBulletCount
     if (isHolder && ctx.playerShip) {
       const laserDmg = Math.round(
         game.upgrades.damage * Math.pow(0.8, cnt - 1)
@@ -237,6 +269,22 @@ function gameLoop(ticker: Ticker) {
         const angle = (i - (cnt - 1) / 2) * step
         spawnHolderLaser(ctx, game, ctx.playerShip.x, ctx.playerShip.y - 18, angle, laserDmg)
       }
+    } else if (isShooter && ctx.playerShip) {
+      const cs = game.cardStats
+      const mSpd = 6 * cs.shooterMissileSpdMult
+      const missileDmg = Math.round(game.upgrades.damage * cs.shooterMissileDmgMult * (1 + cs.damageBonusPct / 100))
+      for (let i = 0; i < cnt; i++) {
+        const offX = (i - (cnt - 1) / 2) * 14
+        const mg = new Graphics()
+        drawShooterMissile(mg)
+        mg.x = ctx.playerShip.x + offX; mg.y = ctx.playerShip.y - 22
+        ctx.gameLayer.addChild(mg)
+        const target = findNearestEnemy(ctx.enemies, mg.x, mg.y)
+        const dx = target ? target.container.x - mg.x : 0
+        const dy = target ? target.container.y - mg.y : -1
+        const d = Math.sqrt(dx * dx + dy * dy) || 1
+        ctx.shooterMissiles.push({ gfx: mg, vx: (dx / d) * mSpd, vy: (dy / d) * mSpd, damage: missileDmg, aoe: cs.shooterMissileAoe })
+      }
     } else {
       const maxHalfAngle = Math.min(Math.PI * 12 / 180, (cnt - 1) * Math.PI * 3 / 180)
       const bulletVy = 8 * game.upgrades.bulletSpeed
@@ -245,6 +293,47 @@ function gameLoop(ticker: Ticker) {
         const vxDrift = Math.tan(norm * maxHalfAngle) * bulletVy
         shoot((i - (cnt - 1) / 2) * 12, vxDrift)
       }
+    }
+  }
+
+  // Star Shooter black hole
+  if (isShooter && ctx.shooterBlackHoleGfx) {
+    ctx.shooterBlackHoleTimer -= dt
+    const bhg = ctx.shooterBlackHoleGfx
+    bhg.clear()
+    const bhPulse = 0.7 + Math.sin(Date.now() * 0.003) * 0.3
+    bhg.circle(0, 0, 55 * bhPulse).fill({ color: 0x110022, alpha: 0.92 })
+    bhg.circle(0, 0, 55 * bhPulse).stroke({ color: 0x8800ff, width: 2.5, alpha: 0.9 })
+    bhg.circle(0, 0, (55 + 14) * bhPulse).stroke({ color: 0x4400aa, width: 1.5, alpha: 0.5 })
+    bhg.circle(0, 0, (55 + 28) * bhPulse).stroke({ color: 0x220055, width: 1, alpha: 0.3 })
+    for (let i = ctx.enemies.length - 1; i >= 0; i--) {
+      const e = ctx.enemies[i]
+      const isBoss = e.kind.startsWith('boss')
+      const bdx = bhg.x - e.container.x; const bdy = bhg.y - e.container.y
+      const bd = Math.sqrt(bdx * bdx + bdy * bdy) || 1
+      if (!isBoss && bd < 130) {
+        const pull = (1 - bd / 130) * 4 * dt
+        e.container.x += (bdx / bd) * pull; e.container.y += (bdy / bd) * pull
+      }
+      const dmgRate = isBoss ? 0.02 : 0.10
+      const bhDmg = Math.round(e.maxHp * dmgRate * dt / 60)
+      if (bhDmg > 0) {
+        e.hp = Math.max(0, e.hp - bhDmg); hitFlash(e.body)
+        redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+        if (e.hp <= 0) { killEnemy(ctx, game, e, i); continue }
+      }
+    }
+    for (let i = ctx.enemyBullets.length - 1; i >= 0; i--) {
+      const b = ctx.enemyBullets[i]
+      if (dist2(b.gfx.x, b.gfx.y, bhg.x, bhg.y) < 80 * 80) {
+        if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
+        ctx.enemyBullets.splice(i, 1)
+      }
+    }
+    if (ctx.shooterBlackHoleTimer <= 0) {
+      if (!bhg.destroyed) ctx.gameLayer.removeChild(bhg)
+      ctx.shooterBlackHoleGfx = null
+      ctx.shooterBlackHoleTimer = 0
     }
   }
 
@@ -283,12 +372,32 @@ function gameLoop(ticker: Ticker) {
       continue
     }
     const bHitR = b.homing ? 14 : 12
+    // AOE missile: explode when reaching target position
+    if (b.aoe && b.targetX !== undefined && b.targetY !== undefined) {
+      if (dist2(b.gfx.x, b.gfx.y, b.targetX, b.targetY) < 28 * 28) {
+        spawnExplosion(ctx, b.gfx.x, b.gfx.y, 22, 0xcc44ff, 0xffffff)
+        screenFlash(ctx, 0x8800ff, 0.12, 200)
+        if (ctx.playerShip && dist2(b.gfx.x, b.gfx.y, ctx.playerShip.x, ctx.playerShip.y) < 55 * 55) {
+          if (game.absorbShieldHit()) {
+            spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 10, 0x44aaff, 0x88ddff)
+            screenFlash(ctx, 0x4488ff, 0.28, 200)
+          } else {
+            const dmg = 20 + game.currentStage * 3
+            game.takeDamage(dmg); screenFlash(ctx)
+            spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+          }
+        }
+        if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
+        ctx.enemyBullets.splice(i, 1)
+        continue
+      }
+    }
     if (ctx.playerShip && dist2(b.gfx.x, b.gfx.y, ctx.playerShip.x, ctx.playerShip.y) < bHitR * bHitR) {
       if (game.absorbShieldHit()) {
         spawnExplosion(ctx, b.gfx.x, b.gfx.y, 9, 0x44aaff, 0x88ddff)
         screenFlash(ctx, 0x4488ff, 0.28, 200)
       } else {
-        const dmg = 15 + game.currentStage * 3
+        const dmg = b.damage ?? (15 + game.currentStage * 3)
         game.takeDamage(dmg)
         screenFlash(ctx)
         spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
@@ -600,7 +709,7 @@ function gameLoop(ticker: Ticker) {
       // Fast burst fire (-30% fire rate)
       e.shootTimer = (e.shootTimer ?? 25) - dt
       if (e.shootTimer <= 0 && ctx.playerShip) {
-        e.shootTimer = (20 + Math.random() * 12 + Math.max(0, 10 - game.currentStage)) * 1.3
+      e.shootTimer = (20 + Math.random() * 12 + Math.max(0, 10 - game.currentStage)) * 1.56
         const bg = new Graphics()
         drawDaiLienBullet(bg)
         bg.x = e.container.x
@@ -685,16 +794,15 @@ function gameLoop(ticker: Ticker) {
           e.container.y += (dy / dist) * speed * dt
         }
       } else {
-        // Patrol: follow & hide behind a shield enemy (away from player)
-        const shieldIdx = e.healTargetIdx ?? -1
-        const shieldEnemy = shieldIdx >= 0 && shieldIdx < ctx.enemies.length ? ctx.enemies[shieldIdx] : null
-        const shieldTarget = shieldEnemy && shieldEnemy !== e && !shieldEnemy.isDyingMeteor ? shieldEnemy : null
+        // Patrol: follow & hide behind a shield enemy (away from player), keep distance
+        const shieldTarget = e.healTarget && e.healTarget !== e && !e.healTarget.isDyingMeteor
+          && ctx.enemies.includes(e.healTarget) ? e.healTarget : null
         if (shieldTarget && ctx.playerShip) {
           const dx = shieldTarget.container.x - ctx.playerShip.x
           const dy = shieldTarget.container.y - ctx.playerShip.y
           const mag = Math.sqrt(dx * dx + dy * dy) || 1
-          const hideX = shieldTarget.container.x + (dx / mag) * 30
-          const hideY = shieldTarget.container.y + (dy / mag) * 30
+          const hideX = shieldTarget.container.x + (dx / mag) * 60
+          const hideY = shieldTarget.container.y + (dy / mag) * 60
           const ddx = hideX - e.container.x
           const ddy = hideY - e.container.y
           const d = Math.sqrt(ddx * ddx + ddy * ddy) || 1
@@ -713,15 +821,15 @@ function gameLoop(ticker: Ticker) {
       // Healing beam: pick a nearby enemy and channel heal
       if (e.pioneerPhase === 'patrol' && ctx.enemies.length > 1) {
         // Re-pick target: must be within 230px, injured (hp < maxHp), prefer lowest HP ratio
-        const currentIdx = e.healTargetIdx ?? -1
-        const currentTarget = currentIdx >= 0 && currentIdx < ctx.enemies.length ? ctx.enemies[currentIdx] : null
+        const currentTarget = e.healTarget ?? null
         const isValidTarget = currentTarget && currentTarget !== e
           && currentTarget.kind !== 'thuat_si' && !currentTarget.isDyingMeteor
           && currentTarget.hp < currentTarget.maxHp
+          && ctx.enemies.includes(currentTarget)
           && dist2(e.container.x, e.container.y, currentTarget.container.x, currentTarget.container.y) < 230 * 230
         if (!isValidTarget) {
           // Find injured enemy within 230px with lowest HP ratio
-          let bestIdx = -1
+          let bestTarget: Enemy | null = null
           let bestRatio = 1.0  // only consider hp < maxHp
           for (let k = 0; k < ctx.enemies.length; k++) {
             const t2 = ctx.enemies[k]!
@@ -729,11 +837,11 @@ function gameLoop(ticker: Ticker) {
             if (t2.hp >= t2.maxHp) continue  // not injured
             if (dist2(e.container.x, e.container.y, t2.container.x, t2.container.y) > 230 * 230) continue
             const ratio = t2.hp / t2.maxHp
-            if (ratio < bestRatio) { bestRatio = ratio; bestIdx = k }
+            if (ratio < bestRatio) { bestRatio = ratio; bestTarget = t2 }
           }
-          e.healTargetIdx = bestIdx
+          e.healTarget = bestTarget
         }
-        const healTarget = (e.healTargetIdx ?? -1) >= 0 ? ctx.enemies[e.healTargetIdx!] : null
+        const healTarget = e.healTarget ?? null
         if (healTarget && e.healBeamGfx) {
           // Draw animated lightning beam
           const seed = Date.now() * 0.05
@@ -741,7 +849,7 @@ function gameLoop(ticker: Ticker) {
           const toY = healTarget.container.y - e.container.y
           drawHealBeam(e.healBeamGfx, toX, toY, seed)
           // Heal target: 10%/s for normal, 2%/s for boss (dt is frames at 60fps)
-          const isBoss = healTarget.kind === 'boss_stardestroyer' || healTarget.kind === 'boss_invader' || healTarget.kind === 'boss_tinhvan'
+        const isBoss = healTarget.kind === 'boss_stardestroyer' || healTarget.kind === 'boss_invader' || healTarget.kind === 'boss_tinhvan' || healTarget.kind === 'boss_trumso'
           const healRate = isBoss ? 0.02 / 60 : 0.10 / 60
           healTarget.hp = Math.min(healTarget.maxHp, healTarget.hp + healTarget.maxHp * healRate * dt)
           redrawHpBar(healTarget.hpBarBg, healTarget.hpBar, healTarget.hp / healTarget.maxHp, healTarget.barW)
@@ -1097,6 +1205,19 @@ function gameLoop(ticker: Ticker) {
             const apparentR = bh.r * Math.min(1, bh.age / 60)
             const fadeA = lifeR > 0.82 ? (1 - lifeR) / 0.18 : 1
 
+            // Portal (phase 2 summon): animate as purple vortex, no age removal, no pull
+            if (bh.portal) {
+              const pt = bh.age * 0.05
+              bh.gfx.clear()
+              const pr = apparentR + Math.sin(pt * 2) * 4
+              bh.gfx.circle(0, 0, pr * 1.6).fill({ color: 0x330044, alpha: 0.35 })
+              bh.gfx.circle(0, 0, pr).fill({ color: 0x440066, alpha: 0.78 })
+              bh.gfx.circle(0, 0, pr).stroke({ color: 0xcc44ff, width: 2.5, alpha: 0.9 })
+              bh.gfx.circle(0, 0, pr * 0.55).fill({ color: 0x6600aa, alpha: 0.9 })
+              bh.gfx.circle(0, 0, pr * 0.28).fill({ color: 0xaa33ff, alpha: 1 })
+              continue  // skip age-removal and pull logic
+            }
+
             if (bh.age >= bh.maxAge) {
               if (!bh.gfx.destroyed) ctx.gameLayer.removeChild(bh.gfx)
               e.blackHoles.splice(bhi, 1)
@@ -1105,36 +1226,80 @@ function gameLoop(ticker: Ticker) {
             const t = bh.age
             const pulse = 0.4 + Math.sin(t * 0.12) * 0.2
             bh.gfx.clear()
+            // Pull range indicator (faint ring)
+            bh.gfx.circle(0, 0, apparentR * 5).stroke({ color: 0xcc44ff, width: 1, alpha: 0.18 * fadeA })
             bh.gfx.circle(0, 0, apparentR * 1.5).fill({ color: 0x330044, alpha: pulse * 0.5 * fadeA })
             bh.gfx.circle(0, 0, apparentR * 1.2).fill({ color: 0x550066, alpha: pulse * 0.65 * fadeA })
             bh.gfx.circle(0, 0, apparentR).fill({ color: 0x000000, alpha: 0.97 })
             bh.gfx.circle(0, 0, apparentR * 1.05).stroke({ color: 0xcc44ff, width: 1.5, alpha: (0.7 + Math.sin(t * 0.18) * 0.3) * fadeA })
 
-            // Pull player toward black hole (no damage)
+            const pullR = apparentR * 5
+            // Pull player toward black hole
             if (ctx.playerShip) {
               const pdx = bh.x - ctx.playerShip.x
               const pdy = bh.y - ctx.playerShip.y
               const pd = Math.sqrt(pdx * pdx + pdy * pdy) || 1
-              const pullRange = apparentR * 5
-              if (pd < pullRange) {
-                const force = (1 - pd / pullRange) * 2.2 * dt * fadeA
+              if (pd < pullR) {
+                const force = (1 - pd / pullR) * 2.2 * dt * fadeA
                 ctx.playerShip.x += (pdx / pd) * force
                 ctx.playerShip.y += (pdy / pd) * force
                 ctx.playerShip.x = Math.max(10, Math.min(GAME_W - 10, ctx.playerShip.x))
                 ctx.playerShip.y = Math.max(40, Math.min(GAME_H - 40, ctx.playerShip.y))
               }
             }
-            // Absorb player bullets
+            // Pull non-boss enemies toward black hole
+            for (const oe of ctx.enemies) {
+              if (oe.kind.startsWith('boss')) continue
+              const edx = bh.x - oe.container.x; const edy = bh.y - oe.container.y
+              const ed = Math.sqrt(edx * edx + edy * edy) || 1
+              if (ed < pullR) {
+                const eForce = (1 - ed / pullR) * 2.8 * dt * fadeA
+                oe.container.x += (edx / ed) * eForce
+                oe.container.y += (edy / ed) * eForce
+              }
+            }
+            // Pull player bullets toward black hole, absorb at core
             for (let bi = ctx.bullets.length - 1; bi >= 0; bi--) {
-              if (dist2(ctx.bullets[bi]!.gfx.x, ctx.bullets[bi]!.gfx.y, bh.x, bh.y) < apparentR * apparentR * 1.6) {
-                if (!ctx.bullets[bi]!.gfx.destroyed) ctx.gameLayer.removeChild(ctx.bullets[bi]!.gfx)
+              const b = ctx.bullets[bi]!
+              const bdx = bh.x - b.gfx.x; const bdy = bh.y - b.gfx.y
+              const bd = Math.sqrt(bdx * bdx + bdy * bdy) || 1
+              if (bd < pullR) {
+                const bhPull = (1 - bd / pullR) * 5 * dt
+                b.vx = (b.vx ?? 0) + (bdx / bd) * bhPull
+                b.vy -= (bdy / bd) * bhPull  // player bullet gfx.y -= vy*dt
+              }
+              if (bd < apparentR * 1.8) {
+                if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
                 ctx.bullets.splice(bi, 1)
               }
             }
-            // Absorb enemy bullets
+            // Pull shooter missiles toward black hole, absorb at core
+            for (let mi = ctx.shooterMissiles.length - 1; mi >= 0; mi--) {
+              const m = ctx.shooterMissiles[mi]!
+              const mdx = bh.x - m.gfx.x; const mdy = bh.y - m.gfx.y
+              const md = Math.sqrt(mdx * mdx + mdy * mdy) || 1
+              if (md < pullR) {
+                const mPull = (1 - md / pullR) * 5 * dt
+                m.vx += (mdx / md) * mPull
+                m.vy += (mdy / md) * mPull
+              }
+              if (md < apparentR * 1.8) {
+                if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+                ctx.shooterMissiles.splice(mi, 1)
+              }
+            }
+            // Pull and absorb enemy bullets
             for (let ebi = ctx.enemyBullets.length - 1; ebi >= 0; ebi--) {
-              if (dist2(ctx.enemyBullets[ebi]!.gfx.x, ctx.enemyBullets[ebi]!.gfx.y, bh.x, bh.y) < apparentR * apparentR) {
-                if (!ctx.enemyBullets[ebi]!.gfx.destroyed) ctx.gameLayer.removeChild(ctx.enemyBullets[ebi]!.gfx)
+              const eb = ctx.enemyBullets[ebi]!
+              const bdx = bh.x - eb.gfx.x; const bdy = bh.y - eb.gfx.y
+              const bd = Math.sqrt(bdx * bdx + bdy * bdy) || 1
+              if (bd < pullR) {
+                const ebPull = (1 - bd / pullR) * 4 * dt
+                eb.vx += (bdx / bd) * ebPull
+                eb.vy += (bdy / bd) * ebPull
+              }
+              if (bd < apparentR * 1.5) {
+                if (!eb.gfx.destroyed) ctx.gameLayer.removeChild(eb.gfx)
                 ctx.enemyBullets.splice(ebi, 1)
               }
             }
@@ -1148,10 +1313,15 @@ function gameLoop(ticker: Ticker) {
             if ((e.attack2Timer ?? 0) <= 0) {
               e.pendingMissiles = 8   // 8 spawn calls → ~15-20 Bnox enemies
               e.missileFireTimer = 50
-              if (e.summonPortalGfx) {
-                e.summonPortalGfx.visible = true
-                e.summonPortalGfx.x = e.container.x + (Math.random() - 0.5) * 80
-                e.summonPortalGfx.y = e.container.y + 40
+              // Create 2 portal black holes at random screen positions
+              e.blackHoles = e.blackHoles ?? []
+              for (let pi = 0; pi < 2; pi++) {
+                const pX = GAME_W * 0.10 + Math.random() * GAME_W * 0.80
+                const pY = GAME_H * 0.22 + Math.random() * GAME_H * 0.50
+                const pGfx = new Graphics()
+                pGfx.x = pX; pGfx.y = pY
+                ctx.gameLayer.addChild(pGfx)
+                e.blackHoles.push({ gfx: pGfx, x: pX, y: pY, r: 28, age: 0, maxAge: 99999, portal: true })
               }
               screenFlash(ctx, 0x440066, 0.35, 400)
             }
@@ -1160,26 +1330,278 @@ function gameLoop(ticker: Ticker) {
             if ((e.missileFireTimer ?? 0) <= 0) {
               e.missileFireTimer = 22
               e.pendingMissiles!--
-              // Animate portal
-              if (e.summonPortalGfx) {
-                const pt = Date.now() / 500
-                e.summonPortalGfx.clear()
-                const pr = 34 + Math.sin(pt) * 6
-                e.summonPortalGfx.circle(0, 0, pr).fill({ color: 0x440066, alpha: 0.75 })
-                e.summonPortalGfx.circle(0, 0, pr).stroke({ color: 0xcc44ff, width: 2.5, alpha: 0.9 })
-                e.summonPortalGfx.circle(0, 0, pr * 0.55).fill({ color: 0x6600aa, alpha: 0.9 })
-                e.summonPortalGfx.circle(0, 0, pr * 0.28).fill({ color: 0xaa33ff, alpha: 1 })
-              }
-              // Spawn random Bnox enemy
+              // Pick a random portal position and spawn enemies from it
+              const portals = (e.blackHoles ?? []).filter(bh => bh.portal)
+              const portal = portals[Math.floor(Math.random() * portals.length)]
+              const spawnX = portal ? portal.x : e.container.x
+              const spawnY = portal ? portal.y : (e.container.y + 60)
+              const beforeCount = ctx.enemies.length
               const r = Math.random()
               if (r < 0.45) spawnDaiLienPair(ctx, game)
               else if (r < 0.75) spawnThuatSi(ctx, game)
               else spawnThuHoSwarm(ctx, game)
+              // Teleport newly spawned enemies to portal, then send them to lower attack zone
+              for (let ni = beforeCount; ni < ctx.enemies.length; ni++) {
+                const ne = ctx.enemies[ni]!
+                ne.container.x = spawnX + (Math.random() - 0.5) * 30
+                ne.container.y = spawnY
+                // Attack position in lower half of screen (press toward player)
+                const atkX = GAME_W * 0.12 + Math.random() * GAME_W * 0.76
+                const atkY = GAME_H * 0.52 + Math.random() * GAME_H * 0.25
+                ne.enterTargetX = atkX
+                ne.enterTargetY = atkY
+                ne.formTargetX = atkX
+                ne.formTargetY = atkY
+                ne.pioneerPhase = 'enter'
+                ne.squadId = undefined  // no flock formation
+              }
 
               if ((e.pendingMissiles ?? 0) === 0) {
-                if (e.summonPortalGfx) { e.summonPortalGfx.visible = false; e.summonPortalGfx.clear() }
+                // Remove portals from blackHoles
+                if (e.blackHoles) {
+                  for (let pi = e.blackHoles.length - 1; pi >= 0; pi--) {
+                    if (e.blackHoles[pi]!.portal) {
+                      if (!e.blackHoles[pi]!.gfx.destroyed) ctx.gameLayer.removeChild(e.blackHoles[pi]!.gfx)
+                      e.blackHoles.splice(pi, 1)
+                    }
+                  }
+                }
                 e.attack2Timer = 1800  // 30s cooldown
               }
+            }
+          }
+        }
+      }
+    }
+
+    else if (e.kind === 'boss_trumso') {
+      // ── Entry ──────────────────────────────────────────────────────────────
+      if (!e.bossEntered) {
+        e.container.y += 1.2 * dt
+        if (e.container.y >= (e.bossTargetY ?? GAME_H * 0.20)) {
+          e.container.y = e.bossTargetY ?? GAME_H * 0.20
+          e.bossEntered = true
+        }
+      }
+      if (e.bossEntered) {
+        // ── Phase 2 transition at 50% HP ──────────────────────────────────
+        if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
+          e.bossPhase = 2
+          screenFlash(ctx, 0x6600cc, 0.55, 700)
+          spawnExplosion(ctx, e.container.x, e.container.y, 34, 0x6600cc, 0xcc44ff)
+          if (e.bossLabel) {
+            e.bossLabel.text = 'BNOX - TRÙM SÒ [PHASE 2]'
+            e.bossLabel.style = new TextStyle({ fill: 0xff88ff, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000011, width: 3 } })
+          }
+          if (e.trumSoLasers) {
+            for (const laser of e.trumSoLasers) { laser.gfx.clear(); laser.state = 'idle' }
+          }
+          e.trumSoChargeTimer = 900
+          e.trumSoContinuousDmgTimer = 30
+        }
+
+        // ── Horizontal drift (skipped during charge) ──────────────────────
+        if (e.trumSoCharge !== 'charging') {
+          e.bossDriftTimer = (e.bossDriftTimer ?? 0) - dt
+          if ((e.bossDriftTimer ?? 0) <= 0) {
+            e.bossDriftTarget = GAME_W * 0.12 + Math.random() * GAME_W * 0.76
+            e.bossDriftTimer = 200 + Math.random() * 120
+          }
+          if (e.bossDriftTarget !== undefined && e.trumSoCharge === 'idle') {
+            const ddx = e.bossDriftTarget - e.container.x
+            e.container.x += Math.min(Math.abs(ddx), 2.2 * dt) * Math.sign(ddx)
+          }
+        }
+
+        // ── Machine gun turrets ────────────────────────────────────────────
+        if (e.trumSoGuns) {
+          for (const gun of e.trumSoGuns.filter(g => g.type === 'machinegun')) {
+            if (ctx.playerShip) {
+              const adx = ctx.playerShip.x - (e.container.x + gun.offsetX)
+              const ady = ctx.playerShip.y - (e.container.y + gun.offsetY)
+              gun.gfx.rotation = Math.atan2(ady, adx) - Math.PI / 2
+            }
+            if (gun.burstLeft > 0) {
+              gun.rapidTimer -= dt
+              if (gun.rapidTimer <= 0) {
+                gun.rapidTimer = 4
+                gun.burstLeft--
+                if (ctx.playerShip) {
+                  const wx = e.container.x + gun.offsetX
+                  const wy = e.container.y + gun.offsetY
+                  const adx = ctx.playerShip.x - wx
+                  const ady = ctx.playerShip.y - wy
+                  const angle = Math.atan2(ady, adx) + (Math.random() - 0.5) * 0.12
+                  const spd = 4.5 + game.currentStage * 0.05
+                  const bg = new Graphics()
+                  drawEnemyBullet(bg)
+                  bg.x = wx; bg.y = wy
+                  ctx.gameLayer.addChild(bg)
+                  ctx.enemyBullets.push({ gfx: bg, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd })
+                }
+              }
+            } else {
+              gun.timer -= dt
+              if (gun.timer <= 0) { gun.timer = 90; gun.burstLeft = 8; gun.rapidTimer = 4 }
+            }
+          }
+
+          // ── Missile salvos ───────────────────────────────────────────────
+          if ((e.pendingMissiles ?? 0) > 0) {
+            e.missileFireTimer = (e.missileFireTimer ?? 0) - dt
+            if ((e.missileFireTimer ?? 0) <= 0) {
+              e.missileFireTimer = 25
+              const missilePods = e.trumSoGuns.filter(g => g.type === 'missile')
+              const podIdx = 3 - (e.pendingMissiles ?? 1)
+              const pod = missilePods[podIdx]
+              if (pod) {
+                const wx = e.container.x + pod.offsetX
+                const wy = e.container.y + pod.offsetY
+                const tx = e.laserTargetX ?? GAME_W / 2
+                const ty = e.laserTargetY ?? GAME_H / 2
+                const dx = tx - wx; const dy = ty - wy
+                const mag = Math.sqrt(dx * dx + dy * dy) || 1
+                const mg = new Graphics()
+                drawBossMissile(mg)
+                mg.x = wx; mg.y = wy
+                mg.rotation = Math.atan2(dy, dx) + Math.PI / 2
+                ctx.gameLayer.addChild(mg)
+                ctx.enemyBullets.push({ gfx: mg, vx: (dx / mag) * 4.2, vy: (dy / mag) * 4.2, aoe: true, targetX: tx, targetY: ty })
+              }
+              e.pendingMissiles!--
+            }
+          }
+          e.attack2Timer = (e.attack2Timer ?? 300) - dt
+          if ((e.attack2Timer ?? 0) <= 0 && (e.pendingMissiles ?? 0) === 0) {
+            const tx = ctx.playerShip?.x ?? GAME_W / 2
+            const ty = ctx.playerShip?.y ?? GAME_H / 2
+            e.laserTargetX = tx; e.laserTargetY = ty
+            e.pendingMissiles = 3; e.missileFireTimer = 0
+            e.attack2Timer = 300
+            spawnMissileWarning(ctx, tx, ty)
+          }
+        }
+
+        // ── Phase 1: Individual sweep lasers ──────────────────────────────
+        if (e.bossPhase === 1 && e.trumSoLasers) {
+          const len = GAME_W + GAME_H
+          for (const laser of e.trumSoLasers) {
+            const wx = e.container.x + laser.offsetX
+            const wy = e.container.y + laser.offsetY
+            if (laser.state === 'idle') {
+              laser.timer -= dt
+              if (laser.timer <= 0 && ctx.playerShip) {
+                laser.state = 'warning'; laser.timer = 55
+                const baseAngle = Math.atan2(ctx.playerShip.y - wy, ctx.playerShip.x - wx)
+                laser.angle = baseAngle + (Math.random() - 0.5) * Math.PI * 0.55
+              }
+            } else if (laser.state === 'warning') {
+              laser.timer -= dt
+              const al = 0.28 + Math.abs(Math.sin(laser.timer * 0.15)) * 0.4
+              laser.gfx.clear()
+              laser.gfx.moveTo(wx, wy).lineTo(wx + Math.cos(laser.angle) * len, wy + Math.sin(laser.angle) * len).stroke({ color: 0xaa44ff, width: 2, alpha: al })
+              if (laser.timer <= 0) { laser.state = 'firing'; laser.timer = 18; screenFlash(ctx, 0x5500aa, 0.15, 160) }
+            } else {
+              laser.timer -= dt
+              const al = Math.max(0, laser.timer / 18) * 0.9
+              laser.gfx.clear()
+              laser.gfx.moveTo(wx, wy).lineTo(wx + Math.cos(laser.angle) * len, wy + Math.sin(laser.angle) * len).stroke({ color: 0xcc44ff, width: 6, alpha: al })
+              if (laser.timer >= 17 && ctx.playerShip) {
+                const px = ctx.playerShip.x - wx; const py = ctx.playerShip.y - wy
+                const lx = Math.cos(laser.angle); const ly = Math.sin(laser.angle)
+                const dot = px * lx + py * ly
+                const perpX = px - dot * lx; const perpY = py - dot * ly
+                if (Math.sqrt(perpX * perpX + perpY * perpY) < 20 && dot > 0) {
+                  if (!game.absorbShieldHit()) {
+                    const dmg = 16 + game.currentStage * 2
+                    game.takeDamage(dmg); screenFlash(ctx)
+                    spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+                  } else {
+                    spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 9, 0x8844ff, 0xcc88ff)
+                    screenFlash(ctx, 0x8844ff, 0.28, 200)
+                  }
+                }
+              }
+              if (laser.timer <= 0) { laser.state = 'idle'; laser.timer = 180 + Math.random() * 120; laser.gfx.clear() }
+            }
+          }
+        }
+
+        // ── Phase 2: Combined laser beam ──────────────────────────────────
+        if (e.bossPhase === 2 && e.trumSoPhase2LaserGfx && ctx.playerShip) {
+          const toX = ctx.playerShip.x - e.container.x
+          const toY = ctx.playerShip.y - e.container.y
+          const angle = Math.atan2(toY, toX)
+          const len = GAME_W + GAME_H
+          const pulse = 0.75 + Math.sin(Date.now() * 0.015) * 0.25
+          const bx = e.container.x; const by = e.container.y
+          e.trumSoPhase2LaserGfx.clear()
+          e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0x7700ff, width: 16, alpha: 0.20 * pulse })
+          e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0xdd66ff, width: 5, alpha: 0.90 * pulse })
+          e.trumSoContinuousDmgTimer = (e.trumSoContinuousDmgTimer ?? 30) - dt
+          if ((e.trumSoContinuousDmgTimer ?? 0) <= 0) {
+            e.trumSoContinuousDmgTimer = 30
+            const lx = Math.cos(angle); const ly = Math.sin(angle)
+            const px = ctx.playerShip.x - bx; const py = ctx.playerShip.y - by
+            const dot = px * lx + py * ly
+            const perpX = px - dot * lx; const perpY = py - dot * ly
+            if (Math.sqrt(perpX * perpX + perpY * perpY) < 16 && dot > 0) {
+              if (!game.absorbShieldHit()) {
+                const dmg = 10 + game.currentStage
+                game.takeDamage(dmg); screenFlash(ctx)
+                spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+              } else {
+                spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 8, 0x8844ff, 0xcc88ff)
+                screenFlash(ctx, 0x8844ff, 0.22, 180)
+              }
+            }
+          }
+        } else if (e.bossPhase === 2 && e.trumSoPhase2LaserGfx) {
+          e.trumSoPhase2LaserGfx.clear()
+        }
+
+        // ── Phase 2: Charge dash ──────────────────────────────────────────
+        if (e.bossPhase === 2) {
+          if (e.trumSoCharge === 'idle') {
+            e.trumSoChargeTimer = (e.trumSoChargeTimer ?? 900) - dt
+            if ((e.trumSoChargeTimer ?? 0) <= 0) {
+              e.trumSoCharge = 'warning'; e.trumSoChargeTimer = 90
+              e.trumSoChargeLane = GAME_W * 0.12 + Math.random() * GAME_W * 0.76
+              e.bossDriftTarget = e.container.x
+            }
+          } else if (e.trumSoCharge === 'warning') {
+            e.trumSoChargeTimer = (e.trumSoChargeTimer ?? 0) - dt
+            if (e.trumSoChargeLineGfx) {
+              const lane = e.trumSoChargeLane ?? GAME_W / 2
+              const al = 0.3 + Math.abs(Math.sin((e.trumSoChargeTimer ?? 0) * 0.18)) * 0.5
+              e.trumSoChargeLineGfx.clear()
+              e.trumSoChargeLineGfx.moveTo(lane, 0).lineTo(lane, GAME_H).stroke({ color: 0xff44ff, width: 2.5, alpha: al })
+            }
+            if (e.trumSoChargeLane !== undefined) {
+              const ddx = e.trumSoChargeLane - e.container.x
+              e.container.x += Math.min(Math.abs(ddx), 3.5 * dt) * Math.sign(ddx)
+            }
+            if ((e.trumSoChargeTimer ?? 0) <= 0) {
+              e.trumSoCharge = 'charging'
+              if (e.trumSoChargeLineGfx) e.trumSoChargeLineGfx.clear()
+              screenFlash(ctx, 0x8800ff, 0.32, 300)
+            }
+          } else if (e.trumSoCharge === 'charging') {
+            e.container.y += 18 * dt
+            if (ctx.playerShip && dist2(e.container.x, e.container.y, ctx.playerShip.x, ctx.playerShip.y) < 52 * 52) {
+              if (!game.absorbShieldHit()) {
+                const dmg = 25 + game.currentStage * 2
+                game.takeDamage(dmg); screenFlash(ctx)
+                spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+              } else {
+                spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 12, 0x8800ff, 0xcc66ff)
+                screenFlash(ctx, 0x8800ff, 0.35, 200)
+              }
+            }
+            if (e.container.y > GAME_H + 85) {
+              e.container.y = -70
+              e.trumSoCharge = 'idle'; e.trumSoChargeTimer = 900
+              e.bossDriftTimer = 60
             }
           }
         }
@@ -1197,8 +1619,8 @@ function gameLoop(ticker: Ticker) {
           drawEnemyBullet(rb)
           rb.x = b.gfx.x; rb.y = b.gfx.y
           ctx.gameLayer.addChild(rb)
-          // Proper angle reflection: reverse incoming velocity vector
-          ctx.enemyBullets.push({ gfx: rb, vx: -(b.vx ?? 0), vy: Math.abs(b.vy) * 1.1 })
+          // Proper angle reflection: reverse incoming velocity vector; 50% dmg
+          ctx.enemyBullets.push({ gfx: rb, vx: -(b.vx ?? 0), vy: Math.abs(b.vy) * 1.1, damage: Math.max(1, Math.round(bulletDmg * 0.5)) })
           if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
           ctx.bullets.splice(j, 1)
         }
@@ -1237,10 +1659,10 @@ function gameLoop(ticker: Ticker) {
       }
     }
     for (let j = ctx.bullets.length - 1; j >= 0; j--) {
-      const bulletHitR = e.kind === 'boss_tinhvan' ? 60 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 45 : 15)
+      const bulletHitR = e.kind === 'boss_tinhvan' ? 60 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 45 : 15)
       if (dist2(ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, e.container.x, e.container.y) < bulletHitR * bulletHitR) {
         e.hp = Math.max(0, e.hp - bulletDmg)
-        const dmgOffY = e.kind === 'boss_tinhvan' ? 75 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 60 : 14)
+        const dmgOffY = e.kind === 'boss_tinhvan' ? 75 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 60 : 14)
         spawnDamageText(ctx, e.container.x, e.container.y - dmgOffY, bulletDmg)
         hitFlash(e.body)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
@@ -1342,6 +1764,60 @@ function gameLoop(ticker: Ticker) {
     if (hit) { if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx); ctx.fragmentMissiles.splice(i, 1) }
   }
 
+  // Shooter missiles (Star Shooter)
+  for (let i = ctx.shooterMissiles.length - 1; i >= 0; i--) {
+    const m = ctx.shooterMissiles[i]
+    const nearest = findNearestEnemy(ctx.enemies, m.gfx.x, m.gfx.y)
+    if (nearest) {
+      const dx = nearest.container.x - m.gfx.x; const dy = nearest.container.y - m.gfx.y
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1
+      const mSpd = Math.sqrt(m.vx * m.vx + m.vy * m.vy) || 6
+      m.vx += (dx / dist) * mSpd * 0.12; m.vy += (dy / dist) * mSpd * 0.12
+      const spd = Math.sqrt(m.vx * m.vx + m.vy * m.vy)
+      if (spd > mSpd) { m.vx = (m.vx / spd) * mSpd; m.vy = (m.vy / spd) * mSpd }
+    }
+    m.gfx.x += m.vx * dt; m.gfx.y += m.vy * dt
+    m.gfx.rotation = Math.atan2(m.vy, m.vx) + Math.PI / 2
+    if (m.gfx.x < -40 || m.gfx.x > GAME_W + 40 || m.gfx.y < -60 || m.gfx.y > GAME_H + 40) {
+      if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+      ctx.shooterMissiles.splice(i, 1); continue
+    }
+    let hit = false
+    for (let j = ctx.enemies.length - 1; j >= 0; j--) {
+      const e = ctx.enemies[j]
+      if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < 22 * 22) {
+        if (m.aoe) {
+          const aoeRadius = 65 * (1 + game.cardStats.shooterMissileAoeSizeBonus)
+          spawnExplosion(ctx, m.gfx.x, m.gfx.y, 28, 0xff4400, 0xffaa00)
+          screenFlash(ctx, 0xff3300, 0.18, 150)
+          for (let k = ctx.enemies.length - 1; k >= 0; k--) {
+            const ae = ctx.enemies[k]
+            if (dist2(m.gfx.x, m.gfx.y, ae.container.x, ae.container.y) < aoeRadius * aoeRadius) {
+              ae.hp = Math.max(0, ae.hp - m.damage); hitFlash(ae.body)
+              spawnDamageText(ctx, ae.container.x, ae.container.y - 14, m.damage)
+              redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
+              if (ae.hp <= 0) {
+                if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)
+                killEnemy(ctx, game, ae, k)
+              }
+            }
+          }
+        } else {
+          e.hp = Math.max(0, e.hp - m.damage); hitFlash(e.body)
+          spawnDamageText(ctx, e.container.x, e.container.y - 14, m.damage)
+          redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+          spawnExplosion(ctx, m.gfx.x, m.gfx.y, 14, 0xff4400, 0xffaa00)
+          if (e.hp <= 0) {
+            if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)
+            killEnemy(ctx, game, e, j)
+          }
+        }
+        hit = true; break
+      }
+    }
+    if (hit) { if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx); ctx.shooterMissiles.splice(i, 1) }
+  }
+
   // Damage texts
   for (let i = ctx.damageTexts.length - 1; i >= 0; i--) {
     const d = ctx.damageTexts[i]
@@ -1397,6 +1873,9 @@ async function initPixi() {
   app.canvas.addEventListener('mouseleave', onMouseLeave)
   app.canvas.addEventListener('contextmenu', onContextMenu)
   window.addEventListener('keydown', onKeyDown)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('blur', handleWindowBlur)
+  window.addEventListener('focus', handleWindowFocus)
 
   app.ticker.add(gameLoop)
 }
@@ -1456,6 +1935,9 @@ function destroyPixi() {
     app.canvas.removeEventListener('mouseleave', onMouseLeave)
     app.canvas.removeEventListener('contextmenu', onContextMenu)
     window.removeEventListener('keydown', onKeyDown)
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+    window.removeEventListener('blur', handleWindowBlur)
+    window.removeEventListener('focus', handleWindowFocus)
     app.destroy(true, { children: true })
     app = null; ctx.app = null
   }
@@ -1465,6 +1947,7 @@ function destroyPixi() {
   ctx.neutronVacuumTimer = 0; ctx.manaCoreKillCount = 0; ctx.artifactOrbitAngle = 0
   ctx.artifactGfx = null
   game.neutronVacuumPct = 0; game.manaCorePct = 0
+  ctx.shooterMissiles = []; ctx.shooterBlackHoleTimer = 0; ctx.shooterBlackHoleGfx = null
 }
 
 onMounted(async () => { await initPixi(); game.startGame() })
@@ -1493,6 +1976,10 @@ watch(() => game.isPlaying, (val, old) => {
     for (const ml of ctx.missileLaunchers) if (!ml.gfx.destroyed) ctx.gameLayer?.removeChild(ml.gfx)
     for (const pm of ctx.playerMissiles) if (!pm.gfx.destroyed) ctx.gameLayer?.removeChild(pm.gfx)
     ctx.missileLaunchers = []; ctx.playerMissiles = []
+    for (const sm of ctx.shooterMissiles) if (!sm.gfx.destroyed) ctx.gameLayer?.removeChild(sm.gfx)
+    ctx.shooterMissiles = []; ctx.shooterBlackHoleTimer = 0
+    if (ctx.shooterBlackHoleGfx && !ctx.shooterBlackHoleGfx.destroyed) ctx.gameLayer?.removeChild(ctx.shooterBlackHoleGfx)
+    ctx.shooterBlackHoleGfx = null
     ctx.pbTimer = 0; ctx.cbTimer = 0; ctx.lsTimer = 0; ctx.sfDmgTimer = 0
     if (ctx.shieldGfx) ctx.shieldGfx.visible = false
     if (ctx.sfGfx) ctx.sfGfx.visible = false

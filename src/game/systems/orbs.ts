@@ -57,5 +57,9 @@ export function spawnEnemyOrbs(ctx: GameContext, x: number, y: number, kind: Ene
     for (let i = 0; i < 16; i++) spawnExpOrb(ctx, x + (Math.random()-0.5)*60, y + (Math.random()-0.5)*30, 'gold')
     for (let i = 0; i < 10; i++) spawnExpOrb(ctx, x + (Math.random()-0.5)*45, y + (Math.random()-0.5)*25, 'purple')
     for (let i = 0; i < 6; i++) spawnExpOrb(ctx, x + (Math.random()-0.5)*25, y, 'blue')
+  } else if (kind === 'boss_trumso') {
+    for (let i = 0; i < 11; i++) spawnExpOrb(ctx, x + (Math.random()-0.5)*55, y + (Math.random()-0.5)*28, 'gold')
+    for (let i = 0; i < 7; i++) spawnExpOrb(ctx, x + (Math.random()-0.5)*40, y + (Math.random()-0.5)*22, 'purple')
+    for (let i = 0; i < 4; i++) spawnExpOrb(ctx, x + (Math.random()-0.5)*22, y, 'blue')
   }
 }

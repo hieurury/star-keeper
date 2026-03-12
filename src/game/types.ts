@@ -8,7 +8,7 @@ export interface Bullet {
 }
 
 export type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'
-  | 'dai_lien' | 'thu_ho' | 'thuat_si' | 'boss_tinhvan'
+  | 'dai_lien' | 'thu_ho' | 'thuat_si' | 'boss_tinhvan' | 'boss_trumso'
 export type KamiState = 'descend' | 'aim' | 'charge' | 'prexplode' | 'dead'
 export type BossAttack2State = 'ready' | 'locking'
 export type PioneerPhase = 'enter' | 'patrol' | 'approach'
@@ -87,7 +87,7 @@ export interface Enemy {
   reflectCooldown?: number
   isReflecting?: boolean
   // thuat_si (healer)
-  healTargetIdx?: number
+  healTarget?: Enemy | null
   healBeamGfx?: Graphics
   isDyingMeteor?: boolean
   meteorVx?: number
@@ -96,6 +96,34 @@ export interface Enemy {
   tinhVanGuns?: TinhVanGun[]
   blackHoles?: BlackHoleEntity[]
   summonPortalGfx?: Graphics
+  // boss_trumso
+  trumSoGuns?: TrumSoGun[]
+  trumSoLasers?: TrumSoLaser[]
+  trumSoPhase2LaserGfx?: Graphics
+  trumSoCharge?: 'idle' | 'warning' | 'charging'
+  trumSoChargeTimer?: number
+  trumSoChargeLane?: number
+  trumSoChargeLineGfx?: Graphics
+  trumSoContinuousDmgTimer?: number
+}
+
+export interface TrumSoGun {
+  gfx: Graphics
+  offsetX: number
+  offsetY: number
+  type: 'machinegun' | 'missile'
+  timer: number
+  burstLeft: number
+  rapidTimer: number
+}
+
+export interface TrumSoLaser {
+  gfx: Graphics
+  offsetX: number
+  offsetY: number
+  state: 'idle' | 'warning' | 'firing'
+  timer: number
+  angle: number
 }
 
 export interface TinhVanGun {
@@ -114,6 +142,7 @@ export interface BlackHoleEntity {
   r: number
   age: number
   maxAge: number
+  portal?: boolean  // phase 2 summon portal: no pull, no age-removal, purple vortex
 }
 
 export interface EnemyBullet {
@@ -124,6 +153,10 @@ export interface EnemyBullet {
   homingLife?: number
   homingSpeed?: number
   onHitPlayer?: () => void
+  aoe?: boolean
+  targetX?: number
+  targetY?: number
+  damage?: number   // override default hit damage (e.g. 50% for reflected)
 }
 
 export interface StarBg {
