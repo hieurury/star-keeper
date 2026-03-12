@@ -47,6 +47,20 @@ export interface GameContext {
   soulMissileQueue: number
   soulMissileFireTimer: number
 
+  // Thủ Hộ (Guardian) global reflect state
+  thuHoReflectTimer: number
+  thuHoReflecting: boolean
+  thuHoReflectGlow: number
+
+  // Faction system (rotates every 5 stages, no same faction twice in a row)
+  activeFaction: 'anox' | 'bnox'
+  lastFaction: 'anox' | 'bnox'
+  factionBlock: number
+
+  // Boss zoom (smooth scale-out when Tinh Vân boss is active)
+  bossZoom: number
+  bossZoomTarget: number
+
   // Wave / stage state
   waveQueue: WaveSpawner[]
   waveDispatchTimer: number
@@ -101,6 +115,15 @@ export function createGameContext(): GameContext {
     artifactGfx: null,
     soulMissileQueue: 0,
     soulMissileFireTimer: 0,
+    thuHoReflectTimer: 300,
+    thuHoReflecting: false,
+    thuHoReflectGlow: 0,
+    ...(() => {
+      const f: 'anox' | 'bnox' = Math.random() < 0.5 ? 'anox' : 'bnox'
+      return { activeFaction: f, lastFaction: f === 'anox' ? 'bnox' : 'anox' as const, factionBlock: 0 }
+    })(),
+    bossZoom: 1.0,
+    bossZoomTarget: 1.0,
     waveQueue: [],
     waveDispatchTimer: 0,
     waveIsClearing: false,

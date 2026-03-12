@@ -148,18 +148,28 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
 export function spawnPlasmaBeam(ctx: GameContext, game: GameStore, x: number, damage: number): void {
   if (!ctx.app || !ctx.gameLayer) return
   const beamW = 20
+  const isDevastation = game.cardStats.plasmaClearsBullets
   screenFlash(ctx, 0x4488ff, 0.22, 300)
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
     const e = ctx.enemies[i]
     if (Math.abs(e.container.x - x) < beamW + 10) {
-      e.hp = Math.max(0, e.hp - damage)
-      hitFlash(e.body)
-      spawnDamageText(ctx, e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' ? 60 : 16), damage)
-      redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
-      if (e.hp <= 0) killEnemy(ctx, game, e, i)
+      const isBoss = e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader'
+      if (isDevastation && !isBoss) {
+        hitFlash(e.body)
+        spawnDamageText(ctx, e.container.x, e.container.y - 16, e.maxHp)
+        redrawHpBar(e.hpBarBg, e.hpBar, 0, e.barW)
+        e.hp = 0
+        killEnemy(ctx, game, e, i)
+      } else {
+        e.hp = Math.max(0, e.hp - damage)
+        hitFlash(e.body)
+        spawnDamageText(ctx, e.container.x, e.container.y - (isBoss ? 60 : 16), damage)
+        redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+        if (e.hp <= 0) killEnemy(ctx, game, e, i)
+      }
     }
   }
-  if (game.cardStats.plasmaClearsBullets) {
+  if (isDevastation) {
     for (let i = ctx.enemyBullets.length - 1; i >= 0; i--) {
       if (Math.abs(ctx.enemyBullets[i].gfx.x - x) < beamW + 12) {
         if (!ctx.enemyBullets[i].gfx.destroyed) ctx.gameLayer.removeChild(ctx.enemyBullets[i].gfx)
@@ -187,8 +197,15 @@ export function spawnPlasmaBeam(ctx: GameContext, game: GameStore, x: number, da
 // ─── Cluster bomb ─────────────────────────────────────────────────────────────
 export function dropClusterBomb(ctx: GameContext, game: GameStore, fromX: number, fromY: number, damage: number): void {
   if (!ctx.app || !ctx.gameLayer) return
-  const tx = Math.max(40, Math.min(GAME_W - 40, fromX + (Math.random() - 0.5) * 140))
-  const ty = GAME_H * 0.15 + Math.random() * GAME_H * 0.45
+  let tx: number, ty: number
+  if (ctx.enemies.length > 0) {
+    const pick = ctx.enemies[Math.floor(Math.random() * ctx.enemies.length)]
+    tx = Math.max(40, Math.min(GAME_W - 40, pick.container.x + (Math.random() - 0.5) * 40))
+    ty = Math.max(30, Math.min(GAME_H * 0.85, pick.container.y + (Math.random() - 0.5) * 30))
+  } else {
+    tx = Math.max(40, Math.min(GAME_W - 40, fromX + (Math.random() - 0.5) * 140))
+    ty = GAME_H * 0.15 + Math.random() * GAME_H * 0.45
+  }
   const bomb = new Graphics()
   bomb.circle(0, 0, 9).fill(0xff6600)
   bomb.circle(0, 0, 5).fill(0xffee44)
@@ -224,7 +241,13 @@ export function dropClusterBomb(ctx: GameContext, game: GameStore, fromX: number
 // ─── Laser sweep ──────────────────────────────────────────────────────────────
 export function fireLaserSweep(ctx: GameContext, game: GameStore, damage: number): void {
   if (!ctx.app || !ctx.gameLayer) return
-  const sweepY = GAME_H * 0.1 + Math.random() * GAME_H * 0.5
+  let sweepY: number
+  if (ctx.enemies.length > 0) {
+    const pick = ctx.enemies[Math.floor(Math.random() * ctx.enemies.length)]
+    sweepY = pick.container.y
+  } else {
+    sweepY = GAME_H * 0.1 + Math.random() * GAME_H * 0.5
+  }
   screenFlash(ctx, 0xff4400, 0.18, 220)
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
     const e = ctx.enemies[i]

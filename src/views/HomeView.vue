@@ -5,12 +5,20 @@ import { useGameStore, ALL_CARD_DEFS, ALL_ARTIFACT_DEFS, SHIP_ARTIFACT_SLOTS, SH
 import PixelButton from '../components/ui/PixelButton.vue'
 import TourOverlay, { type TourStep } from '../components/ui/TourOverlay.vue'
 import ArtifactIcon from '../components/ui/ArtifactIcon.vue'
-import { PhCoins, PhDiamond, PhSword, PhShield, PhCrown } from '@phosphor-icons/vue'
+import CardIcon from '../components/ui/CardIcon.vue'
+import {
+  PhCoins, PhDiamond, PhSword, PhShield, PhCrown,
+  PhPlay, PhAirplaneTilt, PhRocketLaunch, PhMagicWand, PhCards, PhGear,
+  PhClipboardText, PhPencilSimple, PhCheck, PhX,
+  PhArrowLeft, PhCaretLeft, PhCaretRight, PhTimer,
+  PhDownloadSimple, PhUploadSimple, PhWarning, PhWrench, PhLightning,
+  PhTreasureChest,
+} from '@phosphor-icons/vue'
 
 const router = useRouter()
 const game = useGameStore()
 
-const AVATARS = ['🚀', '✈', '⚡', '🔥', '🛸', '⭐']
+const AVATARS = ['PhRocketLaunch', 'PhAirplaneTilt', 'PhLightning', 'PhFire', 'PhPlanet', 'PhStar']
 
 const showProfileSheet = ref(false)
 const showShipsPanel = ref(false)
@@ -36,9 +44,36 @@ const showAdminInput = ref(false)
 const adminInput = ref('')
 const showTourPrompt = ref(false)
 const showTour = ref(false)
+const showSettingsPanel = ref(false)
+const importStatus = ref<'idle' | 'success' | 'error'>('idle')
+let importStatusTimer: ReturnType<typeof setTimeout> | null = null
+
+function onImportFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const ok = game.importSave(reader.result as string)
+    importStatus.value = ok ? 'success' : 'error'
+    if (importStatusTimer) clearTimeout(importStatusTimer)
+    importStatusTimer = setTimeout(() => { importStatus.value = 'idle' }, 3000)
+  }
+  reader.readAsText(file)
+  // reset input so same file can be picked again
+  ;(e.target as HTMLInputElement).value = ''
+}
 
 const completedMissions = computed(() => game.dailyMissions.filter(m => m.completed).length)
 const unclaimedMissions = computed(() => game.dailyMissions.filter(m => m.completed && !m.claimed).length)
+
+const MILESTONE_ITEMS: Array<{ step: 3|5; reward: string }> = [
+  { step: 3, reward: '400🪙+EXP' },
+  { step: 5, reward: '5💎' },
+]
+const milestoneClaimed = computed(() => ({
+  3: game.milestone3Claimed,
+  5: game.milestone5Claimed,
+} as Record<3|5, boolean>))
 
 const TOUR_STEPS: TourStep[] = [
   {
@@ -213,7 +248,7 @@ function onShipNameKey(e: KeyboardEvent) {
     <!-- Top profile bar -->
     <div class="home__topbar">
       <button class="profile-btn" data-tour="profile" @click="openProfileSheet">
-        <div class="profile-avatar">{{ AVATARS[game.avatarId] }}</div>
+        <div class="profile-avatar"><CardIcon :name="AVATARS[game.avatarId]" :size="20" /></div>
         <div class="profile-info">
           <div class="profile-name">{{ game.username }}</div>
           <div class="profile-ship">{{ game.shipName }}</div>
@@ -226,23 +261,23 @@ function onShipNameKey(e: KeyboardEvent) {
           <div class="topbar-lv__fill" :style="{ width: game.accountExpPercent + '%' }" />
         </div>
       </div>
-      <div class="currency-display" data-tour="currency">
-        <div class="gold-display">
-          <span class="gold-icon"><PhCoins weight="fill" :size="16" /></span>
-          <span class="gold-amount">{{ game.playerCoins }}</span>
-        </div>
-        <div class="ruby-display">
-          <span class="ruby-icon"><PhDiamond weight="fill" :size="16" /></span>
-          <span class="ruby-amount">{{ game.playerRuby }}</span>
+      <div class="topbar-right" data-tour="currency">
+        <button class="topbar-missions" @click="showMissionsPanel = true">
+          <PhClipboardText weight="fill" :size="18" />
+          <span v-if="unclaimedMissions > 0" class="topbar-missions__badge">{{ unclaimedMissions }}</span>
+        </button>
+        <div class="currency-display">
+          <div class="gold-display">
+            <span class="gold-icon"><PhCoins weight="fill" :size="16" /></span>
+            <span class="gold-amount">{{ game.playerCoins }}</span>
+          </div>
+          <div class="ruby-display">
+            <span class="ruby-icon"><PhDiamond weight="fill" :size="16" /></span>
+            <span class="ruby-amount">{{ game.playerRuby }}</span>
+          </div>
         </div>
       </div>
     </div>
-
-    <!-- Mission FAB -->
-    <button class="mission-fab" @click="showMissionsPanel = true">
-      <span class="mission-fab__icon">📋</span>
-      <span v-if="unclaimedMissions > 0" class="mission-fab__badge">{{ unclaimedMissions }}</span>
-    </button>
 
     <div class="home__container">
       <!-- Logo / Title -->
@@ -251,7 +286,7 @@ function onShipNameKey(e: KeyboardEvent) {
           <h1 class="home__title">STAR<br/>KEEPER</h1>
           <div class="home__subtitle">NGƯỜI HỘ SAO</div>
         </div>
-        <div class="home__ship-icon">✈</div>
+        <div class="home__ship-icon"><PhAirplaneTilt :size="64" weight="fill" /></div>
       </div>
 
       <!-- Equipment Panel -->
@@ -300,7 +335,7 @@ function onShipNameKey(e: KeyboardEvent) {
                   :style="{ width: (((game.shipDurabilities[game.selectedShip] ?? SHIP_DURABILITY_MAX[game.selectedShip]) / SHIP_DURABILITY_MAX[game.selectedShip]) * 100) + '%' }"
                 />
               </div>
-              <div v-if="!game.canUseShip(game.selectedShip)" class="equip-dur__warn">⚠ Cần ≥ 10 để xuất trận</div>
+              <div v-if="!game.canUseShip(game.selectedShip)" class="equip-dur__warn"><PhWarning :size="11" style="vertical-align:middle;margin-right:3px"/>Cần ≥ 10 để xuất trận</div>
             </div>
             <!-- Artifact slot(s) -->
             <div class="equip-artifacts">
@@ -329,10 +364,28 @@ function onShipNameKey(e: KeyboardEvent) {
 
       <!-- Menu buttons -->
       <div class="home__menu">
-        <PixelButton label="▶ Bắt Đầu" size="lg" data-tour="play-btn" @click="startGame" />
-        <PixelButton label="Phi Cơ" variant="secondary" size="md" data-tour="ships-btn" @click="showShipsPanel = true" />
-        <PixelButton label="Cổ Vật" variant="secondary" size="md" @click="showArtifactsPanel = true" />
-        <PixelButton label="Lõi Sao" variant="secondary" size="md" data-tour="core-btn" @click="showCorePanel = true" />
+        <button class="menu-play-btn" data-tour="play-btn" @click="startGame">
+          <PhPlay :size="18" weight="fill" />
+          <span>BẮT ĐẦU</span>
+        </button>
+        <div class="menu-grid">
+          <button class="menu-tile" data-tour="ships-btn" @click="showShipsPanel = true">
+            <PhRocketLaunch :size="24" weight="fill" />
+            <span>Phi Cơ</span>
+          </button>
+          <button class="menu-tile" @click="showArtifactsPanel = true">
+            <PhMagicWand :size="24" weight="fill" />
+            <span>Cổ Vật</span>
+          </button>
+          <button class="menu-tile" data-tour="core-btn" @click="showCorePanel = true">
+            <PhCards :size="24" weight="fill" />
+            <span>Lõi Sao</span>
+          </button>
+          <button class="menu-tile" @click="showSettingsPanel = true">
+            <PhGear :size="24" weight="fill" />
+            <span>Cài Đặt</span>
+          </button>
+        </div>
       </div>
 
       <!-- Version -->
@@ -345,7 +398,7 @@ function onShipNameKey(e: KeyboardEvent) {
         <div class="profile-sheet">
           <div class="sheet-header">
             <div class="sheet-title">HỒ SƠ PHI CÔNG</div>
-            <button class="sheet-close" @click="closeProfileSheet">✕</button>
+            <button class="sheet-close" @click="closeProfileSheet"><PhX :size="14" /></button>
           </div>
 
           <!-- Username -->
@@ -353,7 +406,7 @@ function onShipNameKey(e: KeyboardEvent) {
             <div class="sheet-section-label">TÊN PHI CÔNG</div>
             <div class="sheet-edit-row" v-if="!editingUsername">
               <span class="sheet-value">{{ game.username }}</span>
-              <button class="edit-btn" @click="editingUsername = true; usernameInput = game.username">✏</button>
+              <button class="edit-btn" @click="editingUsername = true; usernameInput = game.username"><PhPencilSimple :size="14" /></button>
             </div>
             <div class="sheet-input-row" v-else>
               <input
@@ -363,7 +416,7 @@ function onShipNameKey(e: KeyboardEvent) {
                 autofocus
                 @keydown="onUsernameKey"
               />
-              <button class="confirm-btn" @click="saveUsername">✓</button>
+              <button class="confirm-btn" @click="saveUsername"><PhCheck :size="16" /></button>
             </div>
           </div>
 
@@ -372,7 +425,7 @@ function onShipNameKey(e: KeyboardEvent) {
             <div class="sheet-section-label">TÊN CHIẾN CƠ</div>
             <div class="sheet-edit-row" v-if="!editingShipName">
               <span class="sheet-value">{{ game.shipName }}</span>
-              <button class="edit-btn" @click="editingShipName = true; shipNameInput = game.shipName">✏</button>
+              <button class="edit-btn" @click="editingShipName = true; shipNameInput = game.shipName"><PhPencilSimple :size="14" /></button>
             </div>
             <div class="sheet-input-row" v-else>
               <input
@@ -382,7 +435,7 @@ function onShipNameKey(e: KeyboardEvent) {
                 autofocus
                 @keydown="onShipNameKey"
               />
-              <button class="confirm-btn" @click="saveShipName">✓</button>
+              <button class="confirm-btn" @click="saveShipName"><PhCheck :size="16" /></button>
             </div>
           </div>
 
@@ -396,7 +449,7 @@ function onShipNameKey(e: KeyboardEvent) {
                 class="avatar-option"
                 :class="{ 'avatar-option--selected': game.avatarId === idx }"
                 @click="selectAvatar(idx)"
-              >{{ av }}</button>
+              ><CardIcon :name="av" :size="24" /></button>
             </div>
           </div>
         </div>
@@ -409,7 +462,7 @@ function onShipNameKey(e: KeyboardEvent) {
         <div class="ships-sheet">
           <div class="sheet-header">
             <div class="sheet-title">PHI CƠ</div>
-            <button class="sheet-close" @click="showShipsPanel = false">✕</button>
+            <button class="sheet-close" @click="showShipsPanel = false"><PhX :size="14" /></button>
           </div>
 
           <!-- Carousel wrapper -->
@@ -447,12 +500,12 @@ function onShipNameKey(e: KeyboardEvent) {
                   </div>
                   <div class="ship-skill">
                     <div class="ship-skill__name"><PhCrown weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>SÓNG TẦM NHIỀT HUỶ DIỆT</div>
-                    <div class="ship-skill__cd">⏱ Hồi chiêu: 30 giây</div>
+                    <div class="ship-skill__cd"><PhTimer :size="11" style="vertical-align:middle;margin-right:4px"/>Hồi chiêu: 30 giây</div>
                     <div class="ship-skill__desc">Toả ra sóng nhiệt tốc độ cao, gây sát thương lên tất cả kẻ địch trên màn hình và huỷ toàn bộ đường đạn của đối phương.</div>
                   </div>
                   <div class="ship-card__actions">
-                    <button v-if="game.selectedShip !== 'star_keeper'" class="ship-btn ship-btn--select" @click="selectShip('star_keeper')">✓ Chọn phi cơ này</button>
-                    <div v-else class="ship-btn ship-btn--active">⚡ Đang sử dụng</div>
+                    <button v-if="game.selectedShip !== 'star_keeper'" class="ship-btn ship-btn--select" @click="selectShip('star_keeper')"><PhCheck :size="11" style="vertical-align:middle;margin-right:4px"/>Chọn phi cơ này</button>
+                    <div v-else class="ship-btn ship-btn--active"><PhLightning weight="fill" :size="11" style="vertical-align:middle;margin-right:4px"/>Đang sử dụng</div>
                   </div>
                 </div>
               </div>
@@ -488,8 +541,8 @@ function onShipNameKey(e: KeyboardEvent) {
                   </div>
                   <div class="ship-skill ship-skill--orange">
                     <div class="ship-skill__name">🔥 THU THẬP LINH HỒN</div>
-                    <div class="ship-skill__cd">⬡ Cần: 10 mảnh linh hồn</div>
-                    <div class="ship-skill__desc">Kẻ địch bị hạ có 30% cơ hội rơi mảnh linh hồn. Thu thập đủ 10 mảnh rồi kích hoạt để bắn tất cả thành tên lửa tự dẫn, tự phân tán tấn công nhiều mục tiêu.</div>
+                    <div class="ship-skill__cd">⬡ Cần: 10 mảnh linh hồn (tối đa 50)</div>
+                    <div class="ship-skill__desc">Kẻ địch bị hạ có 75% cơ hội rơi mảnh linh hồn. Thu thập đủ 10 mảnh rồi kích hoạt để bắn tất cả thành tên lửa tự dẫn, bám sát kẻ địch gần nhất.</div>
                   </div>
                   <div class="ship-card__actions">
                     <template v-if="!game.ownedShips.includes('star_holder')">
@@ -498,8 +551,8 @@ function onShipNameKey(e: KeyboardEvent) {
                       </button>
                     </template>
                     <template v-else>
-                      <button v-if="game.selectedShip !== 'star_holder'" class="ship-btn ship-btn--select" @click="selectShip('star_holder')">✓ Chọn phi cơ này</button>
-                      <div v-else class="ship-btn ship-btn--active">⚡ Đang sử dụng</div>
+                      <button v-if="game.selectedShip !== 'star_holder'" class="ship-btn ship-btn--select" @click="selectShip('star_holder')"><PhCheck :size="11" style="vertical-align:middle;margin-right:4px"/>Chọn phi cơ này</button>
+                      <div v-else class="ship-btn ship-btn--active"><PhLightning weight="fill" :size="11" style="vertical-align:middle;margin-right:4px"/>Đang sử dụng</div>
                     </template>
                   </div>
                 </div>
@@ -508,8 +561,8 @@ function onShipNameKey(e: KeyboardEvent) {
             </div><!-- /.ship-carousel__track -->
 
             <!-- Prev / Next arrows -->
-            <button class="ship-carousel__arrow ship-carousel__arrow--prev" :disabled="shipIndex === 0" @click="prevShip">‹</button>
-            <button class="ship-carousel__arrow ship-carousel__arrow--next" :disabled="shipIndex === SHIP_COUNT - 1" @click="nextShip">›</button>
+            <button class="ship-carousel__arrow ship-carousel__arrow--prev" :disabled="shipIndex === 0" @click="prevShip"><PhCaretLeft :size="18" /></button>
+            <button class="ship-carousel__arrow ship-carousel__arrow--next" :disabled="shipIndex === SHIP_COUNT - 1" @click="nextShip"><PhCaretRight :size="18" /></button>
 
             <!-- Dot indicators -->
             <div class="ship-carousel__dots">
@@ -533,7 +586,7 @@ function onShipNameKey(e: KeyboardEvent) {
           <div class="sheet-header">
             <div style="width:36px"/>
             <div class="sheet-title">CỔ VẬT</div>
-            <button class="sheet-close" @click="showArtifactsPanel = false">✕</button>
+            <button class="sheet-close" @click="showArtifactsPanel = false"><PhX :size="14" /></button>
           </div>
           <div class="ships-scroll" style="padding: 14px;">
             <div class="artifact-hint">Trang bị cổ vật vào ô cổ vật của phi cơ để nhận hiệu ứng đặc biệt trong trận.</div>
@@ -583,17 +636,17 @@ function onShipNameKey(e: KeyboardEvent) {
       <div v-if="showCorePanel" class="sheet-overlay" @click.self="showCorePanel = false; selectedCard = null">
         <div class="ships-sheet">
           <div class="sheet-header">
-            <button v-if="selectedCard" class="sheet-back" @click="selectedCard = null">←</button>
+            <button v-if="selectedCard" class="sheet-back" @click="selectedCard = null"><PhArrowLeft :size="14" /></button>
             <div v-else style="width: 36px;" />
             <div class="sheet-title">{{ selectedCard ? selectedCard.name : 'LÕI SAO' }}</div>
-            <button class="sheet-close" @click="showCorePanel = false; selectedCard = null">✕</button>
+            <button class="sheet-close" @click="showCorePanel = false; selectedCard = null"><PhX :size="14" /></button>
           </div>
 
           <!-- Card detail view -->
           <div v-if="selectedCard" class="ships-scroll">
             <div class="core-detail-card">
               <div class="core-detail-header">
-                <div class="core-detail-icon">{{ selectedCard.icon }}</div>
+                <div class="core-detail-icon"><CardIcon :name="selectedCard.icon" :size="42" /></div>
                 <div class="core-detail-meta">
                   <div class="core-detail-name">{{ selectedCard.name }}</div>
                   <div class="core-detail-type" :class="'type--' + selectedCard.type">
@@ -612,11 +665,11 @@ function onShipNameKey(e: KeyboardEvent) {
               <div v-if="selectedCard.requiresAttackId || selectedCard.requiresSupportId" class="core-detail-req">
                 <div class="core-detail-req-label">YÊU CẦU MỞ KHÓA</div>
                 <div v-if="selectedCard.requiresAttackId" class="core-detail-req-item">
-                  {{ ALL_CARD_DEFS.find(c => c.id === selectedCard!.requiresAttackId)?.icon }}
+                  <CardIcon :name="ALL_CARD_DEFS.find(c => c.id === selectedCard!.requiresAttackId)?.icon ?? ''" :size="14" />
                   {{ ALL_CARD_DEFS.find(c => c.id === selectedCard!.requiresAttackId)?.name }} (Lv5)
                 </div>
                 <div v-if="selectedCard.requiresSupportId" class="core-detail-req-item">
-                  + {{ ALL_CARD_DEFS.find(c => c.id === selectedCard!.requiresSupportId)?.icon }}
+                  + <CardIcon :name="ALL_CARD_DEFS.find(c => c.id === selectedCard!.requiresSupportId)?.icon ?? ''" :size="14" />
                   {{ ALL_CARD_DEFS.find(c => c.id === selectedCard!.requiresSupportId)?.name }}
                 </div>
               </div>
@@ -632,12 +685,12 @@ function onShipNameKey(e: KeyboardEvent) {
               class="core-card-item"
               @click="selectedCard = card"
             >
-              <div class="core-card-icon">{{ card.icon }}</div>
+              <div class="core-card-icon"><CardIcon :name="card.icon" :size="26" /></div>
               <div class="core-card-body">
                 <div class="core-card-name">{{ card.name }}</div>
                 <div class="core-card-desc">{{ card.levels[0].desc }}</div>
               </div>
-              <div class="core-card-arrow">›</div>
+              <div class="core-card-arrow"><PhCaretRight :size="18" /></div>
             </button>
 
             <div class="core-section-label" style="margin-top: 14px;"><PhShield weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>HỖ TRỢ</div>
@@ -647,12 +700,12 @@ function onShipNameKey(e: KeyboardEvent) {
               class="core-card-item"
               @click="selectedCard = card"
             >
-              <div class="core-card-icon">{{ card.icon }}</div>
+              <div class="core-card-icon"><CardIcon :name="card.icon" :size="26" /></div>
               <div class="core-card-body">
                 <div class="core-card-name">{{ card.name }}</div>
                 <div class="core-card-desc">{{ card.levels[0].desc }}</div>
               </div>
-              <div class="core-card-arrow">›</div>
+              <div class="core-card-arrow"><PhCaretRight :size="18" /></div>
             </button>
 
             <div class="core-section-label" style="margin-top: 14px;"><PhCrown weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>TỐI THƯỢNG</div>
@@ -662,12 +715,12 @@ function onShipNameKey(e: KeyboardEvent) {
               class="core-card-item core-card-item--ultimate"
               @click="selectedCard = card"
             >
-              <div class="core-card-icon">{{ card.icon }}</div>
+              <div class="core-card-icon"><CardIcon :name="card.icon" :size="26" /></div>
               <div class="core-card-body">
                 <div class="core-card-name">{{ card.name }}</div>
                 <div class="core-card-desc">{{ card.levels[0].desc }}</div>
               </div>
-              <div class="core-card-arrow">›</div>
+              <div class="core-card-arrow"><PhCaretRight :size="18" /></div>
             </button>
           </div>
         </div>
@@ -678,10 +731,51 @@ function onShipNameKey(e: KeyboardEvent) {
     <Transition name="sheet">
       <div v-if="showComingSoon" class="sheet-overlay" @click.self="showComingSoon = false">
         <div class="modal-dialog">
-          <div class="modal-dialog__icon">🔧</div>
+          <div class="modal-dialog__icon"><PhWrench weight="fill" :size="32" /></div>
           <div class="modal-dialog__title">SẮP RA MẮT</div>
           <div class="modal-dialog__desc">Tính năng này đang được phát triển và sẽ có mặt trong phiên bản tới!</div>
-          <PixelButton label="✓ Đã Hiểu" size="md" @click="showComingSoon = false" />
+          <PixelButton label="Đã Hiểu" size="md" @click="showComingSoon = false" />
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Settings Panel -->
+    <Transition name="sheet">
+      <div v-if="showSettingsPanel" class="sheet-overlay" @click.self="showSettingsPanel = false">
+        <div class="ships-sheet">
+          <div class="sheet-header">
+            <div style="width:36px"/>
+            <div class="sheet-title">CÀI ĐẶT</div>
+            <button class="sheet-close" @click="showSettingsPanel = false"><PhX :size="14" /></button>
+          </div>
+          <div class="ships-scroll" style="padding: 20px 16px 32px;">
+            <!-- Save data section -->
+            <div class="settings-section-label">DỮ LIỆU GAME</div>
+            <div class="settings-desc">Xuất file lưu để bảo quản tiến trình, hoặc nạp lại từ file đã xuất trước đó.</div>
+
+            <button class="settings-btn settings-btn--export" @click="game.exportSave()">
+              <PhDownloadSimple :size="14" style="vertical-align:middle;margin-right:6px" weight="bold"/>Xuất File Lưu Game
+            </button>
+
+            <label class="settings-btn settings-btn--import">
+              <PhUploadSimple :size="14" style="vertical-align:middle;margin-right:6px" weight="bold"/>Nạp File Lưu Game
+              <input
+                type="file"
+                accept=".json,application/json"
+                style="display:none"
+                @change="onImportFile"
+              />
+            </label>
+
+            <Transition name="fade">
+              <div v-if="importStatus === 'success'" class="settings-status settings-status--ok">
+                <PhCheck :size="12" style="vertical-align:middle;margin-right:4px"/>Nạp dữ liệu thành công!
+              </div>
+              <div v-else-if="importStatus === 'error'" class="settings-status settings-status--err">
+                <PhX :size="12" style="vertical-align:middle;margin-right:4px"/>File không hợp lệ, vui lòng thử lại.
+              </div>
+            </Transition>
+          </div>
         </div>
       </div>
     </Transition>
@@ -690,7 +784,7 @@ function onShipNameKey(e: KeyboardEvent) {
     <Transition name="sheet">
       <div v-if="showTourPrompt" class="sheet-overlay" @click.self="dismissTourPrompt">
         <div class="modal-dialog">
-          <div class="modal-dialog__icon">✈</div>
+          <div class="modal-dialog__icon"><PhAirplaneTilt weight="fill" :size="32" /></div>
           <div class="modal-dialog__title">XIN CHÀO, PHI CÔNG!</div>
           <div class="modal-dialog__desc">Đây là lần đầu bạn ghé thăm. Bạn có muốn xem hướng dẫn cách chơi không?</div>
           <div class="modal-dialog__actions">
@@ -711,9 +805,38 @@ function onShipNameKey(e: KeyboardEvent) {
           <div class="sheet-header">
             <div style="width:36px"/>
             <div class="sheet-title">NHIỆM VỤ HÔM NAY</div>
-            <button class="sheet-close" @click="showMissionsPanel = false">✕</button>
+            <button class="sheet-close" @click="showMissionsPanel = false"><PhX :size="14" /></button>
           </div>
           <div class="ships-scroll" style="padding: 14px 14px 24px;">
+            <!-- Milestone Timeline -->
+            <div class="ms-timeline">
+              <div class="ms-timeline__title">CỘT MỐC</div>
+              <div class="ms-track">
+                <div class="ms-track__fill" :style="{ width: Math.min(100, (completedMissions / 5 * 100)) + '%' }" />
+                <div
+                  v-for="ms in MILESTONE_ITEMS"
+                  :key="ms.step"
+                  class="ms-chest"
+                  :style="{ left: 'calc(' + (ms.step / 5 * 100).toFixed(0) + '% - 22px)' }"
+                  :class="{
+                    'ms-chest--unlocked':  completedMissions >= ms.step,
+                    'ms-chest--claimed':   milestoneClaimed[ms.step],
+                    'ms-chest--claimable': completedMissions >= ms.step && !milestoneClaimed[ms.step],
+                  }"
+                  @click="completedMissions >= ms.step && !milestoneClaimed[ms.step] && game.claimMilestone(ms.step)"
+                >
+                  <div class="ms-chest__icon">
+                    <PhTreasureChest :size="24" :weight="completedMissions >= ms.step ? 'fill' : 'regular'" />
+                  </div>
+                  <div class="ms-chest__step">
+                    <PhCheck v-if="milestoneClaimed[ms.step]" :size="8" weight="bold" />
+                    <span v-else>{{ ms.step }}/5</span>
+                  </div>
+                  <div class="ms-chest__reward">{{ ms.reward }}</div>
+                </div>
+              </div>
+              <div class="ms-progress-label">{{ completedMissions }}/5 nhiệm vụ hoàn thành</div>
+            </div>
             <div v-for="m in game.dailyMissions" :key="m.id" class="mission-item" :class="{ 'mission-item--done': m.completed }">
               <div class="mission-item__top">
                 <span class="mission-item__desc">{{ m.desc }}</span>
@@ -729,23 +852,7 @@ function onShipNameKey(e: KeyboardEvent) {
                 <span v-if="m.reward.accountExp"> {{ m.reward.accountExp }} EXP</span>
               </div>
               <button v-if="m.completed && !m.claimed" class="mission-claim-btn" @click="game.claimMissionReward(m.id)">Nhận thưởng</button>
-              <div v-else-if="m.claimed" class="mission-claimed">✓ Đã nhận</div>
-            </div>
-            <!-- Milestones -->
-            <div class="milestone-section">
-              <div class="milestone-section__title">CỘT MỐC</div>
-              <div class="milestone-item" :class="{ 'milestone-item--done': completedMissions >= 2, 'milestone-item--claimed': game.milestone2Claimed }">
-                <div class="milestone-item__desc">Hoàn thành 2 nhiệm vụ → 500🪙 + 100 EXP</div>
-                <span class="milestone-item__prog">{{ completedMissions }}/2</span>
-                <button v-if="completedMissions >= 2 && !game.milestone2Claimed" class="mission-claim-btn" @click="game.claimMilestone(2)">Nhận</button>
-                <div v-else-if="game.milestone2Claimed" class="mission-claimed">✓</div>
-              </div>
-              <div class="milestone-item" :class="{ 'milestone-item--done': completedMissions >= 5, 'milestone-item--claimed': game.milestone5Claimed }">
-                <div class="milestone-item__desc">Hoàn thành 5 nhiệm vụ → 5💎</div>
-                <span class="milestone-item__prog">{{ completedMissions }}/5</span>
-                <button v-if="completedMissions >= 5 && !game.milestone5Claimed" class="mission-claim-btn" @click="game.claimMilestone(5)">Nhận</button>
-                <div v-else-if="game.milestone5Claimed" class="mission-claimed">✓</div>
-              </div>
+              <div v-else-if="m.claimed" class="mission-claimed"><PhCheck :size="12" style="vertical-align:middle"/> Đã nhận</div>
             </div>
           </div>
         </div>
@@ -840,8 +947,6 @@ function onShipNameKey(e: KeyboardEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
-  line-height: 1;
   transition: border-color 0.2s;
 }
 .profile-btn:hover .profile-avatar { border-color: var(--color-accent); }
@@ -858,7 +963,7 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .profile-ship {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text-dim);
   letter-spacing: 0.5px;
 }
@@ -932,17 +1037,22 @@ function onShipNameKey(e: KeyboardEvent) {
   margin-top: 4px;
 }
 .home__ship-icon {
-  font-size: 64px;
   animation: float 2s ease-in-out infinite alternate;
   filter: drop-shadow(0 0 12px var(--color-accent));
-  transform: rotate(-90deg);
+  color: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
 }
+
 @keyframes float {
   from { transform: rotate(-90deg) translateX(-6px); }
   to   { transform: rotate(-90deg) translateX(6px); }
 }
-
-/* Stats */
+.home__ship-icon > * {
+  transform: rotate(-90deg);
+}
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1012,7 +1122,7 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .ach-summary__count {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text-dim);
 }
 
@@ -1021,8 +1131,56 @@ function onShipNameKey(e: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  align-items: center;
+  align-items: stretch;
 }
+.menu-play-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 20px;
+  background: var(--color-accent);
+  color: #fff;
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  letter-spacing: 2px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 0 var(--color-accent-dark), inset 0 1px 0 rgba(255,255,255,0.25);
+  transition: transform 0.05s, box-shadow 0.05s, background 0.1s;
+  text-transform: uppercase;
+  user-select: none;
+}
+.menu-play-btn:hover { background: var(--color-accent-light); }
+.menu-play-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--color-accent-dark); }
+.menu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+.menu-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 16px 8px;
+  background: var(--color-panel);
+  border: 2px solid var(--color-border-dark);
+  color: var(--color-text-dim);
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  text-transform: uppercase;
+  box-shadow: 0 3px 0 var(--color-border-dark);
+  transition: transform 0.05s, box-shadow 0.05s, border-color 0.12s, color 0.12s;
+  user-select: none;
+}
+.menu-tile:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.menu-tile:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--color-border-dark); }
 
 /* Footer */
 .home__footer {
@@ -1074,14 +1232,13 @@ function onShipNameKey(e: KeyboardEvent) {
   background: none;
   border: 2px solid var(--color-border-dark);
   color: var(--color-text-dim);
-  font-size: 14px;
   width: 28px;
   height: 28px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: sans-serif;
+  flex-shrink: 0;
 }
 .sheet-close:hover { border-color: var(--color-border); color: var(--color-text); }
 .sheet-section {
@@ -1089,7 +1246,7 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .sheet-section-label {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text-dim);
   letter-spacing: 2px;
   margin-bottom: 8px;
@@ -1111,9 +1268,11 @@ function onShipNameKey(e: KeyboardEvent) {
   background: none;
   border: none;
   color: var(--color-text-dim);
-  font-size: 14px;
   cursor: pointer;
   padding: 2px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .edit-btn:hover { color: var(--color-accent); }
 .sheet-input-row {
@@ -1135,14 +1294,13 @@ function onShipNameKey(e: KeyboardEvent) {
   background: var(--color-accent-dark, #006088);
   border: 2px solid var(--color-accent);
   color: var(--color-accent);
-  font-size: 16px;
   width: 36px;
   height: 36px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: sans-serif;
+  flex-shrink: 0;
 }
 .confirm-btn:hover { background: var(--color-accent); color: #000; }
 
@@ -1157,7 +1315,6 @@ function onShipNameKey(e: KeyboardEvent) {
   aspect-ratio: 1;
   background: var(--color-panel-dark);
   border: 2px solid var(--color-border-dark);
-  font-size: 24px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1222,7 +1379,6 @@ function onShipNameKey(e: KeyboardEvent) {
   border: 2px solid var(--color-border);
   color: var(--color-accent);
   font-family: var(--font-pixel);
-  font-size: 24px;
   width: 32px;
   height: 48px;
   display: flex;
@@ -1230,7 +1386,6 @@ function onShipNameKey(e: KeyboardEvent) {
   justify-content: center;
   cursor: pointer;
   z-index: 2;
-  line-height: 1;
   padding: 0;
   transition: opacity 0.2s;
 }
@@ -1291,13 +1446,13 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .ship-card__tag {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: #f1c40f;
   letter-spacing: 1px;
 }
 .ship-card__desc {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text-dim);
   line-height: 1.7;
   letter-spacing: 0.3px;
@@ -1316,7 +1471,7 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .ship-stat__label {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text-dim);
   letter-spacing: 0.5px;
   min-width: 84px;
@@ -1335,7 +1490,7 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .ship-stat__val {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text-dim);
   min-width: 54px;
   text-align: right;
@@ -1353,19 +1508,19 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .ship-skill__name {
   font-family: var(--font-pixel);
-  font-size: 9px;
+  font-size: 10px;
   color: #ff8833;
   letter-spacing: 1px;
 }
 .ship-skill__cd {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: #ffaa55;
   letter-spacing: 0.5px;
 }
 .ship-skill__desc {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text-dim);
   line-height: 1.7;
   letter-spacing: 0.2px;
@@ -1427,9 +1582,7 @@ function onShipNameKey(e: KeyboardEvent) {
   background: none;
   border: 2px solid var(--color-border-dark);
   color: var(--color-text-dim);
-  font-family: var(--font-pixel);
-  font-size: 11px;
-  padding: 4px 10px;
+  padding: 0;
   cursor: pointer;
   width: 36px;
   height: 28px;
@@ -1466,7 +1619,7 @@ function onShipNameKey(e: KeyboardEvent) {
 .core-card-item--ultimate { border-color: rgba(255, 200, 0, 0.3); }
 .core-card-item--ultimate:hover { border-color: #ffd700; }
 
-.core-card-icon { font-size: 26px; flex-shrink: 0; }
+.core-card-icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .core-card-body { flex: 1; min-width: 0; }
 .core-card-name {
   font-family: var(--font-pixel);
@@ -1476,19 +1629,19 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .core-card-desc {
   font-family: var(--font-pixel);
-  font-size: 7px;
+  font-size: 9px;
   color: var(--color-text-dim);
   line-height: 1.5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.core-card-arrow { font-size: 18px; color: var(--color-text-dim); flex-shrink: 0; }
+.core-card-arrow { display: flex; align-items: center; color: var(--color-text-dim); flex-shrink: 0; }
 
 /* Card detail */
 .core-detail-card { display: flex; flex-direction: column; gap: 16px; }
 .core-detail-header { display: flex; align-items: center; gap: 14px; }
-.core-detail-icon { font-size: 42px; flex-shrink: 0; }
+.core-detail-icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .core-detail-meta { display: flex; flex-direction: column; gap: 6px; }
 .core-detail-name {
   font-family: var(--font-pixel);
@@ -1498,7 +1651,7 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .core-detail-type {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 1.5px;
   padding: 2px 8px;
   display: inline-block;
@@ -1518,7 +1671,7 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .core-detail-lv-badge {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: #f1c40f;
   min-width: 24px;
   flex-shrink: 0;
@@ -1526,7 +1679,7 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .core-detail-lv-desc {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text-dim);
   line-height: 1.7;
 }
@@ -1540,14 +1693,14 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .core-detail-req-label {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: #f1c40f;
   letter-spacing: 1px;
   margin-bottom: 3px;
 }
 .core-detail-req-item {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text-dim);
 }
 
@@ -1566,8 +1719,13 @@ function onShipNameKey(e: KeyboardEvent) {
   text-align: center;
 }
 .modal-dialog__icon {
-  font-size: 32px;
-  line-height: 1;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent);
+  filter: drop-shadow(0 0 8px rgba(0, 200, 255, 0.4));
 }
 .modal-dialog__title {
   font-family: var(--font-pixel);
@@ -1718,13 +1876,13 @@ function onShipNameKey(e: KeyboardEvent) {
 .equip-slot__icon { font-size: 16px; flex-shrink: 0; }
 .equip-slot__name {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-accent);
   letter-spacing: 0.5px;
 }
 .equip-slot__empty {
   font-family: var(--font-pixel);
-  font-size: 7px;
+  font-size: 9px;
   color: var(--color-text-dim);
   letter-spacing: 0.5px;
 }
@@ -1732,7 +1890,7 @@ function onShipNameKey(e: KeyboardEvent) {
 /* ─── Artifact Panel ─────────────────────────────────────────────────────── */
 .artifact-hint {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text-dim);
   line-height: 1.7;
   margin-bottom: 12px;
@@ -1760,26 +1918,26 @@ function onShipNameKey(e: KeyboardEvent) {
 .artifact-card__icon { font-size: 26px; flex-shrink: 0; }
 .artifact-card__name {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text);
   margin-bottom: 2px;
 }
 .artifact-card__desc {
   font-family: var(--font-pixel);
-  font-size: 6.5px;
+  font-size: 8px;
   color: var(--color-text-dim);
   line-height: 1.6;
   flex: 1;
 }
 .artifact-card__cost {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 9px;
   color: #f1c40f;
 }
 .artifact-card__actions { display: flex; flex-direction: column; gap: 4px; width: 100%; margin-top: auto; }
 .artifact-btn {
   font-family: var(--font-pixel);
-  font-size: 7px;
+  font-size: 9px;
   letter-spacing: 1px;
   padding: 5px 6px;
   border: 2px solid transparent;
@@ -1824,43 +1982,43 @@ function onShipNameKey(e: KeyboardEvent) {
   min-height: 0;
 }
 
-/* ─── Mission FAB ────────────────────────────────────────────────────────── */
-.mission-fab {
-  position: fixed;
-  top: 62px;
-  right: 12px;
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  background: var(--color-panel);
-  border: 2px solid var(--color-accent);
-  color: var(--color-text);
-  font-size: 20px;
-  cursor: pointer;
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.topbar-missions {
+  position: relative;
+  background: none;
+  border: 2px solid var(--color-border-dark);
+  color: var(--color-text-dim);
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 15;
-  box-shadow: 0 2px 12px rgba(0, 200, 255, 0.25);
-  transition: transform 0.15s, box-shadow 0.15s;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
 }
-.mission-fab:hover { transform: scale(1.08); box-shadow: 0 4px 18px rgba(0, 200, 255, 0.4); }
-.mission-fab__icon { line-height: 1; }
-.mission-fab__badge {
+.topbar-missions:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.topbar-missions__badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -5px;
+  right: -5px;
   background: #ff4444;
   color: #fff;
   font-family: var(--font-pixel);
   font-size: 7px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
+  min-width: 15px;
+  height: 15px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 2px solid var(--color-bg);
+  padding: 0 2px;
 }
 
 /* ─── Mission Panel ──────────────────────────────────────────────────────── */
@@ -1881,14 +2039,14 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .mission-item__desc {
   font-family: var(--font-pixel);
-  font-size: 8.5px;
+  font-size: 10px;
   color: var(--color-text);
   flex: 1;
   line-height: 1.7;
 }
 .mission-item__prog {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 10px;
   color: var(--color-accent);
   white-space: nowrap;
 }
@@ -1907,14 +2065,14 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .mission-item__reward {
   font-family: var(--font-pixel);
-  font-size: 7px;
+  font-size: 9px;
   color: var(--color-text-dim);
   margin-bottom: 6px;
 }
 .mission-reward-label { margin-right: 4px; }
 .mission-claim-btn {
   font-family: var(--font-pixel);
-  font-size: 7.5px;
+  font-size: 9px;
   background: #1a3300;
   border: 2px solid #44aa22;
   color: #88ff55;
@@ -1926,44 +2084,96 @@ function onShipNameKey(e: KeyboardEvent) {
 .mission-claim-btn:hover { background: #224400; }
 .mission-claimed {
   font-family: var(--font-pixel);
-  font-size: 7.5px;
+  font-size: 9px;
   color: #44bb44;
 }
-.milestone-section {
-  margin-top: 16px;
-  border-top: 2px solid var(--color-border-dark);
-  padding-top: 12px;
+/* ─── Milestone Timeline ────────────────────────────────────────────── */
+.ms-timeline {
+  background: var(--color-panel-dark);
+  border: 2px solid var(--color-border-dark);
+  padding: 12px 16px 14px;
+  margin-bottom: 14px;
 }
-.milestone-section__title {
+.ms-timeline__title {
   font-family: var(--font-pixel);
   font-size: 9px;
   color: var(--color-accent);
-  margin-bottom: 8px;
   letter-spacing: 2px;
+  margin-bottom: 14px;
 }
-.milestone-item {
+.ms-track {
+  position: relative;
+  height: 70px;
+  overflow: visible;
+}
+.ms-track::before {
+  content: '';
+  position: absolute;
+  top: 11px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-border);
+  border-radius: 1px;
+  z-index: 1;
+  pointer-events: none;
+}
+.ms-track__fill {
+  position: absolute;
+  top: 11px;
+  left: 0;
+  height: 2px;
+  background: #ffd700;
+  border-radius: 1px;
+  transition: width 0.4s ease;
+  z-index: 1;
+  max-width: 100%;
+  pointer-events: none;
+}
+.ms-chest {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  background: var(--color-panel-dark);
-  border: 2px solid var(--color-border-dark);
-  margin-bottom: 6px;
+  gap: 3px;
+  width: 44px;
+  position: absolute;
+  top: 0;
+  z-index: 10;
+  cursor: default;
 }
-.milestone-item--done { border-color: rgba(255, 200, 50, 0.4); }
-.milestone-item--claimed { opacity: 0.6; }
-.milestone-item__desc {
-  font-family: var(--font-pixel);
-  font-size: 7.5px;
-  color: var(--color-text);
-  flex: 1;
-  line-height: 1.6;
-}
-.milestone-item__prog {
+.ms-chest--claimable { cursor: pointer; animation: chest-pulse 1.4s ease-in-out infinite; }
+.ms-chest__icon { color: var(--color-border); display: flex; }
+.ms-chest--unlocked .ms-chest__icon { color: #ffd700; }
+.ms-chest--claimed .ms-chest__icon { color: rgba(255, 215, 0, 0.35); }
+.ms-chest__step {
   font-family: var(--font-pixel);
   font-size: 8px;
-  color: var(--color-accent);
+  color: var(--color-text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 10px;
+}
+.ms-chest--claimable .ms-chest__step { color: #ffd700; }
+.ms-chest--claimed .ms-chest__step { color: #26de81; }
+.ms-chest__reward {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: var(--color-text-dim);
+  text-align: center;
+  line-height: 1.4;
   white-space: nowrap;
+}
+.ms-progress-label {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  text-align: right;
+  margin-top: 10px;
+}
+@keyframes chest-pulse {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.1); }
 }
 
 /* ─── Admin modal ────────────────────────────────────────────────────────── */
@@ -1981,4 +2191,63 @@ function onShipNameKey(e: KeyboardEvent) {
   outline: none;
   box-sizing: border-box;
 }
+
+/* ─── Settings Panel ─────────────────────────────────────────────────────── */
+.settings-section-label {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: var(--color-accent);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.settings-desc {
+  font-family: var(--font-pixel);
+  font-size: 7.5px;
+  color: var(--color-text-dim);
+  line-height: 1.8;
+  margin-bottom: 14px;
+}
+.settings-btn {
+  display: block;
+  width: 100%;
+  font-family: var(--font-pixel);
+  font-size: 8.5px;
+  letter-spacing: 1.5px;
+  padding: 11px 14px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  margin-bottom: 10px;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.settings-btn:active { transform: scale(0.98); }
+.settings-btn--export {
+  background: #001a33;
+  border-color: #0088cc;
+  color: #00cfff;
+}
+.settings-btn--export:hover { background: #00253d; border-color: #00cfff; }
+.settings-btn--import {
+  background: #001a0a;
+  border-color: #00882b;
+  color: #44ff88;
+}
+.settings-btn--import:hover { background: #002514; border-color: #44ff88; }
+.settings-status {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  padding: 8px 10px;
+  text-align: center;
+  border: 2px solid transparent;
+  margin-top: 4px;
+}
+.settings-status--ok  { background: rgba(68, 255, 136, 0.1); border-color: #44ff88; color: #44ff88; }
+.settings-status--err { background: rgba(255, 80,  80,  0.1); border-color: #ff5050; color: #ff5050; }
+
+/* fade transition for status text */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

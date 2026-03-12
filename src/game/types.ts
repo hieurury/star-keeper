@@ -8,6 +8,7 @@ export interface Bullet {
 }
 
 export type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'
+  | 'dai_lien' | 'thu_ho' | 'thuat_si' | 'boss_tinhvan'
 export type KamiState = 'descend' | 'aim' | 'charge' | 'prexplode' | 'dead'
 export type BossAttack2State = 'ready' | 'locking'
 export type PioneerPhase = 'enter' | 'patrol' | 'approach'
@@ -81,6 +82,38 @@ export interface Enemy {
   formOffsetY?: number
   // boss_invader
   bossTurrets?: BossTurret[]
+  // dai_lien — reuses shootTimer, pioneerPhase, formTargetX/Y
+  // thu_ho (guardian)
+  reflectCooldown?: number
+  isReflecting?: boolean
+  // thuat_si (healer)
+  healTargetIdx?: number
+  healBeamGfx?: Graphics
+  isDyingMeteor?: boolean
+  meteorVx?: number
+  meteorVy?: number
+  // boss_tinhvan
+  tinhVanGuns?: TinhVanGun[]
+  blackHoles?: BlackHoleEntity[]
+  summonPortalGfx?: Graphics
+}
+
+export interface TinhVanGun {
+  gfx: Graphics
+  offsetX: number
+  offsetY: number
+  shootTimer: number
+  burstLeft: number
+  pauseTimer: number
+}
+
+export interface BlackHoleEntity {
+  gfx: Graphics
+  x: number
+  y: number
+  r: number
+  age: number
+  maxAge: number
 }
 
 export interface EnemyBullet {

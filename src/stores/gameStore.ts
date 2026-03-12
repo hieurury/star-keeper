@@ -61,12 +61,18 @@ export interface CardStats {
   staticField: boolean
   staticFieldRadius: number
   staticFieldDmgPerTick: number
+  // Cánh Tản Nhiệt (support)
+  speedCardPct: number
+  // Xạ Thủ Nhanh (support)
+  turboFireRatePct: number
+  // Mưa Bom Liên Hoàn (ultimate)
+  cbTurboBoost: boolean
 }
 
 export const ALL_CARD_DEFS: CardDef[] = [
   // ── Tấn công ────────────────────────────────────────────────────────────────
   {
-    id: 'heat_missile', name: 'Tên Lửa Tầm Nhiệt', type: 'attack', icon: '🚀', maxLevel: 5,
+    id: 'heat_missile', name: 'Tên Lửa Tầm Nhiệt', type: 'attack', icon: 'PhRocketLaunch', maxLevel: 5,
     levels: [
       { desc: 'Triệu hồi 1 bệ phóng bám theo phi cơ, mỗi 5s bắn 1 tên lửa tầm nhiệt.' },
       { desc: 'Tên lửa bay nhanh +30%, sát thương +20%.' },
@@ -76,7 +82,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'plasma_bolt', name: 'Tia Plasma', type: 'attack', icon: '⚡', maxLevel: 5,
+    id: 'plasma_bolt', name: 'Tia Plasma', type: 'attack', icon: 'PhLightning', maxLevel: 5,
     levels: [
       { desc: 'Mỗi 6s phóng 1 tia plasma xuyên thấu, gây 80 sát thương.' },
       { desc: 'Sát thương +25%.' },
@@ -86,7 +92,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'cluster_bomb', name: 'Bom Cụm', type: 'attack', icon: '💣', maxLevel: 5,
+    id: 'cluster_bomb', name: 'Bom Cụm', type: 'attack', icon: 'PhBomb', maxLevel: 5,
     levels: [
       { desc: 'Mỗi 8s thả 1 bom cụm, nổ gây 70 sát thương diện rộng.' },
       { desc: 'Phạm vi nổ +30%, sát thương +20%.' },
@@ -96,7 +102,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'laser_sweep', name: 'Quét Laser', type: 'attack', icon: '🔴', maxLevel: 5,
+    id: 'laser_sweep', name: 'Quét Laser', type: 'attack', icon: 'PhWaveSine', maxLevel: 5,
     levels: [
       { desc: 'Mỗi 7s quét tia laser ngang, gây 50 sát thương mọi kẻ địch trong vùng.' },
       { desc: 'Sát thương +25%.' },
@@ -106,7 +112,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'weapon_cache_star', name: 'Kho Vũ Khí - Star Keeper', type: 'attack', icon: '🔫', maxLevel: 5, shipId: 'star_keeper',
+    id: 'weapon_cache_star', name: 'Kho Vũ Khí - Star Keeper', type: 'attack', icon: 'PhSword', maxLevel: 5, shipId: 'star_keeper',
     levels: [
       { desc: '+1 đạn bắn ra và tăng 20% tốc độ bắn.' },
       { desc: '+25% sát thương đạn.' },
@@ -116,7 +122,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'weapon_cache_holder', name: 'Kho Vũ Khí - Star Holder', type: 'attack', icon: '🔥', maxLevel: 5, shipId: 'star_holder',
+    id: 'weapon_cache_holder', name: 'Kho Vũ Khí - Star Holder', type: 'attack', icon: 'PhFire', maxLevel: 5, shipId: 'star_holder',
     levels: [
       { desc: 'Tăng kích thước tia lazer +25%.' },
       { desc: 'Bắn thêm 1 tia lazer song song.' },
@@ -127,17 +133,17 @@ export const ALL_CARD_DEFS: CardDef[] = [
   },
   // ── Hỗ trợ ──────────────────────────────────────────────────────────────────
   {
-    id: 'skill_recovery', name: 'Phục Hồi Kỹ Năng', type: 'support', icon: '🔄', maxLevel: 5,
+    id: 'skill_recovery', name: 'Phục Hồi Kỹ Năng', type: 'support', icon: 'PhArrowsClockwise', maxLevel: 5,
     levels: [
-      { desc: 'Giảm 5% thời gian hồi chiêu kỹ năng.' },
-      { desc: 'Giảm thêm 5% (tổng -10%) thời gian hồi chiêu.' },
-      { desc: 'Giảm thêm 5% (tổng -15%) thời gian hồi chiêu.' },
-      { desc: 'Giảm thêm 5% (tổng -20%) thời gian hồi chiêu.' },
-      { desc: 'Giảm thêm 5% (tổng -25%) thời gian hồi chiêu.' },
+      { desc: 'Giảm 8% thời gian hồi chiêu kỹ năng.' },
+      { desc: 'Giảm thêm 8% (tổng -16%) thời gian hồi chiêu.' },
+      { desc: 'Giảm thêm 8% (tổng -24%) thời gian hồi chiêu.' },
+      { desc: 'Giảm thêm 8% (tổng -32%) thời gian hồi chiêu.' },
+      { desc: 'Giảm thêm 8% (tổng -40%) thời gian hồi chiêu.' },
     ],
   },
   {
-    id: 'energy_shield', name: 'Lá Chắn Năng Lượng', type: 'support', icon: '🛡️', maxLevel: 5,
+    id: 'energy_shield', name: 'Lá Chắn Năng Lượng', type: 'support', icon: 'PhShieldPlus', maxLevel: 5,
     levels: [
       { desc: 'Mỗi 25s tự động tạo lá chắn hấp thụ 1 đòn tấn công.' },
       { desc: 'Thời gian hồi lá chắn giảm còn 20s.' },
@@ -147,7 +153,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'exp_magnet', name: 'Nam Châm EXP', type: 'support', icon: '🧲', maxLevel: 5,
+    id: 'exp_magnet', name: 'Nam Châm EXP', type: 'support', icon: 'PhMagnet', maxLevel: 5,
     levels: [
       { desc: 'Phạm vi thu thập kinh nghiệm +40.' },
       { desc: 'Phạm vi thu thập kinh nghiệm +40 (tổng +80).' },
@@ -157,32 +163,32 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'hp_vampire', name: 'Hút Máu', type: 'support', icon: '🩸', maxLevel: 5,
+    id: 'hp_vampire', name: 'Hút Máu', type: 'support', icon: 'PhDrop', maxLevel: 5,
     levels: [
       { desc: 'Đánh trúng kẻ địch hồi 1 HP.' },
+      { desc: 'Tiêu diệt kẻ địch bổ sung hồi +3 HP.' },
+      { desc: 'Tiêu diệt kẻ địch bổ sung hồi +3 HP (tổng +6 HP khi tiêu diệt).' },
       { desc: 'Đánh trúng kẻ địch hồi 2 HP.' },
-      { desc: 'Tiêu diệt kẻ địch bổ sung hồi +5 HP.' },
-      { desc: 'Đánh trúng kẻ địch hồi 3 HP.' },
-      { desc: 'Tiêu diệt kẻ địch bổ sung hồi +10 HP.' },
+      { desc: 'Tiêu diệt kẻ địch bổ sung hồi +5 HP (tổng 7 HP khi tiêu diệt).' },
     ],
   },
   // ── Tối thượng ──────────────────────────────────────────────────────────────
   {
-    id: 'weapon_cache_star_ult', name: 'Đạn Xuyên Phá', type: 'ultimate', icon: '🔮', maxLevel: 1, shipId: 'star_keeper',
+    id: 'weapon_cache_star_ult', name: 'Đạn Xuyên Phá', type: 'ultimate', icon: 'PhDiamondsFour', maxLevel: 1, shipId: 'star_keeper',
     requiresAttackId: 'weapon_cache_star',
     levels: [
       { desc: 'Đạn xuyên qua kẻ địch khi tiêu diệt, tiếp tục tấn công mục tiêu phía sau. (Yêu cầu: Kho Vũ Khí - Star Keeper Lv5)' },
     ],
   },
   {
-    id: 'weapon_cache_holder_ult', name: 'Thu Hồn Tự Động', type: 'ultimate', icon: '👻', maxLevel: 1, shipId: 'star_holder',
+    id: 'weapon_cache_holder_ult', name: 'Thu Hồn Tự Động', type: 'ultimate', icon: 'PhGhost', maxLevel: 1, shipId: 'star_holder',
     requiresAttackId: 'weapon_cache_holder',
     levels: [
       { desc: 'Kẻ địch bị tiêu diệt bởi lazer có 100% cơ hội rơi linh hồn. (Yêu cầu: Kho Vũ Khí - Star Holder Lv5)' },
     ],
   },
   {
-    id: 'interstellar_missile', name: 'Tên Lửa Liên Sao', type: 'ultimate', icon: '🌠', maxLevel: 1,
+    id: 'interstellar_missile', name: 'Tên Lửa Liên Sao', type: 'ultimate', icon: 'PhShootingStar', maxLevel: 1,
     requiresAttackId: 'heat_missile',
     requiresSupportId: 'skill_recovery',
     levels: [
@@ -191,7 +197,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
   },
   // ── Hỗ trợ (mới) ────────────────────────────────────────────────────────────
   {
-    id: 'power_advance', name: 'Tân Tiến Sức Mạnh', type: 'support', icon: '💪', maxLevel: 5,
+    id: 'power_advance', name: 'Tân Tiến Sức Mạnh', type: 'support', icon: 'PhTrendUp', maxLevel: 5,
     levels: [
       { desc: '+10% sát thương gây ra.' },
       { desc: '+10% sát thương gây ra (tổng +20%).' },
@@ -202,7 +208,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
   },
   // ── Tối thượng (mới) ─────────────────────────────────────────────────────────
   {
-    id: 'devastation_ray', name: 'Tia Hủy Diệt', type: 'ultimate', icon: '🔱', maxLevel: 1,
+    id: 'devastation_ray', name: 'Tia Hủy Diệt', type: 'ultimate', icon: 'PhAtom', maxLevel: 1,
     requiresAttackId: 'plasma_bolt',
     requiresSupportId: 'energy_shield',
     levels: [
@@ -210,11 +216,41 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'static_field_ult', name: 'Từ Trường Tĩnh Điện', type: 'ultimate', icon: '🌀', maxLevel: 1,
+    id: 'static_field_ult', name: 'Từ Trường Tĩnh Điện', type: 'ultimate', icon: 'PhSpiral', maxLevel: 1,
     requiresAttackId: 'laser_sweep',
     requiresSupportId: 'exp_magnet',
     levels: [
       { desc: 'Thay thế quét laser bằng vùng tĩnh điện bao quanh phi cơ, gây sát thương mỗi 0.5s cho kẻ địch bên trong. (Yêu cầu: Quét Laser Lv5 + Nam Châm EXP)' },
+    ],
+  },
+  // ── Hỗ trợ (tốc độ & tốc bắn) ───────────────────────────────────────────────
+  {
+    id: 'wing_boost', name: 'Cánh Tản Nhiệt', type: 'support', icon: 'PhWind', maxLevel: 5,
+    levels: [
+      { desc: '+7% tốc bay.' },
+      { desc: '+7% tốc bay (tổng +14%).' },
+      { desc: '+7% tốc bay (tổng +21%).' },
+      { desc: '+7% tốc bay (tổng +28%).' },
+      { desc: '+7% tốc bay (tổng +35%). Tốc độ di chuyển tối đa tăng thêm.' },
+    ],
+  },
+  {
+    id: 'turbo_fire_card', name: 'Xạ Thủ Nhanh', type: 'support', icon: 'PhTarget', maxLevel: 5,
+    levels: [
+      { desc: '+10% tốc độ bắn.' },
+      { desc: '+10% tốc độ bắn (tổng +20%).' },
+      { desc: '+10% tốc độ bắn (tổng +30%).' },
+      { desc: '+10% tốc độ bắn (tổng +40%).' },
+      { desc: '+10% tốc độ bắn (tổng +50%).' },
+    ],
+  },
+  // ── Tấn công (mới) ───────────────────────────────────────────────────────────
+  {
+    id: 'bullet_rain_ult', name: 'Mưa Bom Liên Hoàn', type: 'ultimate', icon: 'PhSparkle', maxLevel: 1,
+    requiresAttackId: 'cluster_bomb',
+    requiresSupportId: 'turbo_fire_card',
+    levels: [
+      { desc: 'Bom cụm bắn nhanh gấp đôi, luôn bắn kép. (Yêu cầu: Bom Cụm Lv5 + Xạ Thủ Nhanh)' },
     ],
   },
 ]
@@ -304,56 +340,62 @@ const MISSION_POOL: Array<{
   variants: Array<{ target: number; desc: string; reward: { coins?: number; ruby?: number; accountExp?: number } }>
 }> = [
   { kind: 'score', variants: [
-    { target: 500,  desc: 'Đạt 500 điểm trong 1 ván',     reward: { coins: 60 } },
-    { target: 1000, desc: 'Đạt 1,000 điểm trong 1 ván',   reward: { coins: 80 } },
-    { target: 3000, desc: 'Đạt 3,000 điểm trong 1 ván',   reward: { coins: 120 } },
-    { target: 8000, desc: 'Đạt 8,000 điểm trong 1 ván',   reward: { coins: 200 } },
+    { target: 1500,  desc: 'Đạt 1,500 điểm trong 1 ván',   reward: { coins: 80 } },
+    { target: 4000,  desc: 'Đạt 4,000 điểm trong 1 ván',   reward: { coins: 120 } },
+    { target: 8000,  desc: 'Đạt 8,000 điểm trong 1 ván',   reward: { coins: 180 } },
+    { target: 15000, desc: 'Đạt 15,000 điểm trong 1 ván',  reward: { coins: 260 } },
   ]},
   { kind: 'kills', variants: [
-    { target: 10, desc: 'Tiêu diệt 10 kẻ địch trong 1 ván', reward: { coins: 50 } },
-    { target: 20, desc: 'Tiêu diệt 20 kẻ địch trong 1 ván', reward: { coins: 70 } },
-    { target: 35, desc: 'Tiêu diệt 35 kẻ địch trong 1 ván', reward: { coins: 100 } },
-    { target: 50, desc: 'Tiêu diệt 50 kẻ địch trong 1 ván', reward: { coins: 130 } },
+    { target: 40,  desc: 'Tiêu diệt 40 kẻ địch trong 1 ván',  reward: { coins: 70 } },
+    { target: 80,  desc: 'Tiêu diệt 80 kẻ địch trong 1 ván',  reward: { coins: 110 } },
+    { target: 130, desc: 'Tiêu diệt 130 kẻ địch trong 1 ván', reward: { coins: 160 } },
+    { target: 200, desc: 'Tiêu diệt 200 kẻ địch trong 1 ván', reward: { coins: 220 } },
   ]},
   { kind: 'earn_gold', variants: [
-    { target: 50,  desc: 'Kiếm 50 vàng trong 1 ván',  reward: { accountExp: 30 } },
-    { target: 100, desc: 'Kiếm 100 vàng trong 1 ván', reward: { accountExp: 50 } },
-    { target: 200, desc: 'Kiếm 200 vàng trong 1 ván', reward: { accountExp: 80 } },
+    { target: 150, desc: 'Kiếm 150 vàng trong 1 ván', reward: { accountExp: 50 } },
+    { target: 300, desc: 'Kiếm 300 vàng trong 1 ván', reward: { accountExp: 80 } },
+    { target: 550, desc: 'Kiếm 550 vàng trong 1 ván', reward: { accountExp: 120 } },
   ]},
   { kind: 'reach_stage', variants: [
-    { target: 3,  desc: 'Vượt qua stage 3 trong 1 ván',  reward: { coins: 80 } },
-    { target: 5,  desc: 'Vượt qua stage 5 trong 1 ván',  reward: { accountExp: 60 } },
-    { target: 8,  desc: 'Vượt qua stage 8 trong 1 ván',  reward: { coins: 130 } },
-    { target: 12, desc: 'Vượt qua stage 12 trong 1 ván', reward: { accountExp: 100 } },
+    { target: 5,  desc: 'Vượt qua stage 5 trong 1 ván',  reward: { coins: 100 } },
+    { target: 8,  desc: 'Vượt qua stage 8 trong 1 ván',  reward: { accountExp: 80 } },
+    { target: 12, desc: 'Vượt qua stage 12 trong 1 ván', reward: { coins: 160 } },
+    { target: 18, desc: 'Vượt qua stage 18 trong 1 ván', reward: { accountExp: 140 } },
   ]},
   { kind: 'kill_boss', variants: [
-    { target: 1, desc: 'Hạ gục 1 trùm trong ngày', reward: { ruby: 1 } },
-    { target: 3, desc: 'Hạ gục 3 trùm trong ngày', reward: { ruby: 2 } },
+    { target: 2, desc: 'Hạ gục 2 trùm trong ngày', reward: { ruby: 1 } },
+    { target: 5, desc: 'Hạ gục 5 trùm trong ngày', reward: { ruby: 3 } },
   ]},
   { kind: 'play_with_ship', shipId: 'star_keeper', variants: [
-    { target: 1, desc: 'Chơi 1 ván với Star Keeper', reward: { coins: 40 } },
-    { target: 3, desc: 'Chơi 3 ván với Star Keeper', reward: { coins: 80 } },
+    { target: 2, desc: 'Chơi 2 ván với Star Keeper', reward: { coins: 60 } },
+    { target: 4, desc: 'Chơi 4 ván với Star Keeper', reward: { coins: 110 } },
   ]},
   { kind: 'play_with_ship', shipId: 'star_holder', variants: [
-    { target: 1, desc: 'Chơi 1 ván với Star Holder', reward: { coins: 50 } },
-    { target: 2, desc: 'Chơi 2 ván với Star Holder', reward: { coins: 90 } },
+    { target: 2, desc: 'Chơi 2 ván với Star Holder', reward: { coins: 70 } },
+    { target: 4, desc: 'Chơi 4 ván với Star Holder', reward: { coins: 120 } },
   ]},
   { kind: 'play_time', variants: [
-    { target: 60,  desc: 'Chơi liên tục 60 giây trong 1 ván',  reward: { accountExp: 40 } },
-    { target: 120, desc: 'Chơi liên tục 120 giây trong 1 ván', reward: { accountExp: 60 } },
-    { target: 180, desc: 'Chơi liên tục 3 phút trong 1 ván',   reward: { accountExp: 90 } },
+    { target: 120, desc: 'Chơi liên tục 2 phút trong 1 ván',   reward: { accountExp: 60 } },
+    { target: 240, desc: 'Chơi liên tục 4 phút trong 1 ván',   reward: { accountExp: 90 } },
+    { target: 360, desc: 'Chơi liên tục 6 phút trong 1 ván',   reward: { accountExp: 130 } },
   ]},
   { kind: 'choose_upgrades', variants: [
-    { target: 3, desc: 'Chọn 3 thẻ Lõi Sao trong 1 ván', reward: { coins: 60 } },
-    { target: 5, desc: 'Chọn 5 thẻ Lõi Sao trong 1 ván', reward: { coins: 100 } },
-    { target: 7, desc: 'Chọn 7 thẻ Lõi Sao trong 1 ván', reward: { coins: 140 } },
+    { target: 5,  desc: 'Chọn 5 thẻ Lõi Sao trong 1 ván',  reward: { coins: 80 } },
+    { target: 8,  desc: 'Chọn 8 thẻ Lõi Sao trong 1 ván',  reward: { coins: 130 } },
+    { target: 12, desc: 'Chọn 12 thẻ Lõi Sao trong 1 ván', reward: { coins: 180 } },
   ]},
   { kind: 'earn_upgrades', variants: [
-    { target: 3, desc: 'Đạt cấp 3 trong 1 ván',  reward: { accountExp: 40 } },
-    { target: 5, desc: 'Đạt cấp 5 trong 1 ván',  reward: { accountExp: 70 } },
-    { target: 7, desc: 'Đạt cấp 7 trong 1 ván',  reward: { accountExp: 100 } },
+    { target: 5,  desc: 'Đạt cấp 5 trong 1 ván',  reward: { accountExp: 60 } },
+    { target: 8,  desc: 'Đạt cấp 8 trong 1 ván',  reward: { accountExp: 100 } },
+    { target: 12, desc: 'Đạt cấp 12 trong 1 ván', reward: { accountExp: 150 } },
   ]},
 ]
+
+// ─── Save version ─────────────────────────────────────────────────────────────
+// Tăng số này mỗi khi cấu trúc dữ liệu save thay đổi không tương thích ngược.
+// loadProgress() sẽ dùng số này để chạy migration thích hợp.
+const SAVE_VERSION = 1
+const SAVE_KEY = 'ban-may-bay-save'
 
 export const useGameStore = defineStore('game', () => {
   // Tiến độ người chơi
@@ -472,6 +514,9 @@ export const useGameStore = defineStore('game', () => {
       staticField: false,
       staticFieldRadius: 0,
       staticFieldDmgPerTick: 0,
+      speedCardPct: 0,
+      turboFireRatePct: 0,
+      cbTurboBoost: false,
     }
     const c = activeCards.value
 
@@ -505,7 +550,7 @@ export const useGameStore = defineStore('game', () => {
     if (lsLv >= 4) stats.laserSweepDmgMult = 1.625
 
     // skill_recovery
-    stats.cdReductionPct = (c['skill_recovery'] ?? 0) * 0.05
+    stats.cdReductionPct = (c['skill_recovery'] ?? 0) * 0.08
 
     // energy_shield
     const esLv = c['energy_shield'] ?? 0
@@ -518,13 +563,12 @@ export const useGameStore = defineStore('game', () => {
     // exp_magnet
     stats.expRangeBonus = (c['exp_magnet'] ?? 0) * 40
 
-    // hp_vampire
+    // hp_vampire (nerfed: hit heal thấp hơn, kill heal hợp lý hơn)
     const hvLv = c['hp_vampire'] ?? 0
     if (hvLv >= 1) stats.vampireHitHeal = 1
-    if (hvLv >= 2) stats.vampireHitHeal = 2
-    if (hvLv >= 3) stats.vampireKillHeal = 5
-    if (hvLv >= 4) stats.vampireHitHeal = 3
-    if (hvLv >= 5) stats.vampireKillHeal = 10
+    if (hvLv >= 2) stats.vampireKillHeal = 3
+    if (hvLv >= 4) stats.vampireHitHeal = 2
+    if (hvLv >= 5) stats.vampireKillHeal = 5
 
     // weapon_cache_star (Kho Vũ Khí - Star Keeper)
     const ac = c['weapon_cache_star'] ?? 0
@@ -564,6 +608,19 @@ export const useGameStore = defineStore('game', () => {
       stats.staticFieldDmgPerTick = Math.round(50 * stats.laserSweepDmgMult)
     }
 
+    // wing_boost (support)
+    stats.speedCardPct = (c['wing_boost'] ?? 0) * 7
+
+    // turbo_fire_card (support)
+    stats.turboFireRatePct = (c['turbo_fire_card'] ?? 0) * 10
+
+    // bullet_rain_ult: cluster bomb halved interval + always double
+    if ((c['bullet_rain_ult'] ?? 0) >= 1) {
+      stats.cbTurboBoost = true
+      stats.clusterBombIntervalFrames = Math.round(stats.clusterBombIntervalFrames / 2)
+      stats.clusterBombDouble = true
+    }
+
     return stats
   })
 
@@ -583,7 +640,7 @@ export const useGameStore = defineStore('game', () => {
   // ─── Daily missions ───────────────────────────────────────────────────────────
   const dailyMissions = ref<DailyMission[]>([])
   const dailyDate = ref('')
-  const milestone2Claimed = ref(false)
+  const milestone3Claimed = ref(false)
   const milestone5Claimed = ref(false)
 
   // ─── Session tracking (per run) ───────────────────────────────────────────────
@@ -679,16 +736,22 @@ export const useGameStore = defineStore('game', () => {
     const atkFilled = getAttackSlotsFilled()
     const supFilled = getSupportSlotsFilled()
 
-    const available = ALL_CARD_DEFS.filter(def => {
-      // Ship-specific cards only available when using the matching ship
+    // Ultimates eligible: attack requirement met (mandatory), support requirement met (if present)
+    const eligibleUltimates = ALL_CARD_DEFS.filter(def => {
+      if (def.type !== 'ultimate') return false
       if (def.shipId && def.shipId !== selectedShip.value) return false
-      if (def.type === 'ultimate') {
-        if (!def.requiresAttackId || !def.requiresSupportId) return false
-        const atkDef = ALL_CARD_DEFS.find(c => c.id === def.requiresAttackId)
-        const atkLv = owned[def.requiresAttackId] ?? 0
-        const supLv = owned[def.requiresSupportId] ?? 0
-        return atkLv >= (atkDef?.maxLevel ?? 5) && supLv >= 1 && (owned[def.id] ?? 0) < def.maxLevel
-      }
+      if ((owned[def.id] ?? 0) >= def.maxLevel) return false
+      if (!def.requiresAttackId) return false
+      const atkDef = ALL_CARD_DEFS.find(c => c.id === def.requiresAttackId)
+      if ((owned[def.requiresAttackId] ?? 0) < (atkDef?.maxLevel ?? 5)) return false
+      if (def.requiresSupportId && (owned[def.requiresSupportId] ?? 0) < 1) return false
+      return true
+    })
+
+    // Non-ultimates eligible
+    const eligibleOthers = ALL_CARD_DEFS.filter(def => {
+      if (def.type === 'ultimate') return false
+      if (def.shipId && def.shipId !== selectedShip.value) return false
       const currentLv = owned[def.id] ?? 0
       if (currentLv > 0) return currentLv < def.maxLevel
       if (def.type === 'attack') return atkFilled < 5
@@ -696,7 +759,20 @@ export const useGameStore = defineStore('game', () => {
       return false
     })
 
-    return [...available].sort(() => Math.random() - 0.5).slice(0, 3)
+    // Khi có ultimate đủ điều kiện, nó luôn xuất hiện trong lựa chọn
+    const shuffledUlts = [...eligibleUltimates].sort(() => Math.random() - 0.5)
+    const shuffledOthers = [...eligibleOthers].sort(() => Math.random() - 0.5)
+
+    const choices: CardDef[] = []
+    for (const ult of shuffledUlts) {
+      if (choices.length >= 3) break
+      choices.push(ult)
+    }
+    for (const card of shuffledOthers) {
+      if (choices.length >= 3) break
+      choices.push(card)
+    }
+    return choices
   }
 
   function chooseCard(cardId: string) {
@@ -1029,13 +1105,15 @@ export const useGameStore = defineStore('game', () => {
     const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     if (dailyDate.value === today && dailyMissions.value.length === 5) return
     if (dailyDate.value !== today) {
-      milestone2Claimed.value = false
+      milestone3Claimed.value = false
       milestone5Claimed.value = false
     }
     dailyDate.value = today
     const seed = parseInt(today.replace(/-/g, ''), 10)
     const rand = _seededRand(seed)
-    const shuffled = [...MISSION_POOL].sort(() => rand() - 0.5)
+    const owned = ownedShips.value
+    const pool = MISSION_POOL.filter(e => !e.shipId || owned.includes(e.shipId))
+    const shuffled = [...pool].sort(() => rand() - 0.5)
     const picked: typeof MISSION_POOL = []
     const usedKeys = new Set<string>()
     for (const entry of shuffled) {
@@ -1110,12 +1188,12 @@ export const useGameStore = defineStore('game', () => {
     saveProgress()
   }
 
-  function claimMilestone(which: 2 | 5) {
+  function claimMilestone(which: 3 | 5) {
     const doneCount = dailyMissions.value.filter(m => m.completed).length
-    if (which === 2) {
-      if (doneCount < 2 || milestone2Claimed.value) return
-      milestone2Claimed.value = true
-      playerCoins.value += 500
+    if (which === 3) {
+      if (doneCount < 3 || milestone3Claimed.value) return
+      milestone3Claimed.value = true
+      playerCoins.value += 400
       addAccountExp(100)
     } else {
       if (doneCount < 5 || milestone5Claimed.value) return
@@ -1140,6 +1218,7 @@ export const useGameStore = defineStore('game', () => {
 
   function saveProgress() {
     const data = {
+      version: SAVE_VERSION,
       playerCoins: playerCoins.value,
       playerRuby: playerRuby.value,
       highScore: highScore.value,
@@ -1165,62 +1244,110 @@ export const useGameStore = defineStore('game', () => {
       // Daily missions
       dailyMissions: dailyMissions.value,
       dailyDate: dailyDate.value,
-      milestone2Claimed: milestone2Claimed.value,
+      milestone3Claimed: milestone3Claimed.value,
       milestone5Claimed: milestone5Claimed.value,
     }
-    localStorage.setItem('ban-may-bay-save', JSON.stringify(data))
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data))
+  }
+
+  function _applyDataToStore(data: Record<string, unknown>) {
+    playerCoins.value             = (data.playerCoins as number)             ?? 0
+    playerRuby.value              = (data.playerRuby as number)              ?? 0
+    highScore.value               = (data.highScore as number)               ?? 0
+    username.value                = (data.username as string)                ?? 'Phi Công'
+    avatarId.value                = (data.avatarId as number)                ?? 0
+    shipName.value                = (data.shipName as string)                ?? 'Chiến Cơ Alpha'
+    accountLevel.value            = (data.accountLevel as number)            ?? 1
+    accountExp.value              = (data.accountExp as number)              ?? 0
+    ownedShips.value              = (data.ownedShips as string[])            ?? ['star_keeper']
+    selectedShip.value            = (data.selectedShip as string)            ?? 'star_keeper'
+    unlockedAchievements.value    = (data.unlockedAchievements as string[])  ?? []
+    const pu = (data.permUpgrades as Record<string, number>) ?? {}
+    permUpgrades.value = {
+      baseDamage:  pu.baseDamage  ?? 0,
+      baseHp:      pu.baseHp      ?? 0,
+      baseSpeed:   pu.baseSpeed   ?? 0,
+      expBonus:    pu.expBonus    ?? 0,
+      bulletCount: pu.bulletCount ?? 0,
+      fireRate:    pu.fireRate    ?? 0,
+    }
+    ownedArtifacts.value    = (data.ownedArtifacts as string[])                           ?? []
+    equippedArtifacts.value = (data.equippedArtifacts as Record<string, string[]>)        ?? {}
+    // Durability — apply offline regen
+    const savedDurs = (data.shipDurabilities as Record<string, number>) ?? {}
+    const lastSave  = (data.durabilityLastSave as number) ?? Date.now()
+    const minutesPassed = Math.floor((Date.now() - lastSave) / 60000)
+    const regenDurs: Record<string, number> = {}
+    for (const [shipId, maxDur] of Object.entries(SHIP_DURABILITY_MAX)) {
+      const cur = savedDurs[shipId] ?? maxDur
+      regenDurs[shipId] = Math.min(maxDur, cur + minutesPassed)
+    }
+    shipDurabilities.value  = regenDurs
+    dailyDate.value         = (data.dailyDate as string)          ?? ''
+    dailyMissions.value     = (data.dailyMissions as DailyMission[]) ?? []
+    milestone3Claimed.value = (data.milestone3Claimed as boolean) ?? false
+    milestone5Claimed.value = (data.milestone5Claimed as boolean) ?? false
+  }
+
+  // Migration stubs — thêm case mới khi cấu trúc save thay đổi.
+  // Mỗi hàm nhận raw object v(N) và trả ra object đã migrate lên v(N+1).
+  function _migrateV0toV1(d: Record<string, unknown>): Record<string, unknown> {
+    // v0 (chưa có trường version) → v1: không thay đổi cấu trúc, chỉ thêm trường version.
+    return { ...d, version: 1 }
   }
 
   function loadProgress() {
-    const saved = localStorage.getItem('ban-may-bay-save')
+    const saved = localStorage.getItem(SAVE_KEY)
     if (saved) {
       try {
-        const data = JSON.parse(saved)
-        playerCoins.value             = data.playerCoins ?? 0
-        playerRuby.value              = data.playerRuby ?? 0
-        highScore.value               = data.highScore ?? 0
-        username.value                = data.username ?? 'Phi Công'
-        avatarId.value                = data.avatarId ?? 0
-        shipName.value                = data.shipName ?? 'Chiến Cơ Alpha'
-        accountLevel.value            = data.accountLevel ?? 1
-        accountExp.value              = data.accountExp ?? 0
-        ownedShips.value              = data.ownedShips ?? ['star_keeper']
-        selectedShip.value            = data.selectedShip ?? 'star_keeper'
-        unlockedAchievements.value    = data.unlockedAchievements ?? []
-        if (data.permUpgrades) {
-          permUpgrades.value = {
-            baseDamage:  data.permUpgrades.baseDamage  ?? 0,
-            baseHp:      data.permUpgrades.baseHp      ?? 0,
-            baseSpeed:   data.permUpgrades.baseSpeed   ?? 0,
-            expBonus:    data.permUpgrades.expBonus    ?? 0,
-            bulletCount: data.permUpgrades.bulletCount ?? 0,
-            fireRate:    data.permUpgrades.fireRate    ?? 0,
-          }
-        }
-        // Artifacts
-        ownedArtifacts.value    = data.ownedArtifacts    ?? []
-        equippedArtifacts.value = data.equippedArtifacts ?? {}
-        // Durability — apply offline regen
-        const savedDurs = data.shipDurabilities ?? {}
-        const lastSave = data.durabilityLastSave ?? Date.now()
-        const minutesPassed = Math.floor((Date.now() - lastSave) / 60000)
-        const regenDurs: Record<string, number> = {}
-        for (const [shipId, maxDur] of Object.entries(SHIP_DURABILITY_MAX)) {
-          const saved = savedDurs[shipId] ?? maxDur
-          regenDurs[shipId] = Math.min(maxDur, saved + minutesPassed)
-        }
-        shipDurabilities.value = regenDurs
-        // Daily missions
-        dailyDate.value         = data.dailyDate        ?? ''
-        dailyMissions.value     = data.dailyMissions    ?? []
-        milestone2Claimed.value = data.milestone2Claimed ?? false
-        milestone5Claimed.value = data.milestone5Claimed ?? false
+        let data = JSON.parse(saved) as Record<string, unknown>
+        // ── Migration chain ──────────────────────────────────────────────────
+        const ver = typeof data.version === 'number' ? data.version : 0
+        if (ver < 1) data = _migrateV0toV1(data)
+        // (thêm các bước migrate tiếp theo ở đây khi cần)
+        // ────────────────────────────────────────────────────────────────────
+        _applyDataToStore(data)
+        // Lưu lại với version mới nhất nếu đã migrate
+        if (ver < SAVE_VERSION) saveProgress()
       } catch {
-        // dữ liệu lưu bị hỏng, giữ mặc định
+        // Dữ liệu save bị hỏng hoàn toàn → giữ giá trị mặc định
       }
     }
     // Refresh/generate today's missions after loading
     generateDailyMissions()
+  }
+
+  /** Xuất dữ liệu game ra file JSON để người dùng tự bảo quản. */
+  function exportSave() {
+    const saved = localStorage.getItem(SAVE_KEY)
+    if (!saved) return
+    const blob = new Blob([saved], { type: 'application/json' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    const d = new Date()
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+    a.download = `ban-may-bay-save-${stamp}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  /**
+   * Nạp lại dữ liệu từ chuỗi JSON (do người dùng cung cấp qua file).
+   * Trả về true nếu thành công.
+   */
+  function importSave(jsonStr: string): boolean {
+    try {
+      const data = JSON.parse(jsonStr)
+      if (typeof data !== 'object' || data === null || Array.isArray(data)) return false
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data))
+      loadProgress()
+      return true
+    } catch {
+      return false
+    }
   }
 
   return {
@@ -1315,7 +1442,7 @@ export const useGameStore = defineStore('game', () => {
     // Daily missions
     dailyMissions,
     dailyDate,
-    milestone2Claimed,
+    milestone3Claimed,
     milestone5Claimed,
     generateDailyMissions,
     claimMissionReward,
@@ -1326,5 +1453,8 @@ export const useGameStore = defineStore('game', () => {
     // Kill tracking (called from GameCanvas)
     addKill,
     addBossKill,
+    // Save management
+    exportSave,
+    importSave,
   }
 })

@@ -20,6 +20,9 @@ import { drawArtifactGfx, initArtifactGfx, activateNeutronVacuum, activateManaCo
 import { launchWave } from '../../game/systems/wave'
 import { killEnemy } from '../../game/entities/kill'
 import { spawnKamikazeAt } from '../../game/entities/Kamikaze'
+import { drawDaiLienBullet, spawnDaiLienPair } from '../../game/entities/DaiLien'
+import { drawThuHo, spawnThuHoSwarm } from '../../game/entities/ThuHo'
+import { drawHealBeam, spawnThuatSi } from '../../game/entities/ThuatSi'
 
 const canvasWrapper = ref<HTMLDivElement>()
 const game = useGameStore()
@@ -102,8 +105,10 @@ function gameLoop(ticker: Ticker) {
       launchWave(ctx, game)
     }
     if (ctx.playerShip && ctx.isDragging) {
-      const dx = ctx.touchX - ctx.playerShip.x
-      const dy = (ctx.touchY - TOUCH_Y_OFFSET) - ctx.playerShip.y
+      const _bz = ctx.bossZoom
+      const _blx = GAME_W * (1 - _bz) / 2; const _bly = GAME_H * (1 - _bz) / 2
+      const dx = (ctx.touchX - _blx) / _bz - ctx.playerShip.x
+      const dy = ((ctx.touchY - _bly) / _bz - TOUCH_Y_OFFSET) - ctx.playerShip.y
       const hpPenalty = Math.max(0.7, Math.pow(100 / game.playerMaxHp, 0.15))
       const spd = 5.5 * game.upgrades.shipSpeed * hpPenalty
       ctx.playerShip.x += dx * 0.055 * spd * dt * 0.5
@@ -199,10 +204,12 @@ function gameLoop(ticker: Ticker) {
 
   // Player movement
   if (ctx.isDragging && ctx.playerShip) {
-    const dx = ctx.touchX - ctx.playerShip.x
-    const dy = (ctx.touchY - TOUCH_Y_OFFSET) - ctx.playerShip.y
+    const _bz2 = ctx.bossZoom
+    const _blx2 = GAME_W * (1 - _bz2) / 2; const _bly2 = GAME_H * (1 - _bz2) / 2
+    const dx = (ctx.touchX - _blx2) / _bz2 - ctx.playerShip.x
+    const dy = ((ctx.touchY - _bly2) / _bz2 - TOUCH_Y_OFFSET) - ctx.playerShip.y
     const hpPenalty = Math.max(0.7, Math.pow(100 / game.playerMaxHp, 0.15))
-    const spd = 5.5 * game.upgrades.shipSpeed * hpPenalty
+    const spd = 5.5 * game.upgrades.shipSpeed * (1 + game.cardStats.speedCardPct / 100) * hpPenalty
     ctx.playerShip.x += dx * 0.055 * spd * dt * 0.5
     ctx.playerShip.y += dy * 0.055 * spd * dt * 0.5
     ctx.playerShip.x = Math.max(20, Math.min(GAME_W - 20, ctx.playerShip.x))
@@ -214,13 +221,13 @@ function gameLoop(ticker: Ticker) {
   const effectiveBulletCount = game.upgrades.bulletCount + game.cardStats.arsenalBulletBonus
   ctx.shootTimer += dt
   const baseShootInterval = isHolder ? 60 : 18
-  const shootInterval = (baseShootInterval / Math.sqrt(effectiveBulletCount)) / (1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100)
+  const shootInterval = (baseShootInterval / Math.sqrt(effectiveBulletCount)) / (1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100)
   if (ctx.shootTimer >= shootInterval) {
     ctx.shootTimer = 0
     const cnt = effectiveBulletCount
     if (isHolder && ctx.playerShip) {
       const laserDmg = Math.round(
-        game.upgrades.damage * Math.pow(1.2, cnt - 1) / cnt
+        game.upgrades.damage * Math.pow(0.8, cnt - 1)
         * (1 + game.cardStats.arsenalDamagePct / 100)
         * (1 + game.cardStats.damageBonusPct / 100)
       )
@@ -327,7 +334,7 @@ function gameLoop(ticker: Ticker) {
 
   // Bullet damage
   const bulletDmg = Math.round(
-    game.upgrades.damage * Math.pow(1.2, effectiveBulletCount - 1) / effectiveBulletCount
+    game.upgrades.damage * Math.pow(0.8, effectiveBulletCount - 1)
     * (1 + game.cardStats.arsenalDamagePct / 100)
     * (1 + game.cardStats.damageBonusPct / 100)
   )
@@ -355,6 +362,43 @@ function gameLoop(ticker: Ticker) {
   // Update enemies (entity modules handle their own AI)
   // Pioneer, Kamikaze, Sniper, BossStarDestroyer, BossInvader are updated inline here
   // since they reach into ctx directly for PixiJS ops and shared state.
+
+  // ── Boss zoom: smooth scale-out when Tinh Vân boss is alive ──────────────────
+  const tinhVanAlive = ctx.enemies.some(e => e.kind === 'boss_tinhvan')
+  ctx.bossZoomTarget = tinhVanAlive ? 0.75 : 1.0
+  if (Math.abs(ctx.bossZoom - ctx.bossZoomTarget) > 0.001) {
+    const zSpeed = 0.014 * dt
+    ctx.bossZoom += Math.sign(ctx.bossZoomTarget - ctx.bossZoom) * Math.min(zSpeed, Math.abs(ctx.bossZoomTarget - ctx.bossZoom))
+  }
+  const bz = ctx.bossZoom
+  ctx.gameLayer.scale.set(bz)
+  ctx.gameLayer.position.set(GAME_W * (1 - bz) / 2, GAME_H * (1 - bz) / 2)
+
+  // ── Thủ Hộ swarm reflect (global) ──────────────────────────────────────────
+  const thuHoAlive = ctx.enemies.filter(e => e.kind === 'thu_ho').length
+  if (thuHoAlive >= 4) {
+    ctx.thuHoReflectTimer -= dt
+    if (!ctx.thuHoReflecting && ctx.thuHoReflectTimer <= 0) {
+      ctx.thuHoReflecting = true
+      ctx.thuHoReflectGlow = 30             // 0.5 s at 60 fps
+      ctx.thuHoReflectTimer = 300 + Math.random() * 120  // 5–7 s
+      for (const _e of ctx.enemies) {
+        if (_e.kind === 'thu_ho') drawThuHo(_e.body, 13, true)
+      }
+    }
+    if (ctx.thuHoReflecting) {
+      ctx.thuHoReflectGlow -= dt
+      if (ctx.thuHoReflectGlow <= 0) {
+        ctx.thuHoReflecting = false
+        for (const _e of ctx.enemies) {
+          if (_e.kind === 'thu_ho') drawThuHo(_e.body, 13, false)
+        }
+      }
+    }
+  } else {
+    ctx.thuHoReflecting = false
+  }
+
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
     const e = ctx.enemies[i]
 
@@ -528,6 +572,185 @@ function gameLoop(ticker: Ticker) {
         }
       }
       if (e.container.y > GAME_H + 40) {
+        if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
+        ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
+      }
+    }
+
+    else if (e.kind === 'dai_lien') {
+      // Enter phase
+      if (e.pioneerPhase === 'enter') {
+        const dx = (e.enterTargetX ?? e.container.x) - e.container.x
+        const dy = (e.enterTargetY ?? e.container.y) - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const speed = 3.0
+        if (dist < speed * dt * 2) {
+          e.container.x = e.enterTargetX ?? e.container.x
+          e.container.y = e.enterTargetY ?? e.container.y
+          e.pioneerPhase = 'patrol'
+        } else {
+          e.container.x += (dx / dist) * speed * dt
+          e.container.y += (dy / dist) * speed * dt
+        }
+      } else {
+        const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.009
+        e.container.x += Math.sin(t * 1.8) * 0.55 * dt
+        e.container.x = Math.max(25, Math.min(GAME_W - 25, e.container.x))
+      }
+      // Fast burst fire (-30% fire rate)
+      e.shootTimer = (e.shootTimer ?? 25) - dt
+      if (e.shootTimer <= 0 && ctx.playerShip) {
+        e.shootTimer = (20 + Math.random() * 12 + Math.max(0, 10 - game.currentStage)) * 1.3
+        const bg = new Graphics()
+        drawDaiLienBullet(bg)
+        bg.x = e.container.x
+        bg.y = e.container.y + 8
+        ctx.gameLayer.addChild(bg)
+        const tx = ctx.playerShip.x - e.container.x
+        const ty = ctx.playerShip.y - e.container.y
+        const mag = Math.sqrt(tx * tx + ty * ty) || 1
+        const spd = 4.5 + game.currentStage * 0.1
+        ctx.enemyBullets.push({ gfx: bg, vx: (tx / mag) * spd, vy: (ty / mag) * spd })
+      }
+      if (e.container.y > GAME_H + 50) {
+        if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
+        ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
+      }
+    }
+
+    else if (e.kind === 'thu_ho') {
+      // Enter phase: slide in from side
+      if (e.pioneerPhase === 'enter') {
+        const dx = (e.enterTargetX ?? e.container.x) - e.container.x
+        const dy = (e.enterTargetY ?? e.container.y) - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const speed = 3.2
+        if (dist < speed * dt * 2) {
+          e.container.x = e.enterTargetX ?? e.container.x
+          e.container.y = e.enterTargetY ?? e.container.y
+          e.pioneerPhase = 'patrol'
+        } else {
+          e.container.x += (dx / dist) * speed * dt
+          e.container.y += (dy / dist) * speed * dt
+        }
+      } else {
+        // Gentle vertical drift once in place
+        const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.012
+        e.container.y += Math.sin(t * 0.6) * 0.3 * dt
+        e.container.y = Math.max(20, Math.min(GAME_H - 80, e.container.y))
+      }
+      // Swarm reflect countdown (global reflect handled at top of enemy loop)
+      if (e.container.y > GAME_H + 50) {
+        if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
+        ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
+      }
+    }
+
+    else if (e.kind === 'thuat_si') {
+      if (e.isDyingMeteor) {
+        // Meteorite phase: fly toward player
+        e.container.x += (e.meteorVx ?? 0) * dt
+        e.container.y += (e.meteorVy ?? 0) * dt
+        e.body.alpha = 0.85 + Math.sin(Date.now() * 0.025) * 0.15
+        if (ctx.playerShip && dist2(e.container.x, e.container.y, ctx.playerShip.x, ctx.playerShip.y) < 20 * 20) {
+          // Hit player
+          if (game.absorbShieldHit()) {
+            screenFlash(ctx, 0x88ff88, 0.25, 180)
+          } else {
+            game.takeDamage(20); screenFlash(ctx)
+            spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, 20)
+          }
+          spawnExplosion(ctx, e.container.x, e.container.y, 14, 0x886644, 0xff6600)
+          if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
+          ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
+        }
+        if (e.container.y > GAME_H + 60 || e.container.x < -60 || e.container.x > GAME_W + 60) {
+          if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
+          ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
+        }
+        continue // skip further updates (bullet collision etc.) for dying meteor
+      }
+      // Enter phase
+      if (e.pioneerPhase === 'enter') {
+        const dx = (e.enterTargetX ?? e.container.x) - e.container.x
+        const dy = (e.enterTargetY ?? e.container.y) - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const speed = 2.8
+        if (dist < speed * dt * 2) {
+          e.container.x = e.enterTargetX ?? e.container.x
+          e.container.y = e.enterTargetY ?? e.container.y
+          e.pioneerPhase = 'patrol'
+        } else {
+          e.container.x += (dx / dist) * speed * dt
+          e.container.y += (dy / dist) * speed * dt
+        }
+      } else {
+        // Patrol: follow & hide behind a shield enemy (away from player)
+        const shieldIdx = e.healTargetIdx ?? -1
+        const shieldEnemy = shieldIdx >= 0 && shieldIdx < ctx.enemies.length ? ctx.enemies[shieldIdx] : null
+        const shieldTarget = shieldEnemy && shieldEnemy !== e && !shieldEnemy.isDyingMeteor ? shieldEnemy : null
+        if (shieldTarget && ctx.playerShip) {
+          const dx = shieldTarget.container.x - ctx.playerShip.x
+          const dy = shieldTarget.container.y - ctx.playerShip.y
+          const mag = Math.sqrt(dx * dx + dy * dy) || 1
+          const hideX = shieldTarget.container.x + (dx / mag) * 30
+          const hideY = shieldTarget.container.y + (dy / mag) * 30
+          const ddx = hideX - e.container.x
+          const ddy = hideY - e.container.y
+          const d = Math.sqrt(ddx * ddx + ddy * ddy) || 1
+          const step = Math.min(2.8 * dt, d)
+          e.container.x += (ddx / d) * step
+          e.container.y += (ddy / d) * step
+          e.container.x = Math.max(15, Math.min(GAME_W - 15, e.container.x))
+          e.container.y = Math.max(15, Math.min(GAME_H - 60, e.container.y))
+        } else {
+          // No shield available — gentle oscillation while looking for one
+          const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.008
+          e.container.x += Math.sin(t * 0.9) * 0.4 * dt
+          e.container.x = Math.max(20, Math.min(GAME_W - 20, e.container.x))
+        }
+      }
+      // Healing beam: pick a nearby enemy and channel heal
+      if (e.pioneerPhase === 'patrol' && ctx.enemies.length > 1) {
+        // Re-pick target: must be within 230px, injured (hp < maxHp), prefer lowest HP ratio
+        const currentIdx = e.healTargetIdx ?? -1
+        const currentTarget = currentIdx >= 0 && currentIdx < ctx.enemies.length ? ctx.enemies[currentIdx] : null
+        const isValidTarget = currentTarget && currentTarget !== e
+          && currentTarget.kind !== 'thuat_si' && !currentTarget.isDyingMeteor
+          && currentTarget.hp < currentTarget.maxHp
+          && dist2(e.container.x, e.container.y, currentTarget.container.x, currentTarget.container.y) < 230 * 230
+        if (!isValidTarget) {
+          // Find injured enemy within 230px with lowest HP ratio
+          let bestIdx = -1
+          let bestRatio = 1.0  // only consider hp < maxHp
+          for (let k = 0; k < ctx.enemies.length; k++) {
+            const t2 = ctx.enemies[k]!
+            if (t2 === e || t2.kind === 'thuat_si' || t2.isDyingMeteor) continue
+            if (t2.hp >= t2.maxHp) continue  // not injured
+            if (dist2(e.container.x, e.container.y, t2.container.x, t2.container.y) > 230 * 230) continue
+            const ratio = t2.hp / t2.maxHp
+            if (ratio < bestRatio) { bestRatio = ratio; bestIdx = k }
+          }
+          e.healTargetIdx = bestIdx
+        }
+        const healTarget = (e.healTargetIdx ?? -1) >= 0 ? ctx.enemies[e.healTargetIdx!] : null
+        if (healTarget && e.healBeamGfx) {
+          // Draw animated lightning beam
+          const seed = Date.now() * 0.05
+          const toX = healTarget.container.x - e.container.x
+          const toY = healTarget.container.y - e.container.y
+          drawHealBeam(e.healBeamGfx, toX, toY, seed)
+          // Heal target: 10%/s for normal, 2%/s for boss (dt is frames at 60fps)
+          const isBoss = healTarget.kind === 'boss_stardestroyer' || healTarget.kind === 'boss_invader' || healTarget.kind === 'boss_tinhvan'
+          const healRate = isBoss ? 0.02 / 60 : 0.10 / 60
+          healTarget.hp = Math.min(healTarget.maxHp, healTarget.hp + healTarget.maxHp * healRate * dt)
+          redrawHpBar(healTarget.hpBarBg, healTarget.hpBar, healTarget.hp / healTarget.maxHp, healTarget.barW)
+        } else if (e.healBeamGfx) {
+          e.healBeamGfx.clear()
+        }
+      }
+      if (e.container.y > GAME_H + 50) {
+        if (e.healBeamGfx) e.healBeamGfx.clear()
         if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
         ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
       }
@@ -776,9 +999,212 @@ function gameLoop(ticker: Ticker) {
       }
     }
 
+    else if (e.kind === 'boss_tinhvan') {
+      // ── Entry ─────────────────────────────────────────────────────────────
+      if (!e.bossEntered) {
+        e.container.y += 1.0 * dt
+        if (e.container.y >= (e.bossTargetY ?? GAME_H * 0.20)) {
+          e.container.y = e.bossTargetY ?? GAME_H * 0.20
+          e.bossEntered = true
+        }
+      }
+
+      if (e.bossEntered) {
+        // Body slow rotation
+        e.body.rotation += 0.003 * dt
+
+        // Phase 1 → 2 transition at 50% HP
+        if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
+          e.bossPhase = 2
+          screenFlash(ctx, 0x660099, 0.6, 700)
+          spawnExplosion(ctx, e.container.x, e.container.y, 36, 0x6600aa, 0xcc44ff)
+          if (e.bossLabel) {
+            e.bossLabel.text = 'BNOX - TINH VÂN HẮC ÁM [PHASE 2]'
+            e.bossLabel.style = new TextStyle({ fill: 0xff44ff, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000011, width: 3 } })
+          }
+          // Remove lingering black holes
+          if (e.blackHoles) {
+            for (const bh of e.blackHoles) { bh.gfx.clear(); if (!bh.gfx.destroyed) ctx.gameLayer.removeChild(bh.gfx) }
+            e.blackHoles = []
+          }
+          e.attack2Timer = 420  // first summon in 7s
+          e.pendingMissiles = 0
+        }
+
+        // Drift
+        e.bossDriftTimer = (e.bossDriftTimer ?? 0) - dt
+        if ((e.bossDriftTimer ?? 0) <= 0) {
+          e.bossDriftTarget = GAME_W * 0.15 + Math.random() * GAME_W * 0.7
+          e.bossDriftTimer = 220 + Math.random() * 150
+        }
+        if (e.bossDriftTarget !== undefined) {
+          const ddx = e.bossDriftTarget - e.container.x
+          e.container.x += Math.min(Math.abs(ddx), 1.5 * dt) * Math.sign(ddx)
+        }
+
+        // ── Gun burst fire (both phases) ────────────────────────────────────
+        if (e.tinhVanGuns) {
+          const phase2Boost = e.bossPhase === 2 ? 1 : 0
+          for (const gun of e.tinhVanGuns) {
+            if (gun.burstLeft > 0) {
+              gun.shootTimer -= dt
+              if (gun.shootTimer <= 0 && ctx.playerShip) {
+                gun.shootTimer = 5
+                gun.burstLeft--
+                const worldX = e.container.x + gun.offsetX
+                const worldY = e.container.y + gun.offsetY
+                const bg = new Graphics()
+                drawEnemyBullet(bg)
+                bg.x = worldX; bg.y = worldY + 10
+                ctx.gameLayer.addChild(bg)
+                const tx = ctx.playerShip.x - worldX
+                const ty = ctx.playerShip.y - worldY
+                const mag = Math.sqrt(tx * tx + ty * ty) || 1
+                const spd = 3.5 + phase2Boost * 0.8 + game.currentStage * 0.1
+                ctx.enemyBullets.push({ gfx: bg, vx: (tx / mag) * spd, vy: (ty / mag) * spd })
+              }
+            } else {
+              gun.pauseTimer -= dt
+              if (gun.pauseTimer <= 0) {
+                gun.burstLeft = 6 + phase2Boost
+                gun.pauseTimer = 75 - phase2Boost * 15 + Math.random() * 40
+              }
+            }
+          }
+        }
+
+        // ── Phase 1: Black hole spawn ────────────────────────────────────────
+        if (e.bossPhase === 1) {
+          e.attack1Timer = (e.attack1Timer ?? 600) - dt
+          if ((e.attack1Timer ?? 0) <= 0) {
+            e.attack1Timer = 600
+            const bhX = GAME_W * 0.18 + Math.random() * GAME_W * 0.64
+            const bhY = GAME_H * 0.28 + Math.random() * GAME_H * 0.38
+            const bhG = new Graphics()
+            bhG.x = bhX; bhG.y = bhY
+            ctx.gameLayer.addChild(bhG)
+            e.blackHoles = e.blackHoles ?? []
+            e.blackHoles.push({ gfx: bhG, x: bhX, y: bhY, r: 26, age: 0, maxAge: 180 })
+          }
+        }
+
+        // ── Black hole update (both phases) ─────────────────────────────────
+        if (e.blackHoles) {
+          for (let bhi = e.blackHoles.length - 1; bhi >= 0; bhi--) {
+            const bh = e.blackHoles[bhi]!
+            bh.age += dt
+            const lifeR = bh.age / bh.maxAge
+            const apparentR = bh.r * Math.min(1, bh.age / 60)
+            const fadeA = lifeR > 0.82 ? (1 - lifeR) / 0.18 : 1
+
+            if (bh.age >= bh.maxAge) {
+              if (!bh.gfx.destroyed) ctx.gameLayer.removeChild(bh.gfx)
+              e.blackHoles.splice(bhi, 1)
+              continue
+            }
+            const t = bh.age
+            const pulse = 0.4 + Math.sin(t * 0.12) * 0.2
+            bh.gfx.clear()
+            bh.gfx.circle(0, 0, apparentR * 1.5).fill({ color: 0x330044, alpha: pulse * 0.5 * fadeA })
+            bh.gfx.circle(0, 0, apparentR * 1.2).fill({ color: 0x550066, alpha: pulse * 0.65 * fadeA })
+            bh.gfx.circle(0, 0, apparentR).fill({ color: 0x000000, alpha: 0.97 })
+            bh.gfx.circle(0, 0, apparentR * 1.05).stroke({ color: 0xcc44ff, width: 1.5, alpha: (0.7 + Math.sin(t * 0.18) * 0.3) * fadeA })
+
+            // Pull player toward black hole (no damage)
+            if (ctx.playerShip) {
+              const pdx = bh.x - ctx.playerShip.x
+              const pdy = bh.y - ctx.playerShip.y
+              const pd = Math.sqrt(pdx * pdx + pdy * pdy) || 1
+              const pullRange = apparentR * 5
+              if (pd < pullRange) {
+                const force = (1 - pd / pullRange) * 2.2 * dt * fadeA
+                ctx.playerShip.x += (pdx / pd) * force
+                ctx.playerShip.y += (pdy / pd) * force
+                ctx.playerShip.x = Math.max(10, Math.min(GAME_W - 10, ctx.playerShip.x))
+                ctx.playerShip.y = Math.max(40, Math.min(GAME_H - 40, ctx.playerShip.y))
+              }
+            }
+            // Absorb player bullets
+            for (let bi = ctx.bullets.length - 1; bi >= 0; bi--) {
+              if (dist2(ctx.bullets[bi]!.gfx.x, ctx.bullets[bi]!.gfx.y, bh.x, bh.y) < apparentR * apparentR * 1.6) {
+                if (!ctx.bullets[bi]!.gfx.destroyed) ctx.gameLayer.removeChild(ctx.bullets[bi]!.gfx)
+                ctx.bullets.splice(bi, 1)
+              }
+            }
+            // Absorb enemy bullets
+            for (let ebi = ctx.enemyBullets.length - 1; ebi >= 0; ebi--) {
+              if (dist2(ctx.enemyBullets[ebi]!.gfx.x, ctx.enemyBullets[ebi]!.gfx.y, bh.x, bh.y) < apparentR * apparentR) {
+                if (!ctx.enemyBullets[ebi]!.gfx.destroyed) ctx.gameLayer.removeChild(ctx.enemyBullets[ebi]!.gfx)
+                ctx.enemyBullets.splice(ebi, 1)
+              }
+            }
+          }
+        }
+
+        // ── Phase 2: Nebula portal summon (30s cooldown) ─────────────────────
+        if (e.bossPhase === 2) {
+          if ((e.pendingMissiles ?? 0) === 0) {
+            e.attack2Timer = (e.attack2Timer ?? 1800) - dt
+            if ((e.attack2Timer ?? 0) <= 0) {
+              e.pendingMissiles = 8   // 8 spawn calls → ~15-20 Bnox enemies
+              e.missileFireTimer = 50
+              if (e.summonPortalGfx) {
+                e.summonPortalGfx.visible = true
+                e.summonPortalGfx.x = e.container.x + (Math.random() - 0.5) * 80
+                e.summonPortalGfx.y = e.container.y + 40
+              }
+              screenFlash(ctx, 0x440066, 0.35, 400)
+            }
+          } else {
+            e.missileFireTimer = (e.missileFireTimer ?? 0) - dt
+            if ((e.missileFireTimer ?? 0) <= 0) {
+              e.missileFireTimer = 22
+              e.pendingMissiles!--
+              // Animate portal
+              if (e.summonPortalGfx) {
+                const pt = Date.now() / 500
+                e.summonPortalGfx.clear()
+                const pr = 34 + Math.sin(pt) * 6
+                e.summonPortalGfx.circle(0, 0, pr).fill({ color: 0x440066, alpha: 0.75 })
+                e.summonPortalGfx.circle(0, 0, pr).stroke({ color: 0xcc44ff, width: 2.5, alpha: 0.9 })
+                e.summonPortalGfx.circle(0, 0, pr * 0.55).fill({ color: 0x6600aa, alpha: 0.9 })
+                e.summonPortalGfx.circle(0, 0, pr * 0.28).fill({ color: 0xaa33ff, alpha: 1 })
+              }
+              // Spawn random Bnox enemy
+              const r = Math.random()
+              if (r < 0.45) spawnDaiLienPair(ctx, game)
+              else if (r < 0.75) spawnThuatSi(ctx, game)
+              else spawnThuHoSwarm(ctx, game)
+
+              if ((e.pendingMissiles ?? 0) === 0) {
+                if (e.summonPortalGfx) { e.summonPortalGfx.visible = false; e.summonPortalGfx.clear() }
+                e.attack2Timer = 1800  // 30s cooldown
+              }
+            }
+          }
+        }
+      }
+    }
+
     // ── Hit by player bullets ──────────────────────────────────────────────
     let killed = false
-    if (e.kind === 'boss_invader' && e.bossTurrets) {
+    // Thủ Hộ reflect: during swarm reflect phase, bullets are bounced back
+    if (e.kind === 'thu_ho' && ctx.thuHoReflecting) {
+      for (let j = ctx.bullets.length - 1; j >= 0; j--) {
+        if (dist2(ctx.bullets[j]!.gfx.x, ctx.bullets[j]!.gfx.y, e.container.x, e.container.y) < 16 * 16) {
+          const b = ctx.bullets[j]!
+          const rb = new Graphics()
+          drawEnemyBullet(rb)
+          rb.x = b.gfx.x; rb.y = b.gfx.y
+          ctx.gameLayer.addChild(rb)
+          // Proper angle reflection: reverse incoming velocity vector
+          ctx.enemyBullets.push({ gfx: rb, vx: -(b.vx ?? 0), vy: Math.abs(b.vy) * 1.1 })
+          if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
+          ctx.bullets.splice(j, 1)
+        }
+      }
+      // Skip further damage processing this frame
+    } else if (e.kind === 'boss_invader' && e.bossTurrets) {
       for (let j = ctx.bullets.length - 1; j >= 0; j--) {
         let tHit = false
         for (const t of e.bossTurrets) {
@@ -811,10 +1237,11 @@ function gameLoop(ticker: Ticker) {
       }
     }
     for (let j = ctx.bullets.length - 1; j >= 0; j--) {
-      const bulletHitR = e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 45 : 15
+      const bulletHitR = e.kind === 'boss_tinhvan' ? 60 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 45 : 15)
       if (dist2(ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, e.container.x, e.container.y) < bulletHitR * bulletHitR) {
         e.hp = Math.max(0, e.hp - bulletDmg)
-        spawnDamageText(ctx, e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 60 : 14), bulletDmg)
+        const dmgOffY = e.kind === 'boss_tinhvan' ? 75 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 60 : 14)
+        spawnDamageText(ctx, e.container.x, e.container.y - dmgOffY, bulletDmg)
         hitFlash(e.body)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
         if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)

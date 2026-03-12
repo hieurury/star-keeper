@@ -4,6 +4,7 @@ import { useGameStore, ALL_CARD_DEFS, ALL_ARTIFACT_DEFS } from '../../stores/gam
 import type { CardType } from '../../stores/gameStore'
 import { PhLightning } from '@phosphor-icons/vue'
 import ArtifactIcon from '../ui/ArtifactIcon.vue'
+import CardIcon from '../ui/CardIcon.vue'
 
 const game = useGameStore()
 
@@ -96,7 +97,7 @@ watch(() => game.isSkillReady, (ready) => {
               class="hud__pause-card-item"
               :class="'pause-card--' + (getCardDef(String(cardId))?.type ?? 'attack')"
             >
-              <span class="hud__pause-card-icon">{{ getCardDef(String(cardId))?.icon }}</span>
+              <span class="hud__pause-card-icon"><CardIcon :name="getCardDef(String(cardId))?.icon ?? ''" :size="14" /></span>
               <span class="hud__pause-card-name">{{ getCardDef(String(cardId))?.name }}</span>
               <div class="hud__pause-card-dots">
                 <span
@@ -127,7 +128,7 @@ watch(() => game.isSkillReady, (ready) => {
           >
             <!-- Thumbnail -->
             <div class="hud__card-thumb" :class="'card-thumb--' + card.type">
-              <span class="hud__card-big-icon">{{ card.icon }}</span>
+              <span class="hud__card-big-icon"><CardIcon :name="card.icon" :size="28" /></span>
             </div>
             <!-- Type badge -->
             <div class="hud__card-type-badge" :class="'badge--' + card.type">
@@ -400,7 +401,7 @@ watch(() => game.isSkillReady, (ready) => {
 .pause-card--attack  { border-color: #884422; }
 .pause-card--support { border-color: #224488; }
 .pause-card--ultimate { border-color: #886622; }
-.hud__pause-card-icon { font-size: 14px; }
+.hud__pause-card-icon { display: inline-flex; align-items: center; }
 .hud__pause-card-name { font-size: 8px; color: var(--color-text); flex: 1; }
 .hud__pause-card-dots { display: flex; gap: 3px; }
 
@@ -479,7 +480,7 @@ watch(() => game.isSkillReady, (ready) => {
 .card-thumb--support { background: linear-gradient(160deg, #080d1a, #081828); }
 .card-thumb--ultimate { background: linear-gradient(160deg, #1a1408, #1a1000); }
 
-.hud__card-big-icon { font-size: 28px; filter: drop-shadow(0 0 6px rgba(255,255,255,0.4)); }
+.hud__card-big-icon { display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 0 6px rgba(255,255,255,0.4)); }
 
 /* Type badge */
 .hud__card-type-badge {
