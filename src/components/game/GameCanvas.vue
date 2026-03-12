@@ -32,6 +32,11 @@ let app: Application | null = null
 let autoPaused = false   // tracks pauses triggered by visibility/blur
 const ctx = createGameContext()
 
+// Zoom indicator (shows when boss zoom is changing)
+let zoomIndicatorText: Text | null = null
+let zoomIndicatorTimer = 0
+let zoomIndicatorLastZoom = 1.0
+
 // ─── Auto-pause on tab switch / window blur ───────────────────────────────────
 function handleVisibilityChange() {
   if (document.hidden) {
@@ -40,7 +45,7 @@ function handleVisibilityChange() {
       autoPaused = true
     }
   } else if (autoPaused) {
-    game.isPaused = false
+    // Game stays paused — player must press "Tiếp Tục" manually
     autoPaused = false
   }
 }
@@ -51,10 +56,8 @@ function handleWindowBlur() {
   }
 }
 function handleWindowFocus() {
-  if (autoPaused) {
-    game.isPaused = false
-    autoPaused = false
-  }
+  // Game stays paused — player must press "Tiếp Tục" manually
+  if (autoPaused) autoPaused = false
 }
 
 // ─── Shoot ────────────────────────────────────────────────────────────────────
@@ -273,17 +276,19 @@ function gameLoop(ticker: Ticker) {
       const cs = game.cardStats
       const mSpd = 6 * cs.shooterMissileSpdMult
       const missileDmg = Math.round(game.upgrades.damage * cs.shooterMissileDmgMult * (1 + cs.damageBonusPct / 100))
-      for (let i = 0; i < cnt; i++) {
-        const offX = (i - (cnt - 1) / 2) * 14
-        const mg = new Graphics()
-        drawShooterMissile(mg)
-        mg.x = ctx.playerShip.x + offX; mg.y = ctx.playerShip.y - 22
-        ctx.gameLayer.addChild(mg)
-        const target = findNearestEnemy(ctx.enemies, mg.x, mg.y)
-        const dx = target ? target.container.x - mg.x : 0
-        const dy = target ? target.container.y - mg.y : -1
-        const d = Math.sqrt(dx * dx + dy * dy) || 1
-        ctx.shooterMissiles.push({ gfx: mg, vx: (dx / d) * mSpd, vy: (dy / d) * mSpd, damage: missileDmg, aoe: cs.shooterMissileAoe })
+      if (findNearestEnemy(ctx.enemies, ctx.playerShip.x, ctx.playerShip.y)) {
+        for (let i = 0; i < cnt; i++) {
+          const offX = (i - (cnt - 1) / 2) * 14
+          const mg = new Graphics()
+          drawShooterMissile(mg)
+          mg.x = ctx.playerShip.x + offX; mg.y = ctx.playerShip.y - 22
+          ctx.gameLayer.addChild(mg)
+          const target = findNearestEnemy(ctx.enemies, mg.x, mg.y)
+          const dx = target ? target.container.x - mg.x : 0
+          const dy = target ? target.container.y - mg.y : -1
+          const d = Math.sqrt(dx * dx + dy * dy) || 1
+          ctx.shooterMissiles.push({ gfx: mg, vx: (dx / d) * mSpd, vy: (dy / d) * mSpd, damage: missileDmg, aoe: cs.shooterMissileAoe })
+        }
       }
     } else {
       const maxHalfAngle = Math.min(Math.PI * 12 / 180, (cnt - 1) * Math.PI * 3 / 180)
@@ -293,6 +298,34 @@ function gameLoop(ticker: Ticker) {
         const vxDrift = Math.tan(norm * maxHalfAngle) * bulletVy
         shoot((i - (cnt - 1) / 2) * 12, vxDrift)
       }
+    }
+  }
+
+  // Star Shooter black hole projectile (in-flight phase)
+  if (isShooter && ctx.shooterBlackHoleProjGfx) {
+    const proj = ctx.shooterBlackHoleProjGfx
+    const pdx = ctx.shooterBlackHoleProjTX - proj.x
+    const pdy = ctx.shooterBlackHoleProjTY - proj.y
+    const pdist = Math.sqrt(pdx * pdx + pdy * pdy) || 1
+    const projSpd = 11 * dt
+    if (pdist <= projSpd + 2) {
+      // Arrived — spawn black hole at target position
+      if (!proj.destroyed) ctx.gameLayer.removeChild(proj)
+      ctx.shooterBlackHoleProjGfx = null
+      const g = new Graphics()
+      g.x = ctx.shooterBlackHoleProjTX
+      g.y = ctx.shooterBlackHoleProjTY
+      ctx.gameLayer.addChild(g)
+      ctx.shooterBlackHoleGfx = g
+      ctx.shooterBlackHoleTimer = 300
+    } else {
+      proj.x += (pdx / pdist) * projSpd
+      proj.y += (pdy / pdist) * projSpd
+      proj.clear()
+      const ppulse = 0.75 + Math.sin(Date.now() * 0.015) * 0.25
+      proj.circle(0, 0, 9 * ppulse).fill(0x1a0033)
+      proj.circle(0, 0, 9 * ppulse).stroke({ color: 0xaa33ff, width: 2.5, alpha: 0.9 })
+      proj.circle(0, 0, 4 * ppulse).fill({ color: 0x9900ff, alpha: 0.7 })
     }
   }
 
@@ -311,8 +344,8 @@ function gameLoop(ticker: Ticker) {
       const isBoss = e.kind.startsWith('boss')
       const bdx = bhg.x - e.container.x; const bdy = bhg.y - e.container.y
       const bd = Math.sqrt(bdx * bdx + bdy * bdy) || 1
-      if (!isBoss && bd < 130) {
-        const pull = (1 - bd / 130) * 4 * dt
+      if (!isBoss && bd < 185) {
+        const pull = (1 - bd / 185) * 4 * dt
         e.container.x += (bdx / bd) * pull; e.container.y += (bdy / bd) * pull
       }
       const dmgRate = isBoss ? 0.02 : 0.10
@@ -482,6 +515,21 @@ function gameLoop(ticker: Ticker) {
   const bz = ctx.bossZoom
   ctx.gameLayer.scale.set(bz)
   ctx.gameLayer.position.set(GAME_W * (1 - bz) / 2, GAME_H * (1 - bz) / 2)
+
+  // Zoom change indicator
+  if (zoomIndicatorText) {
+    if (Math.abs(bz - zoomIndicatorLastZoom) > 0.002) {
+      zoomIndicatorLastZoom = bz
+      zoomIndicatorText.text = `TẦM NHÌN: ${Math.round(bz * 100)}%`
+      zoomIndicatorText.alpha = 1
+      zoomIndicatorTimer = 150
+    } else if (zoomIndicatorTimer > 0) {
+      zoomIndicatorTimer -= dt
+      if (zoomIndicatorTimer <= 0) zoomIndicatorText.alpha = Math.max(0, zoomIndicatorText.alpha - 0.03 * dt)
+    } else {
+      zoomIndicatorText.alpha = Math.max(0, zoomIndicatorText.alpha - 0.03 * dt)
+    }
+  }
 
   // ── Thủ Hộ swarm reflect (global) ──────────────────────────────────────────
   const thuHoAlive = ctx.enemies.filter(e => e.kind === 'thu_ho').length
@@ -1175,7 +1223,7 @@ function gameLoop(ticker: Ticker) {
               gun.pauseTimer -= dt
               if (gun.pauseTimer <= 0) {
                 gun.burstLeft = 6 + phase2Boost
-                gun.pauseTimer = 75 - phase2Boost * 15 + Math.random() * 40
+                gun.pauseTimer = 105 - phase2Boost * 15 + Math.random() * 40
               }
             }
           }
@@ -1288,21 +1336,7 @@ function gameLoop(ticker: Ticker) {
                 ctx.shooterMissiles.splice(mi, 1)
               }
             }
-            // Pull and absorb enemy bullets
-            for (let ebi = ctx.enemyBullets.length - 1; ebi >= 0; ebi--) {
-              const eb = ctx.enemyBullets[ebi]!
-              const bdx = bh.x - eb.gfx.x; const bdy = bh.y - eb.gfx.y
-              const bd = Math.sqrt(bdx * bdx + bdy * bdy) || 1
-              if (bd < pullR) {
-                const ebPull = (1 - bd / pullR) * 4 * dt
-                eb.vx += (bdx / bd) * ebPull
-                eb.vy += (bdy / bd) * ebPull
-              }
-              if (bd < apparentR * 1.5) {
-                if (!eb.gfx.destroyed) ctx.gameLayer.removeChild(eb.gfx)
-                ctx.enemyBullets.splice(ebi, 1)
-              }
-            }
+            // Enemy bullets are NOT pulled by black holes — only player projectiles are affected
           }
         }
 
@@ -1862,6 +1896,21 @@ async function initPixi() {
   ctx.shieldGfx.visible = false
   ctx.gameLayer.addChild(ctx.shieldGfx)
 
+  // Zoom level indicator
+  const zStyle = new TextStyle({
+    fill: 0xffdd44, fontSize: 12,
+    fontFamily: "'Chakra Petch', sans-serif",
+    fontWeight: 'bold',
+    stroke: { color: 0x000000, width: 3 },
+  })
+  zoomIndicatorText = new Text({ text: '', style: zStyle })
+  zoomIndicatorText.anchor.set(0.5, 0)
+  zoomIndicatorText.x = GAME_W / 2
+  zoomIndicatorText.y = 8
+  zoomIndicatorText.alpha = 0
+  ctx.uiLayer.addChild(zoomIndicatorText)
+  zoomIndicatorLastZoom = 1.0
+
   ctx.gamePhase = 'intro'; ctx.introTimer = 0
 
   app.canvas.addEventListener('touchstart', onTouchStart, { passive: false })
@@ -1948,6 +1997,8 @@ function destroyPixi() {
   ctx.artifactGfx = null
   game.neutronVacuumPct = 0; game.manaCorePct = 0
   ctx.shooterMissiles = []; ctx.shooterBlackHoleTimer = 0; ctx.shooterBlackHoleGfx = null
+  if (ctx.shooterBlackHoleProjGfx && !ctx.shooterBlackHoleProjGfx.destroyed) ctx.gameLayer?.removeChild(ctx.shooterBlackHoleProjGfx)
+  ctx.shooterBlackHoleProjGfx = null
 }
 
 onMounted(async () => { await initPixi(); game.startGame() })
@@ -1980,6 +2031,8 @@ watch(() => game.isPlaying, (val, old) => {
     ctx.shooterMissiles = []; ctx.shooterBlackHoleTimer = 0
     if (ctx.shooterBlackHoleGfx && !ctx.shooterBlackHoleGfx.destroyed) ctx.gameLayer?.removeChild(ctx.shooterBlackHoleGfx)
     ctx.shooterBlackHoleGfx = null
+    if (ctx.shooterBlackHoleProjGfx && !ctx.shooterBlackHoleProjGfx.destroyed) ctx.gameLayer?.removeChild(ctx.shooterBlackHoleProjGfx)
+    ctx.shooterBlackHoleProjGfx = null
     ctx.pbTimer = 0; ctx.cbTimer = 0; ctx.lsTimer = 0; ctx.sfDmgTimer = 0
     if (ctx.shieldGfx) ctx.shieldGfx.visible = false
     if (ctx.sfGfx) ctx.sfGfx.visible = false

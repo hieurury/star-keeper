@@ -200,6 +200,11 @@ function startGame() {
   router.push('/game')
 }
 
+const canPlay = computed(() => {
+  const dur = game.shipDurabilities[game.selectedShip] ?? (SHIP_DURABILITY_MAX[game.selectedShip] ?? 100)
+  return dur >= 10
+})
+
 function openProfileSheet() {
   usernameInput.value = game.username
   shipNameInput.value = game.shipName
@@ -313,16 +318,24 @@ function onShipNameKey(e: KeyboardEvent) {
               </svg>
             </template>
             <template v-else-if="game.selectedShip === 'star_shooter'">
-              <svg viewBox="-36 -30 72 62" width="56" height="54">
-                <polygon points="-7,2 -30,16 -7,12" fill="#cc2222"/>
-                <polygon points="-25,14 -30,16 -22,20" fill="#ff4444"/>
-                <polygon points="7,2 30,16 7,12" fill="#cc2222"/>
-                <polygon points="25,14 30,16 22,20" fill="#ff4444"/>
-                <rect x="-8" y="-24" width="16" height="36" fill="#ffffff"/>
-                <polygon points="0,-28 7,-18 -7,-18" fill="#ff4444"/>
-                <rect x="-13" y="-6" width="8" height="10" fill="#dddddd"/>
-                <rect x="5" y="-6" width="8" height="10" fill="#dddddd"/>
-                <rect x="-5" y="16" width="10" height="8" fill="#ff3333" opacity="0.9"/>
+              <svg viewBox="-32 -33 64 62" width="56" height="54">
+                <polygon points="-7,-4 -29,-12 -25,5 -7,5" fill="#27405f"/>
+                <polygon points="7,-4 29,-12 25,5 7,5" fill="#27405f"/>
+                <polygon points="-7,-4 -29,-12 -28,-9 -7,-3" fill="#4477aa" opacity="0.75"/>
+                <polygon points="7,-4 29,-12 28,-9 7,-3" fill="#4477aa" opacity="0.75"/>
+                <polygon points="-7,9 -20,15 -18,21 -7,17" fill="#1a2e48"/>
+                <polygon points="7,9 20,15 18,21 7,17" fill="#1a2e48"/>
+                <rect x="-28" y="-10" width="7" height="4" fill="#ff3333"/>
+                <rect x="-25" y="-4" width="7" height="4" fill="#ff3333"/>
+                <rect x="21" y="-10" width="7" height="4" fill="#ff3333"/>
+                <rect x="18" y="-4" width="7" height="4" fill="#ff3333"/>
+                <rect x="-7" y="-24" width="14" height="42" fill="#1c2c44"/>
+                <polygon points="-7,18 7,18 4,22 -4,22" fill="#151f33"/>
+                <rect x="-2" y="-24" width="4" height="42" fill="#7733cc" opacity="0.38"/>
+                <polygon points="0,-30 6,-21 -6,-21" fill="#ff4422"/>
+                <rect x="-3" y="-19" width="6" height="8" fill="#66ccff" opacity="0.88"/>
+                <rect x="-5" y="18" width="10" height="7" fill="#ff5500" opacity="0.9"/>
+                <rect x="-3" y="22" width="6" height="5" fill="#ffcc22" opacity="0.95"/>
               </svg>
             </template>
             <template v-else>
@@ -385,10 +398,11 @@ function onShipNameKey(e: KeyboardEvent) {
 
       <!-- Menu buttons -->
       <div class="home__menu">
-        <button class="menu-play-btn" data-tour="play-btn" @click="startGame">
+        <button class="menu-play-btn" data-tour="play-btn" :disabled="!canPlay" @click="startGame">
           <PhPlay :size="18" weight="fill" />
           <span>BẮT ĐẦU</span>
         </button>
+        <div v-if="!canPlay" class="menu-play-warn">⚠ Độ bền phi cơ quá thấp! Sửa chữa trước khi cất cánh.</div>
         <div class="menu-grid">
           <button class="menu-tile" data-tour="ships-btn" @click="showShipsPanel = true">
             <PhRocketLaunch :size="24" weight="fill" />
@@ -583,16 +597,24 @@ function onShipNameKey(e: KeyboardEvent) {
               <div class="ship-carousel__slide">
                 <div class="ship-card" :class="{ 'ship-card--selected': game.selectedShip === 'star_shooter' }">
                   <div class="ship-card__header">
-                    <svg class="ship-svg" viewBox="-36 -30 72 62" width="60" height="58">
-                      <polygon points="-7,2 -30,16 -7,12" fill="#cc2222"/>
-                      <polygon points="-25,14 -30,16 -22,20" fill="#ff4444"/>
-                      <polygon points="7,2 30,16 7,12" fill="#cc2222"/>
-                      <polygon points="25,14 30,16 22,20" fill="#ff4444"/>
-                      <rect x="-8" y="-24" width="16" height="36" fill="#ffffff"/>
-                      <polygon points="0,-28 7,-18 -7,-18" fill="#ff4444"/>
-                      <rect x="-13" y="-6" width="8" height="10" fill="#dddddd"/>
-                      <rect x="5" y="-6" width="8" height="10" fill="#dddddd"/>
-                      <rect x="-5" y="16" width="10" height="8" fill="#ff3333" opacity="0.9"/>
+                    <svg class="ship-svg" viewBox="-32 -33 64 62" width="60" height="58">
+                      <polygon points="-7,-4 -29,-12 -25,5 -7,5" fill="#27405f"/>
+                      <polygon points="7,-4 29,-12 25,5 7,5" fill="#27405f"/>
+                      <polygon points="-7,-4 -29,-12 -28,-9 -7,-3" fill="#4477aa" opacity="0.75"/>
+                      <polygon points="7,-4 29,-12 28,-9 7,-3" fill="#4477aa" opacity="0.75"/>
+                      <polygon points="-7,9 -20,15 -18,21 -7,17" fill="#1a2e48"/>
+                      <polygon points="7,9 20,15 18,21 7,17" fill="#1a2e48"/>
+                      <rect x="-28" y="-10" width="7" height="4" fill="#ff3333"/>
+                      <rect x="-25" y="-4" width="7" height="4" fill="#ff3333"/>
+                      <rect x="21" y="-10" width="7" height="4" fill="#ff3333"/>
+                      <rect x="18" y="-4" width="7" height="4" fill="#ff3333"/>
+                      <rect x="-7" y="-24" width="14" height="42" fill="#1c2c44"/>
+                      <polygon points="-7,18 7,18 4,22 -4,22" fill="#151f33"/>
+                      <rect x="-2" y="-24" width="4" height="42" fill="#7733cc" opacity="0.38"/>
+                      <polygon points="0,-30 6,-21 -6,-21" fill="#ff4422"/>
+                      <rect x="-3" y="-19" width="6" height="8" fill="#66ccff" opacity="0.88"/>
+                      <rect x="-5" y="18" width="10" height="7" fill="#ff5500" opacity="0.9"/>
+                      <rect x="-3" y="22" width="6" height="5" fill="#ffcc22" opacity="0.95"/>
                     </svg>
                     <div class="ship-card__info">
                       <div class="ship-card__name">STAR SHOOTER</div>
@@ -1224,6 +1246,20 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .menu-play-btn:hover { background: var(--color-accent-light); }
 .menu-play-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--color-accent-dark); }
+.menu-play-btn:disabled {
+  background: #555;
+  box-shadow: 0 4px 0 #333, inset 0 1px 0 rgba(255,255,255,0.08);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+.menu-play-warn {
+  text-align: center;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: #ff7043;
+  letter-spacing: 1px;
+  margin-top: -4px;
+}
 .menu-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

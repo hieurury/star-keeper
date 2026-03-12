@@ -364,14 +364,26 @@ export function activateBlackHole(ctx: GameContext, _game: GameStore): void {
   if (ctx.shooterBlackHoleGfx) {
     if (!ctx.shooterBlackHoleGfx.destroyed) ctx.gameLayer.removeChild(ctx.shooterBlackHoleGfx)
     ctx.shooterBlackHoleGfx = null
+    ctx.shooterBlackHoleTimer = 0
   }
-  const x = GAME_W / 2
-  const y = GAME_H * 0.38
-  const g = new Graphics()
-  g.x = x; g.y = y
-  ctx.gameLayer.addChild(g)
-  ctx.shooterBlackHoleGfx = g
-  ctx.shooterBlackHoleTimer = 300  // 5 seconds at 60 fps
+  // Remove in-flight projectile if any
+  if (ctx.shooterBlackHoleProjGfx) {
+    if (!ctx.shooterBlackHoleProjGfx.destroyed) ctx.gameLayer.removeChild(ctx.shooterBlackHoleProjGfx)
+    ctx.shooterBlackHoleProjGfx = null
+  }
+  // Target nearest enemy, fallback to above-center
+  const nearest = findNearestEnemy(ctx.enemies, ctx.playerShip?.x ?? GAME_W / 2, ctx.playerShip?.y ?? GAME_H * 0.5)
+  ctx.shooterBlackHoleProjTX = nearest ? nearest.container.x : GAME_W / 2
+  ctx.shooterBlackHoleProjTY = nearest ? nearest.container.y : GAME_H * 0.35
+  // Spawn projectile at ship bow
+  const proj = new Graphics()
+  proj.circle(0, 0, 9).fill(0x1a0033)
+  proj.circle(0, 0, 9).stroke({ color: 0xaa33ff, width: 2.5 })
+  proj.circle(0, 0, 4).fill({ color: 0x8800ff, alpha: 0.7 })
+  proj.x = ctx.playerShip?.x ?? GAME_W / 2
+  proj.y = (ctx.playerShip?.y ?? GAME_H * 0.8) - 26
+  ctx.gameLayer.addChild(proj)
+  ctx.shooterBlackHoleProjGfx = proj
   screenFlash(ctx, 0x220044, 0.55, 500)
 }
 export function activateHeatWave(ctx: GameContext, game: GameStore): void {

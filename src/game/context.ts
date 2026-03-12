@@ -83,6 +83,9 @@ export interface GameContext {
   shooterMissileTimer: number
   shooterBlackHoleGfx: Graphics | null
   shooterBlackHoleTimer: number
+  shooterBlackHoleProjGfx: Graphics | null
+  shooterBlackHoleProjTX: number
+  shooterBlackHoleProjTY: number
 
   // Input
   isDragging: boolean
@@ -145,6 +148,9 @@ export function createGameContext(): GameContext {
     shooterMissileTimer: 0,
     shooterBlackHoleGfx: null,
     shooterBlackHoleTimer: 0,
+    shooterBlackHoleProjGfx: null,
+    shooterBlackHoleProjTX: 0,
+    shooterBlackHoleProjTY: 0,
     isDragging: false,
     touchX: 0,
     touchY: 0,

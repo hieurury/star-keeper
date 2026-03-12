@@ -21,33 +21,33 @@ export function drawShip(g: Graphics, shipId: string): void {
     g.rect(-3, 18, 6, 6).fill({ color: 0xffcc00, alpha: 0.85 })
   } else if (shipId === 'star_shooter') {
     g.clear()
-    // Main body (white)
-    g.rect(-9, -28, 18, 46).fill(0xf0f0f0)
-    // Nose cone (red)
-    g.poly([0, -34, 8, -24, -8, -24]).fill(0xff3333)
-    // Upper-left wing
-    g.poly([-9, -10, -32, -22, -28, -4, -9, 2]).fill(0xd8d8d8)
-    // Upper-right wing
-    g.poly([9, -10, 32, -22, 28, -4, 9, 2]).fill(0xd8d8d8)
-    // Lower-left wing
-    g.poly([-9, 8, -28, 14, -26, 22, -9, 16]).fill(0xcccccc)
-    // Lower-right wing
-    g.poly([9, 8, 28, 14, 26, 22, 9, 16]).fill(0xcccccc)
-    // Missile pods (red) — upper wings
-    g.rect(-30, -20, 9, 5).fill(0xff4444)
-    g.rect(-27, -13, 9, 5).fill(0xff4444)
-    g.rect(21, -20, 9, 5).fill(0xff4444)
-    g.rect(18, -13, 9, 5).fill(0xff4444)
-    // Missile pods — lower wings
-    g.rect(-27, 10, 8, 4).fill(0xff4444)
-    g.rect(-24, 16, 8, 4).fill(0xff4444)
-    g.rect(19, 10, 8, 4).fill(0xff4444)
-    g.rect(16, 16, 8, 4).fill(0xff4444)
-    // Red center stripe
-    g.rect(-2, -28, 4, 46).fill({ color: 0xff3333, alpha: 0.45 })
+    // Main body — dark steel blue
+    g.rect(-7, -24, 14, 42).fill(0x1c2c44)
+    // Rear hull taper
+    g.poly([-7, 18, 7, 18, 4, 22, -4, 22]).fill(0x151f33)
+    // Nose cone (red-orange)
+    g.poly([0, -30, 6, -21, -6, -21]).fill(0xff4422)
+    // Cockpit window (cyan glass)
+    g.rect(-3, -19, 6, 8).fill({ color: 0x66ccff, alpha: 0.88 })
+    // Main swept wings
+    g.poly([-7, -4, -29, -12, -25, 5, -7, 5]).fill(0x27405f)
+    g.poly([7, -4, 29, -12, 25, 5, 7, 5]).fill(0x27405f)
+    // Wing leading-edge highlight
+    g.poly([-7, -4, -29, -12, -28, -9, -7, -3]).fill({ color: 0x4477aa, alpha: 0.75 })
+    g.poly([7, -4, 29, -12, 28, -9, 7, -3]).fill({ color: 0x4477aa, alpha: 0.75 })
+    // Tail fins
+    g.poly([-7, 9, -20, 15, -18, 21, -7, 17]).fill(0x1a2e48)
+    g.poly([7, 9, 20, 15, 18, 21, 7, 17]).fill(0x1a2e48)
+    // Missile pods on wings (2 per side)
+    g.rect(-28, -10, 7, 4).fill(0xff3333)
+    g.rect(-25, -4, 7, 4).fill(0xff3333)
+    g.rect(21, -10, 7, 4).fill(0xff3333)
+    g.rect(18, -4, 7, 4).fill(0xff3333)
+    // Purple-violet center spine
+    g.rect(-2, -24, 4, 42).fill({ color: 0x7733cc, alpha: 0.38 })
     // Engine exhaust
-    g.rect(-5, 18, 10, 8).fill({ color: 0xff4400, alpha: 0.85 })
-    g.rect(-3, 22, 6, 5).fill({ color: 0xffcc00, alpha: 0.9 })
+    g.rect(-5, 18, 10, 7).fill({ color: 0xff5500, alpha: 0.9 })
+    g.rect(-3, 22, 6, 5).fill({ color: 0xffcc22, alpha: 0.95 })
   } else {
     g.clear()
     g.rect(-10, -22, 20, 34).fill(0x00cfff)
@@ -71,16 +71,16 @@ export function drawBullet(g: Graphics, spdScale = 1.0): void {
 // ─── Star Shooter missile ────────────────────────────────────────────────────
 export function drawShooterMissile(g: Graphics): void {
   g.clear()
-  // Body (white)
-  g.rect(-3.5, -9, 7, 16).fill(0xffffff)
+  // Body (white) — reduced ~25%
+  g.rect(-2.5, -7, 5, 12).fill(0xffffff)
   // Nose (red)
-  g.poly([0, -13, 3.5, -9, -3.5, -9]).fill(0xff3333)
+  g.poly([0, -10, 2.5, -7, -2.5, -7]).fill(0xff3333)
   // Side fins (red)
-  g.poly([-3.5, 3, -6.5, 8, -3.5, 8]).fill(0xff4444)
-  g.poly([3.5, 3, 6.5, 8, 3.5, 8]).fill(0xff4444)
+  g.poly([-2.5, 2, -5, 6, -2.5, 6]).fill(0xff4444)
+  g.poly([2.5, 2, 5, 6, 2.5, 6]).fill(0xff4444)
   // Engine glow
-  g.circle(0, 7, 2.2).fill({ color: 0xff6600, alpha: 0.9 })
-  g.circle(0, 7, 1.1).fill(0xffee44)
+  g.circle(0, 5, 1.6).fill({ color: 0xff6600, alpha: 0.9 })
+  g.circle(0, 5, 0.8).fill(0xffee44)
 }
 
 // ─── Star Holder laser ────────────────────────────────────────────────────────
