@@ -56,6 +56,8 @@ export interface Enemy {
   dodgeTarget?: number
   // boss_stardestroyer
   bossEntered?: boolean
+  bossBattleReady?: boolean   // true after entry + zoom + 1s delay
+  bossBattleTimer?: number    // countdown after zoom completes
   bossTargetY?: number
   bossPhase?: 1 | 2
   attack1Timer?: number
@@ -105,6 +107,8 @@ export interface Enemy {
   trumSoChargeLane?: number
   trumSoChargeLineGfx?: Graphics
   trumSoContinuousDmgTimer?: number
+  trumSoPhase2LaserState?: 'idle' | 'warning' | 'firing'
+  trumSoPhase2LaserAngle?: number
 }
 
 export interface TrumSoGun {
@@ -142,7 +146,9 @@ export interface BlackHoleEntity {
   r: number
   age: number
   maxAge: number
-  portal?: boolean  // phase 2 summon portal: no pull, no age-removal, purple vortex
+  portal?: boolean       // phase 2 summon portal: no pull, no age-removal, purple vortex
+  lastPlayerX?: number  // track player position for escape resistance
+  lastPlayerY?: number
 }
 
 export interface EnemyBullet {
@@ -195,7 +201,7 @@ export interface FragmentMissile {
   vy: number
 }
 
-export type GamePhase = 'intro' | 'stageTitle' | 'playing'
+export type GamePhase = 'intro' | 'stageTitle' | 'bossIntro' | 'playing'
 
 export interface MissileLauncher {
   gfx: Graphics

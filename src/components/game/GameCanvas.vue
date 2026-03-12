@@ -10,7 +10,7 @@ import { dist2, redrawHpBar, findNearestEnemy } from '../../game/utils'
 
 import { drawShip, drawBullet, spawnHolderLaser, drawShooterMissile } from '../../game/ship/index'
 import { drawFragmentMissile } from '../../game/projectiles/index'
-import { drawEnemyBullet, drawBossBullet, drawBossMissile } from '../../game/projectiles/index'
+import { drawEnemyBullet, drawBossBullet, drawBossMissile, drawTrumSoMissile } from '../../game/projectiles/index'
 
 import { spawnExplosion, screenFlash, spawnDamageText, hitFlash, showStageClearBanner, spawnMissileWarning } from '../../game/systems/effects'
 import { spawnEnemyOrbs } from '../../game/systems/orbs'
@@ -145,6 +145,86 @@ function gameLoop(ticker: Ticker) {
       ctx.playerShip.y += dy * 0.055 * spd * dt * 0.5
       ctx.playerShip.x = Math.max(20, Math.min(GAME_W - 20, ctx.playerShip.x))
       ctx.playerShip.y = Math.max(60, Math.min(GAME_H - 60, ctx.playerShip.y))
+    }
+    return
+  }
+
+  // ── BOSS INTRO PHASE: boss đang trượt vào, không bắn, chỉ di chuyển ─────
+  if (ctx.gamePhase === 'bossIntro') {
+    // Tiếp tục di chuyển các viên đạn đã bắn ra trước đó
+    for (let i = ctx.bullets.length - 1; i >= 0; i--) {
+      const b = ctx.bullets[i]
+      b.gfx.y -= b.vy * dt
+      if (b.vx) b.gfx.x += b.vx * dt
+      if (b.gfx.y < -20 || b.gfx.x < -10 || b.gfx.x > GAME_W + 10) {
+        if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
+        ctx.bullets.splice(i, 1)
+      }
+    }
+    // Cho phép di chuyển máy bay người chơi
+    if (ctx.playerShip && ctx.isDragging) {
+      const _bz = ctx.bossZoom
+      const _blx = GAME_W * (1 - _bz) / 2; const _bly = GAME_H * (1 - _bz) / 2
+      const dx = (ctx.touchX - _blx) / _bz - ctx.playerShip.x
+      const dy = ((ctx.touchY - _bly) / _bz - TOUCH_Y_OFFSET) - ctx.playerShip.y
+      const hpPenalty = Math.max(0.7, Math.pow(100 / game.playerMaxHp, 0.15))
+      const spd = 5.5 * game.upgrades.shipSpeed * hpPenalty
+      ctx.playerShip.x += dx * 0.055 * spd * dt * 0.5
+      ctx.playerShip.y += dy * 0.055 * spd * dt * 0.5
+      ctx.playerShip.x = Math.max(20, Math.min(GAME_W - 20, ctx.playerShip.x))
+      ctx.playerShip.y = Math.max(60, Math.min(GAME_H - 60, ctx.playerShip.y))
+    }
+    // Chạy entry animation + post-entry timer cho boss
+    let battleReady = false
+    for (const e of ctx.enemies) {
+      if (!e.kind.startsWith('boss')) continue
+      if (!e.bossEntered) {
+        if (e.kind === 'boss_tinhvan') {
+          e.container.y += 1.0 * dt
+          const targetY = e.bossTargetY ?? GAME_H * 0.20
+          if (e.container.y >= targetY) {
+            e.container.y = targetY; e.bossEntered = true
+            e.bossBattleReady = false; e.bossBattleTimer = 180
+          }
+          if (e.body) e.body.rotation += 0.003 * dt
+        } else {
+          const speed = e.kind === 'boss_invader' ? 1.2 : 1.2
+          e.container.y += speed * dt
+          const targetY = e.bossTargetY ?? GAME_H * 0.20
+          if (e.container.y >= targetY) {
+            e.container.y = targetY; e.bossEntered = true
+            e.bossBattleTimer = 60  // thêm 1s delay sau khi vào vị trí
+          }
+        }
+      } else {
+        // Đã vào vị trí, chờ timer trước khi bắt đầu chiến đấu
+        if (e.kind === 'boss_tinhvan') {
+          if (e.body) e.body.rotation += 0.003 * dt
+          e.bossBattleTimer = (e.bossBattleTimer ?? 180) - dt
+          if ((e.bossBattleTimer ?? 0) <= 0) {
+            e.bossBattleReady = true
+            battleReady = true
+            screenFlash(ctx, 0x6600aa, 0.3, 400)
+          }
+        } else {
+          e.bossBattleTimer = (e.bossBattleTimer ?? 60) - dt
+          if ((e.bossBattleTimer ?? 0) <= 0) battleReady = true
+        }
+      }
+    }
+    // Boss zoom update
+    const _tinhVanAlive = ctx.enemies.some(e => e.kind === 'boss_tinhvan' && e.bossEntered)
+    ctx.bossZoomTarget = _tinhVanAlive ? 0.75 : 1.0
+    if (Math.abs(ctx.bossZoom - ctx.bossZoomTarget) > 0.001) {
+      const zSpeed = 0.006 * dt
+      ctx.bossZoom += Math.sign(ctx.bossZoomTarget - ctx.bossZoom) * Math.min(zSpeed, Math.abs(ctx.bossZoomTarget - ctx.bossZoom))
+    }
+    ctx.gameLayer.scale.set(ctx.bossZoom)
+    ctx.gameLayer.position.set(GAME_W * (1 - ctx.bossZoom) / 2, GAME_H * (1 - ctx.bossZoom) / 2)
+    // Chuyển sang 'playing' sau khi hết delay — reset shootTimer để không bắn ngay lập tức
+    if (battleReady) {
+      ctx.gamePhase = 'playing'
+      ctx.shootTimer = 0
     }
     return
   }
@@ -506,10 +586,10 @@ function gameLoop(ticker: Ticker) {
   // since they reach into ctx directly for PixiJS ops and shared state.
 
   // ── Boss zoom: smooth scale-out when Tinh Vân boss is alive ──────────────────
-  const tinhVanAlive = ctx.enemies.some(e => e.kind === 'boss_tinhvan')
+  const tinhVanAlive = ctx.enemies.some(e => e.kind === 'boss_tinhvan' && e.bossEntered)
   ctx.bossZoomTarget = tinhVanAlive ? 0.75 : 1.0
   if (Math.abs(ctx.bossZoom - ctx.bossZoomTarget) > 0.001) {
-    const zSpeed = 0.014 * dt
+    const zSpeed = 0.006 * dt  // chậm hơn — zoom mượt hơn
     ctx.bossZoom += Math.sign(ctx.bossZoomTarget - ctx.bossZoom) * Math.min(zSpeed, Math.abs(ctx.bossZoomTarget - ctx.bossZoom))
   }
   const bz = ctx.bossZoom
@@ -919,6 +999,7 @@ function gameLoop(ticker: Ticker) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.18
           e.bossEntered = true
         }
+        continue  // chưa vào vị trí, không tấn công
       }
       if (e.bossEntered) {
         if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
@@ -1029,6 +1110,7 @@ function gameLoop(ticker: Ticker) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.22
           e.bossEntered = true
         }
+        continue  // chưa vào vị trí, không tấn công
       }
       if (e.bossEntered) {
         if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
@@ -1162,10 +1244,24 @@ function gameLoop(ticker: Ticker) {
         if (e.container.y >= (e.bossTargetY ?? GAME_H * 0.20)) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.20
           e.bossEntered = true
+          e.bossBattleReady = false
+          e.bossBattleTimer = 180  // 3s: chờ zoom xong + delay trước khi tấn công
         }
+        continue  // chưa vào vị trí, không làm gì cả
       }
 
-      if (e.bossEntered) {
+      // Chờ timer đếm xuống 0 trước khi bắt đầu trận chiến
+      if (!e.bossBattleReady) {
+        e.body.rotation += 0.003 * dt
+        e.bossBattleTimer = (e.bossBattleTimer ?? 180) - dt
+        if ((e.bossBattleTimer ?? 0) <= 0) {
+          e.bossBattleReady = true
+          screenFlash(ctx, 0x6600aa, 0.3, 400)
+        }
+        continue  // chưa sẵn sàng, bỏ qua toàn bộ logic tấn công
+      }
+
+      if (e.bossEntered && e.bossBattleReady) {
         // Body slow rotation
         e.body.rotation += 0.003 * dt
 
@@ -1202,28 +1298,23 @@ function gameLoop(ticker: Ticker) {
         if (e.tinhVanGuns) {
           const phase2Boost = e.bossPhase === 2 ? 1 : 0
           for (const gun of e.tinhVanGuns) {
-            if (gun.burstLeft > 0) {
-              gun.shootTimer -= dt
-              if (gun.shootTimer <= 0 && ctx.playerShip) {
-                gun.shootTimer = 5
-                gun.burstLeft--
-                const worldX = e.container.x + gun.offsetX
-                const worldY = e.container.y + gun.offsetY
+            // Mỗi 2s (120 frame) bắn 2 viên cùng lúc
+            gun.shootTimer -= dt
+            if (gun.shootTimer <= 0 && ctx.playerShip) {
+              gun.shootTimer = 120
+              const worldX = e.container.x + gun.offsetX
+              const worldY = e.container.y + gun.offsetY
+              const tx = ctx.playerShip.x - worldX
+              const ty = ctx.playerShip.y - worldY
+              const spd = 3.5 + phase2Boost * 0.8 + game.currentStage * 0.1
+              const baseAngle = Math.atan2(ty, tx)
+              const spread = 0.13  // ~7.5°
+              for (const ao of [-spread, spread]) {
                 const bg = new Graphics()
                 drawEnemyBullet(bg)
                 bg.x = worldX; bg.y = worldY + 10
                 ctx.gameLayer.addChild(bg)
-                const tx = ctx.playerShip.x - worldX
-                const ty = ctx.playerShip.y - worldY
-                const mag = Math.sqrt(tx * tx + ty * ty) || 1
-                const spd = 3.5 + phase2Boost * 0.8 + game.currentStage * 0.1
-                ctx.enemyBullets.push({ gfx: bg, vx: (tx / mag) * spd, vy: (ty / mag) * spd })
-              }
-            } else {
-              gun.pauseTimer -= dt
-              if (gun.pauseTimer <= 0) {
-                gun.burstLeft = 6 + phase2Boost
-                gun.pauseTimer = 105 - phase2Boost * 15 + Math.random() * 40
+                ctx.enemyBullets.push({ gfx: bg, vx: Math.cos(baseAngle + ao) * spd, vy: Math.sin(baseAngle + ao) * spd })
               }
             }
           }
@@ -1282,17 +1373,34 @@ function gameLoop(ticker: Ticker) {
             bh.gfx.circle(0, 0, apparentR * 1.05).stroke({ color: 0xcc44ff, width: 1.5, alpha: (0.7 + Math.sin(t * 0.18) * 0.3) * fadeA })
 
             const pullR = apparentR * 5
-            // Pull player toward black hole
+            // Pull player toward black hole (harder to escape)
             if (ctx.playerShip) {
               const pdx = bh.x - ctx.playerShip.x
               const pdy = bh.y - ctx.playerShip.y
               const pd = Math.sqrt(pdx * pdx + pdy * pdy) || 1
               if (pd < pullR) {
-                const force = (1 - pd / pullR) * 2.2 * dt * fadeA
+                // Nếu người chơi đang di chuyển ra ngoài, kháng lại một phần
+                if (bh.lastPlayerX !== undefined && bh.lastPlayerY !== undefined) {
+                  const moveDx = ctx.playerShip.x - bh.lastPlayerX
+                  const moveDy = ctx.playerShip.y - bh.lastPlayerY
+                  // Thành phần hướng ra ngoài: dương = đang thoát khỏi hố đen
+                  const outwardDot = moveDx * (-pdx / pd) + moveDy * (-pdy / pd)
+                  if (outwardDot > 0) {
+                    const resistFactor = (1 - pd / pullR) * 0.6 * fadeA
+                    ctx.playerShip.x -= (-pdx / pd) * outwardDot * resistFactor
+                    ctx.playerShip.y -= (-pdy / pd) * outwardDot * resistFactor
+                  }
+                }
+                const force = (1 - pd / pullR) * 4.0 * dt * fadeA
                 ctx.playerShip.x += (pdx / pd) * force
                 ctx.playerShip.y += (pdy / pd) * force
                 ctx.playerShip.x = Math.max(10, Math.min(GAME_W - 10, ctx.playerShip.x))
                 ctx.playerShip.y = Math.max(40, Math.min(GAME_H - 40, ctx.playerShip.y))
+                bh.lastPlayerX = ctx.playerShip.x
+                bh.lastPlayerY = ctx.playerShip.y
+              } else {
+                bh.lastPlayerX = undefined
+                bh.lastPlayerY = undefined
               }
             }
             // Pull non-boss enemies toward black hole
@@ -1345,13 +1453,13 @@ function gameLoop(ticker: Ticker) {
           if ((e.pendingMissiles ?? 0) === 0) {
             e.attack2Timer = (e.attack2Timer ?? 1800) - dt
             if ((e.attack2Timer ?? 0) <= 0) {
-              e.pendingMissiles = 8   // 8 spawn calls → ~15-20 Bnox enemies
+              e.pendingMissiles = 4   // 4 spawn calls → ~7 Bnox enemies
               e.missileFireTimer = 50
               // Create 2 portal black holes at random screen positions
               e.blackHoles = e.blackHoles ?? []
               for (let pi = 0; pi < 2; pi++) {
-                const pX = GAME_W * 0.10 + Math.random() * GAME_W * 0.80
-                const pY = GAME_H * 0.22 + Math.random() * GAME_H * 0.50
+                const pX = GAME_W * 0.15 + Math.random() * GAME_W * 0.70
+                const pY = GAME_H * 0.02 + Math.random() * GAME_H * 0.10  // mở cổng ở trên cùng
                 const pGfx = new Graphics()
                 pGfx.x = pX; pGfx.y = pY
                 ctx.gameLayer.addChild(pGfx)
@@ -1371,17 +1479,22 @@ function gameLoop(ticker: Ticker) {
               const spawnY = portal ? portal.y : (e.container.y + 60)
               const beforeCount = ctx.enemies.length
               const r = Math.random()
-              if (r < 0.45) spawnDaiLienPair(ctx, game)
-              else if (r < 0.75) spawnThuatSi(ctx, game)
-              else spawnThuHoSwarm(ctx, game)
-              // Teleport newly spawned enemies to portal, then send them to lower attack zone
+              let spawnType: string
+              if (r < 0.45) { spawnDaiLienPair(ctx, game); spawnType = 'dai_lien' }
+              else if (r < 0.75) { spawnThuatSi(ctx, game); spawnType = 'thuat_si' }
+              else { spawnThuHoSwarm(ctx, game); spawnType = 'thu_ho' }
+              // Teleport newly spawned enemies to portal, mỗi loại giữ vị trí chiến thuật của mình
               for (let ni = beforeCount; ni < ctx.enemies.length; ni++) {
                 const ne = ctx.enemies[ni]!
                 ne.container.x = spawnX + (Math.random() - 0.5) * 30
                 ne.container.y = spawnY
-                // Attack position in lower half of screen (press toward player)
-                const atkX = GAME_W * 0.12 + Math.random() * GAME_W * 0.76
-                const atkY = GAME_H * 0.52 + Math.random() * GAME_H * 0.25
+                const atkX = GAME_W * 0.10 + Math.random() * GAME_W * 0.80
+                // Liên xạ: giữ tầm cao; Thử hộ: tầm giữa chắn đạn; Thuật sĩ: tầm dưới để hồi máu
+                const atkY = spawnType === 'dai_lien'
+                  ? GAME_H * 0.15 + Math.random() * GAME_H * 0.15
+                  : spawnType === 'thu_ho'
+                  ? GAME_H * 0.35 + Math.random() * GAME_H * 0.18
+                  : GAME_H * 0.48 + Math.random() * GAME_H * 0.18
                 ne.enterTargetX = atkX
                 ne.enterTargetY = atkY
                 ne.formTargetX = atkX
@@ -1416,6 +1529,15 @@ function gameLoop(ticker: Ticker) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.20
           e.bossEntered = true
         }
+        // Bất tử khi tái xuất: hấp thụ đạn (không xuyên qua) nhưng không nhận sát thương
+        for (let j = ctx.bullets.length - 1; j >= 0; j--) {
+          if (dist2(ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, e.container.x, e.container.y) < 45 * 45) {
+            spawnExplosion(ctx, ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, 4, 0x8888bb, 0xaaaadd)
+            if (!ctx.bullets[j].gfx.destroyed) ctx.gameLayer.removeChild(ctx.bullets[j].gfx)
+            ctx.bullets.splice(j, 1)
+          }
+        }
+        continue  // chưa vào vị trí, không tấn công
       }
       if (e.bossEntered) {
         // ── Phase 2 transition at 50% HP ──────────────────────────────────
@@ -1455,38 +1577,44 @@ function gameLoop(ticker: Ticker) {
               const ady = ctx.playerShip.y - (e.container.y + gun.offsetY)
               gun.gfx.rotation = Math.atan2(ady, adx) - Math.PI / 2
             }
+            // Cả 2 phase: bắn hình nón 2 lần (cách 0.5s), nghỉ 3s
+            const coneCount = e.bossPhase === 2 ? 5 : 3  // số viên mỗi lần bắn
+            const coneSpread = e.bossPhase === 2 ? 0.30 : 0.22  // góc nón tổng (rad)
+            const spd = (e.bossPhase === 2 ? 5 : 4.5) + game.currentStage * 0.05
             if (gun.burstLeft > 0) {
               gun.rapidTimer -= dt
               if (gun.rapidTimer <= 0) {
-                gun.rapidTimer = 4
+                gun.rapidTimer = 30  // 0.5s giữa mỗi lần bắn
                 gun.burstLeft--
                 if (ctx.playerShip) {
                   const wx = e.container.x + gun.offsetX
                   const wy = e.container.y + gun.offsetY
-                  const adx = ctx.playerShip.x - wx
-                  const ady = ctx.playerShip.y - wy
-                  const angle = Math.atan2(ady, adx) + (Math.random() - 0.5) * 0.12
-                  const spd = 4.5 + game.currentStage * 0.05
-                  const bg = new Graphics()
-                  drawEnemyBullet(bg)
-                  bg.x = wx; bg.y = wy
-                  ctx.gameLayer.addChild(bg)
-                  ctx.enemyBullets.push({ gfx: bg, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd })
+                  const baseAngle = Math.atan2(ctx.playerShip.y - wy, ctx.playerShip.x - wx)
+                  for (let ci = 0; ci < coneCount; ci++) {
+                    const norm = coneCount > 1 ? (ci / (coneCount - 1) - 0.5) : 0
+                    const angle = baseAngle + norm * coneSpread
+                    const bg = new Graphics()
+                    drawEnemyBullet(bg)
+                    bg.x = wx; bg.y = wy
+                    ctx.gameLayer.addChild(bg)
+                    ctx.enemyBullets.push({ gfx: bg, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd })
+                  }
                 }
               }
             } else {
               gun.timer -= dt
-              if (gun.timer <= 0) { gun.timer = 90; gun.burstLeft = 8; gun.rapidTimer = 4 }
+              if (gun.timer <= 0) { gun.timer = 180; gun.burstLeft = 2; gun.rapidTimer = 30 }  // nghỉ 3s
             }
           }
+        }
 
           // ── Missile salvos ───────────────────────────────────────────────
           if ((e.pendingMissiles ?? 0) > 0) {
             e.missileFireTimer = (e.missileFireTimer ?? 0) - dt
             if ((e.missileFireTimer ?? 0) <= 0) {
               e.missileFireTimer = 25
-              const missilePods = e.trumSoGuns.filter(g => g.type === 'missile')
-              const podIdx = 3 - (e.pendingMissiles ?? 1)
+              const missilePods = e.trumSoGuns!.filter(g => g.type === 'missile')
+              const podIdx = 2 - (e.pendingMissiles ?? 1)
               const pod = missilePods[podIdx]
               if (pod) {
                 const wx = e.container.x + pod.offsetX
@@ -1496,7 +1624,7 @@ function gameLoop(ticker: Ticker) {
                 const dx = tx - wx; const dy = ty - wy
                 const mag = Math.sqrt(dx * dx + dy * dy) || 1
                 const mg = new Graphics()
-                drawBossMissile(mg)
+                drawTrumSoMissile(mg)
                 mg.x = wx; mg.y = wy
                 mg.rotation = Math.atan2(dy, dx) + Math.PI / 2
                 ctx.gameLayer.addChild(mg)
@@ -1510,31 +1638,42 @@ function gameLoop(ticker: Ticker) {
             const tx = ctx.playerShip?.x ?? GAME_W / 2
             const ty = ctx.playerShip?.y ?? GAME_H / 2
             e.laserTargetX = tx; e.laserTargetY = ty
-            e.pendingMissiles = 3; e.missileFireTimer = 0
+            e.pendingMissiles = 2; e.missileFireTimer = 0
             e.attack2Timer = 300
             spawnMissileWarning(ctx, tx, ty)
           }
-        }
 
-        // ── Phase 1: Individual sweep lasers ──────────────────────────────
+        // ── Phase 1: Simultaneous salvo lasers (all fire at once) ────────────
         if (e.bossPhase === 1 && e.trumSoLasers) {
           const len = GAME_W + GAME_H
+          // Tick idle timers independently
           for (const laser of e.trumSoLasers) {
+            if (laser.state === 'idle') laser.timer -= dt
+          }
+          // When any idle laser is ready and none are active → trigger ALL at once
+          const anyActive = e.trumSoLasers.some(l => l.state !== 'idle')
+          if (!anyActive && e.trumSoLasers.some(l => l.timer <= 0)) {
+            screenFlash(ctx, 0x5500aa, 0.15, 160)
+            for (const laser of e.trumSoLasers) {
+              const wx = e.container.x + laser.offsetX
+              const wy = e.container.y + laser.offsetY
+              const tx = GAME_W * 0.08 + Math.random() * GAME_W * 0.84
+              const ty = GAME_H * 0.30 + Math.random() * GAME_H * 0.55
+              laser.state = 'warning'; laser.timer = 60
+              laser.angle = Math.atan2(ty - wy, tx - wx)
+            }
+          }
+          // Update warning + firing states
+          for (const laser of e.trumSoLasers) {
+            if (laser.state === 'idle') continue
             const wx = e.container.x + laser.offsetX
             const wy = e.container.y + laser.offsetY
-            if (laser.state === 'idle') {
-              laser.timer -= dt
-              if (laser.timer <= 0 && ctx.playerShip) {
-                laser.state = 'warning'; laser.timer = 55
-                const baseAngle = Math.atan2(ctx.playerShip.y - wy, ctx.playerShip.x - wx)
-                laser.angle = baseAngle + (Math.random() - 0.5) * Math.PI * 0.55
-              }
-            } else if (laser.state === 'warning') {
+            if (laser.state === 'warning') {
               laser.timer -= dt
               const al = 0.28 + Math.abs(Math.sin(laser.timer * 0.15)) * 0.4
               laser.gfx.clear()
               laser.gfx.moveTo(wx, wy).lineTo(wx + Math.cos(laser.angle) * len, wy + Math.sin(laser.angle) * len).stroke({ color: 0xaa44ff, width: 2, alpha: al })
-              if (laser.timer <= 0) { laser.state = 'firing'; laser.timer = 18; screenFlash(ctx, 0x5500aa, 0.15, 160) }
+              if (laser.timer <= 0) { laser.state = 'firing'; laser.timer = 18 }
             } else {
               laser.timer -= dt
               const al = Math.max(0, laser.timer / 18) * 0.9
@@ -1556,42 +1695,70 @@ function gameLoop(ticker: Ticker) {
                   }
                 }
               }
-              if (laser.timer <= 0) { laser.state = 'idle'; laser.timer = 180 + Math.random() * 120; laser.gfx.clear() }
+              if (laser.timer <= 0) { laser.state = 'idle'; laser.timer = 70 + Math.random() * 50; laser.gfx.clear() }
             }
           }
         }
 
-        // ── Phase 2: Combined laser beam ──────────────────────────────────
-        if (e.bossPhase === 2 && e.trumSoPhase2LaserGfx && ctx.playerShip) {
-          const toX = ctx.playerShip.x - e.container.x
-          const toY = ctx.playerShip.y - e.container.y
-          const angle = Math.atan2(toY, toX)
-          const len = GAME_W + GAME_H
-          const pulse = 0.75 + Math.sin(Date.now() * 0.015) * 0.25
+        // ── Phase 2: Core mega-laser (warning → fire, instant-kill) ──────────
+        if (e.bossPhase === 2 && e.trumSoPhase2LaserGfx) {
           const bx = e.container.x; const by = e.container.y
-          e.trumSoPhase2LaserGfx.clear()
-          e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0x7700ff, width: 16, alpha: 0.20 * pulse })
-          e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0xdd66ff, width: 5, alpha: 0.90 * pulse })
-          e.trumSoContinuousDmgTimer = (e.trumSoContinuousDmgTimer ?? 30) - dt
-          if ((e.trumSoContinuousDmgTimer ?? 0) <= 0) {
-            e.trumSoContinuousDmgTimer = 30
-            const lx = Math.cos(angle); const ly = Math.sin(angle)
-            const px = ctx.playerShip.x - bx; const py = ctx.playerShip.y - by
-            const dot = px * lx + py * ly
-            const perpX = px - dot * lx; const perpY = py - dot * ly
-            if (Math.sqrt(perpX * perpX + perpY * perpY) < 16 && dot > 0) {
-              if (!game.absorbShieldHit()) {
-                const dmg = 10 + game.currentStage
-                game.takeDamage(dmg); screenFlash(ctx)
-                spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
-              } else {
-                spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 8, 0x8844ff, 0xcc88ff)
-                screenFlash(ctx, 0x8844ff, 0.22, 180)
+          const len = GAME_W + GAME_H
+          if (e.trumSoPhase2LaserState === 'idle' || e.trumSoPhase2LaserState === undefined) {
+            e.trumSoContinuousDmgTimer = (e.trumSoContinuousDmgTimer ?? 400) - dt
+            e.trumSoPhase2LaserGfx.clear()
+            if ((e.trumSoContinuousDmgTimer ?? 0) <= 0) {
+              const tx = GAME_W * 0.06 + Math.random() * GAME_W * 0.88
+              const ty = GAME_H * 0.25 + Math.random() * GAME_H * 0.55
+              e.trumSoPhase2LaserAngle = Math.atan2(ty - by, tx - bx)
+              e.trumSoPhase2LaserState = 'warning'
+              e.trumSoContinuousDmgTimer = 70
+              screenFlash(ctx, 0x440099, 0.22, 300)
+            }
+          } else if (e.trumSoPhase2LaserState === 'warning') {
+            e.trumSoContinuousDmgTimer = (e.trumSoContinuousDmgTimer ?? 70) - dt
+            const angle = e.trumSoPhase2LaserAngle ?? 0
+            const al = 0.25 + Math.abs(Math.sin((e.trumSoContinuousDmgTimer ?? 0) * 0.13)) * 0.5
+            e.trumSoPhase2LaserGfx.clear()
+            e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0x8800ff, width: 28, alpha: al * 0.3 })
+            e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0xdd44ff, width: 5, alpha: al })
+            if ((e.trumSoContinuousDmgTimer ?? 0) <= 0) {
+              e.trumSoPhase2LaserState = 'firing'
+              e.trumSoContinuousDmgTimer = 22
+              screenFlash(ctx, 0x6600cc, 0.4, 200)
+            }
+          } else {
+            // 'firing'
+            e.trumSoContinuousDmgTimer = (e.trumSoContinuousDmgTimer ?? 22) - dt
+            const angle = e.trumSoPhase2LaserAngle ?? 0
+            const al = Math.max(0, (e.trumSoContinuousDmgTimer ?? 0) / 22)
+            e.trumSoPhase2LaserGfx.clear()
+            e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0x6600cc, width: 54, alpha: al * 0.28 })
+            e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0xee88ff, width: 18, alpha: al * 0.95 })
+            e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0xffffff, width: 4, alpha: al * 0.85 })
+            // Check hit only on first frame of firing
+            if ((e.trumSoContinuousDmgTimer ?? 0) >= 21 && ctx.playerShip) {
+              const lx = Math.cos(angle); const ly = Math.sin(angle)
+              const px = ctx.playerShip.x - bx; const py = ctx.playerShip.y - by
+              const dot = px * lx + py * ly
+              const perpX = px - dot * lx; const perpY = py - dot * ly
+              if (Math.sqrt(perpX * perpX + perpY * perpY) < 22 && dot > 0) {
+                if (!game.absorbShieldHit()) {
+                  game.takeDamage(game.playerMaxHp)
+                  screenFlash(ctx)
+                  spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, game.playerMaxHp)
+                } else {
+                  spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 14, 0x8800ff, 0xee66ff)
+                  screenFlash(ctx, 0x8800ff, 0.45, 300)
+                }
               }
             }
+            if ((e.trumSoContinuousDmgTimer ?? 0) <= 0) {
+              e.trumSoPhase2LaserGfx.clear()
+              e.trumSoPhase2LaserState = 'idle'
+              e.trumSoContinuousDmgTimer = 350 + Math.random() * 150
+            }
           }
-        } else if (e.bossPhase === 2 && e.trumSoPhase2LaserGfx) {
-          e.trumSoPhase2LaserGfx.clear()
         }
 
         // ── Phase 2: Charge dash ──────────────────────────────────────────
@@ -1609,7 +1776,10 @@ function gameLoop(ticker: Ticker) {
               const lane = e.trumSoChargeLane ?? GAME_W / 2
               const al = 0.3 + Math.abs(Math.sin((e.trumSoChargeTimer ?? 0) * 0.18)) * 0.5
               e.trumSoChargeLineGfx.clear()
-              e.trumSoChargeLineGfx.moveTo(lane, 0).lineTo(lane, GAME_H).stroke({ color: 0xff44ff, width: 2.5, alpha: al })
+              // Width matches the boss collision radius (52px each side = 104px total)
+              e.trumSoChargeLineGfx.rect(lane - 52, 0, 104, GAME_H).fill({ color: 0xff44ff, alpha: al * 0.18 })
+              e.trumSoChargeLineGfx.moveTo(lane - 52, 0).lineTo(lane - 52, GAME_H).stroke({ color: 0xff44ff, width: 1.5, alpha: al })
+              e.trumSoChargeLineGfx.moveTo(lane + 52, 0).lineTo(lane + 52, GAME_H).stroke({ color: 0xff44ff, width: 1.5, alpha: al })
             }
             if (e.trumSoChargeLane !== undefined) {
               const ddx = e.trumSoChargeLane - e.container.x
@@ -1633,7 +1803,8 @@ function gameLoop(ticker: Ticker) {
               }
             }
             if (e.container.y > GAME_H + 85) {
-              e.container.y = -70
+              e.container.y = -160   // fully off-screen (size=55, wings to 74px)
+              e.bossEntered = false  // re-trigger entry slide-in to bossTargetY
               e.trumSoCharge = 'idle'; e.trumSoChargeTimer = 900
               e.bossDriftTimer = 60
             }
@@ -1657,6 +1828,32 @@ function gameLoop(ticker: Ticker) {
           ctx.enemyBullets.push({ gfx: rb, vx: -(b.vx ?? 0), vy: Math.abs(b.vy) * 1.1, damage: Math.max(1, Math.round(bulletDmg * 0.5)) })
           if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
           ctx.bullets.splice(j, 1)
+        }
+      }
+      // Reflect shooter missiles (Star Shooter) — loses homing
+      for (let j = ctx.shooterMissiles.length - 1; j >= 0; j--) {
+        const m = ctx.shooterMissiles[j]!
+        if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < 20 * 20) {
+          const rb = new Graphics()
+          drawBossMissile(rb, true)
+          rb.x = m.gfx.x; rb.y = m.gfx.y
+          ctx.gameLayer.addChild(rb)
+          ctx.enemyBullets.push({ gfx: rb, vx: -m.vx, vy: Math.abs(m.vy) * 1.1, homing: false, damage: Math.max(1, Math.round(m.damage * 0.5)) })
+          if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+          ctx.shooterMissiles.splice(j, 1)
+        }
+      }
+      // Reflect player card missiles — loses homing
+      for (let j = ctx.playerMissiles.length - 1; j >= 0; j--) {
+        const m = ctx.playerMissiles[j]!
+        if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < 20 * 20) {
+          const rb = new Graphics()
+          drawBossMissile(rb, true)
+          rb.x = m.gfx.x; rb.y = m.gfx.y
+          ctx.gameLayer.addChild(rb)
+          ctx.enemyBullets.push({ gfx: rb, vx: -m.vx, vy: Math.abs(m.vy) * 1.1, homing: false, damage: Math.max(1, Math.round(m.damage * 0.5)) })
+          if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+          ctx.playerMissiles.splice(j, 1)
         }
       }
       // Skip further damage processing this frame
@@ -1733,6 +1930,10 @@ function gameLoop(ticker: Ticker) {
   for (let i = ctx.expOrbs.length - 1; i >= 0; i--) {
     const o = ctx.expOrbs[i]
     o.y += o.vy * dt; o.gfx.y = o.y
+    // Sparkle: scale and alpha pulse
+    const t = Date.now() * 0.011 + i * 2.3
+    o.gfx.scale.set(0.82 + 0.18 * Math.abs(Math.sin(t)))
+    o.gfx.alpha = 0.65 + 0.35 * Math.abs(Math.sin(Date.now() * 0.007 + i * 1.5))
     if (o.y > GAME_H + 20) { if (!o.gfx.destroyed) ctx.gameLayer.removeChild(o.gfx); ctx.expOrbs.splice(i, 1); continue }
     if (ctx.playerShip && dist2(o.gfx.x, o.y, ctx.playerShip.x, ctx.playerShip.y) < collectR2) {
       game.gainSessionExp(o.amount)
@@ -1750,6 +1951,7 @@ function gameLoop(ticker: Ticker) {
       if (o.age < 30) {
         o.y += o.vy * dt; o.gfx.y = o.y
         o.gfx.alpha = 0.75 + Math.sin(Date.now() * 0.008 + i) * 0.25
+        o.gfx.scale.set(0.88 + 0.12 * Math.abs(Math.sin(Date.now() * 0.013 + i * 1.9)))
         if (o.y > GAME_H + 20) { if (!o.gfx.destroyed) ctx.gameLayer.removeChild(o.gfx); ctx.fragmentOrbs.splice(i, 1) }
       } else {
         const dx = skillTargetX - o.gfx.x; const dy = skillTargetY - o.gfx.y

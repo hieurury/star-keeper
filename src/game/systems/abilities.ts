@@ -198,14 +198,8 @@ export function spawnPlasmaBeam(ctx: GameContext, game: GameStore, x: number, da
 export function dropClusterBomb(ctx: GameContext, game: GameStore, fromX: number, fromY: number, damage: number): void {
   if (!ctx.app || !ctx.gameLayer) return
   let tx: number, ty: number
-  if (ctx.enemies.length > 0) {
-    const pick = ctx.enemies[Math.floor(Math.random() * ctx.enemies.length)]
-    tx = Math.max(40, Math.min(GAME_W - 40, pick.container.x + (Math.random() - 0.5) * 40))
-    ty = Math.max(30, Math.min(GAME_H * 0.85, pick.container.y + (Math.random() - 0.5) * 30))
-  } else {
-    tx = Math.max(40, Math.min(GAME_W - 40, fromX + (Math.random() - 0.5) * 140))
-    ty = GAME_H * 0.15 + Math.random() * GAME_H * 0.45
-  }
+  tx = Math.max(40, Math.min(GAME_W - 40, fromX + (Math.random() - 0.5) * 240))
+  ty = GAME_H * 0.1 + Math.random() * GAME_H * 0.5
   const bomb = new Graphics()
   bomb.circle(0, 0, 9).fill(0xff6600)
   bomb.circle(0, 0, 5).fill(0xffee44)
@@ -242,12 +236,7 @@ export function dropClusterBomb(ctx: GameContext, game: GameStore, fromX: number
 export function fireLaserSweep(ctx: GameContext, game: GameStore, damage: number): void {
   if (!ctx.app || !ctx.gameLayer) return
   let sweepY: number
-  if (ctx.enemies.length > 0) {
-    const pick = ctx.enemies[Math.floor(Math.random() * ctx.enemies.length)]
-    sweepY = pick.container.y
-  } else {
-    sweepY = GAME_H * 0.1 + Math.random() * GAME_H * 0.5
-  }
+  sweepY = GAME_H * 0.1 + Math.random() * GAME_H * 0.5
   screenFlash(ctx, 0xff4400, 0.18, 220)
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
     const e = ctx.enemies[i]

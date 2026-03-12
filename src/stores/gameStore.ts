@@ -445,6 +445,9 @@ export const useGameStore = defineStore('game', () => {
   const accountLevel = ref(1)
   const accountExp = ref(0)
 
+  // Test mode (không ảnh hưởng save / kết quả thật)
+  const testMode = ref<{ type: 'faction'; faction: 'anox' | 'bnox' } | { type: 'boss'; bossKind: string } | null>(null)
+
   // Phi cơ sở hữu
   const ownedShips = ref<string[]>(['star_keeper'])
   const selectedShip = ref('star_keeper')
@@ -1047,6 +1050,12 @@ export const useGameStore = defineStore('game', () => {
     fragmentCount.value = 0
     // Reset card system
     activeCards.value = {}
+    // Test mode: auto-equip only the ship's Kho Vũ Khí card at max level
+    if (testMode.value !== null) {
+      const shipId = selectedShip.value
+      const weaponCache = ALL_CARD_DEFS.find(d => d.shipId === shipId && d.id.startsWith('weapon_cache_') && d.type === 'attack')
+      if (weaponCache) activeCards.value = { [weaponCache.id]: weaponCache.maxLevel }
+    }
     shieldActive.value = false
     shieldLivesLeft.value = 0
     shieldCooldownLeft.value = 0
@@ -1509,5 +1518,7 @@ export const useGameStore = defineStore('game', () => {
     // Save management
     exportSave,
     importSave,
+    // Test mode
+    testMode,
   }
 })

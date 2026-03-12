@@ -95,6 +95,27 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
   const stage = game.currentStage
   const wave: WaveSpawner[] = []
 
+  // ── Test mode override ───────────────────────────────────────────────────────
+  if (game.testMode) {
+    if (game.testMode.type === 'boss') {
+      const k = game.testMode.bossKind
+      if (k === 'boss_stardestroyer') { wave.push(() => { spawnStarDestroyer(ctx, game); ctx.gamePhase = 'bossIntro' }) }
+      else if (k === 'boss_invader')  { wave.push(() => { spawnBossInvader(ctx, game);   ctx.gamePhase = 'bossIntro' }) }
+      else if (k === 'boss_tinhvan')  { wave.push(() => { spawnBossTinhVan(ctx, game);   ctx.gamePhase = 'bossIntro' }) }
+      else if (k === 'boss_trumso')   { wave.push(() => { spawnBossTrumSo(ctx, game);    ctx.gamePhase = 'bossIntro' }) }
+      return wave
+    } else if (game.testMode.type === 'faction') {
+      ctx.activeFaction = game.testMode.faction
+      if (game.testMode.faction === 'bnox') buildBnoxWave(ctx, game, wave)
+      else buildAnoxWave(ctx, game, wave)
+      for (let i = wave.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [wave[i], wave[j]] = [wave[j]!, wave[i]!]
+      }
+      return wave
+    }
+  }
+
   // ── Rotate faction every 5-stage block ──────────────────────────────────────
   const block = Math.floor((stage - 1) / 5)
   if (block !== ctx.factionBlock) {
@@ -109,11 +130,11 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
     const escortCount = Math.min(4, 1 + Math.floor(stage / 10))
     spawnBossEscort(ctx, game, wave, escortCount)
     if (ctx.activeFaction === 'anox') {
-      if (bossIdx % 2 === 1) wave.push(() => spawnBossInvader(ctx, game))
-      else wave.push(() => spawnStarDestroyer(ctx, game))
+      if (bossIdx % 2 === 1) { wave.push(() => { spawnBossInvader(ctx, game); ctx.gamePhase = 'bossIntro' }) }
+      else { wave.push(() => { spawnStarDestroyer(ctx, game); ctx.gamePhase = 'bossIntro' }) }
     } else {
-      if (bossIdx % 2 === 1) wave.push(() => spawnBossTinhVan(ctx, game))
-      else wave.push(() => spawnBossTrumSo(ctx, game))
+      if (bossIdx % 2 === 1) { wave.push(() => { spawnBossTinhVan(ctx, game); ctx.gamePhase = 'bossIntro' }) }
+      else { wave.push(() => { spawnBossTrumSo(ctx, game); ctx.gamePhase = 'bossIntro' }) }
     }
     return wave
   }

@@ -26,12 +26,15 @@ export function drawBossMissile(g: Graphics, small = false): void {
   g.circle(0, 7*s, 2*s).fill({ color: 0xff8800, alpha: 0.9 })
 }
 
-/** Fragment (soul) orb — small glowing orange soul fragment. */
+/** Fragment (soul) orb — teal diamond shape, clearly distinct from enemy bullets. */
 export function drawFragmentOrb(g: Graphics): void {
   g.clear()
-  g.circle(0, 0, 5.5).fill(0xff8800)
-  g.circle(0, 0, 3.2).fill({ color: 0xffdd44, alpha: 0.95 })
-  g.circle(0, 0, 1.4).fill(0xffffff)
+  // Outer diamond glow
+  g.poly([0, -5.5, 3.8, 0, 0, 5.5, -3.8, 0]).fill({ color: 0x00e5ff, alpha: 0.9 })
+  // Inner bright core
+  g.poly([0, -3.0, 2.1, 0, 0, 3.0, -2.1, 0]).fill({ color: 0xaaffff, alpha: 0.9 })
+  // White sparkle center
+  g.circle(0, 0, 1.0).fill(0xffffff)
 }
 
 /** Fragment missile — homing soul shard fired by Star Holder skill. */
@@ -40,4 +43,14 @@ export function drawFragmentMissile(g: Graphics): void {
   g.poly([0, -9, 3, -3, 0, 2, -3, -3]).fill(0xff9900)
   g.poly([0, -9, 2, -5, -2, -5]).fill(0xffee44)
   g.circle(0, 2, 2).fill({ color: 0xff4400, alpha: 0.85 })
+}
+
+/** Purple missile fired by Boss Trùm Sổ. */
+export function drawTrumSoMissile(g: Graphics): void {
+  g.clear()
+  g.rect(-2.5, -8, 5, 14).fill(0x6600cc)
+  g.poly([0, -12, 3, -8, -3, -8]).fill(0xcc66ff)
+  g.poly([-2.5, 4, -5.5, 8, -2.5, 2]).fill(0x330066)
+  g.poly([2.5, 4, 5.5, 8, 2.5, 2]).fill(0x330066)
+  g.circle(0, 7, 2).fill({ color: 0xff44ff, alpha: 0.9 })
 }

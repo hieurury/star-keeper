@@ -96,7 +96,7 @@ export function spawnBossTinhVan(ctx: GameContext, game: GameStore): void {
     gg.x = offX; gg.y = offY
     return {
       gfx: gg, offsetX: offX, offsetY: offY,
-      shootTimer: 0, burstLeft: 0,
+      shootTimer: 180, burstLeft: 0,
       pauseTimer: 30 + idx * 30,  // stagger initial bursts
     }
   })

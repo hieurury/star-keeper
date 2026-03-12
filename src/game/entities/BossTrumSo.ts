@@ -128,7 +128,11 @@ export function spawnBossTrumSo(ctx: GameContext, game: GameStore): void {
 
   // ── 2 Machine gun turrets (on wings) ──────────────────────────────────────
   const trumSoGuns: TrumSoGun[] = []
-  const mgOffsets: [number, number][] = [[-82, 12], [82, 12]]
+  // ── 6 Machine gun turrets — 3 per wing ─────────────────────────────────────
+  const mgOffsets: [number, number][] = [
+    [-54, -4], [-68, 12], [-58, 28],  // left wing
+    [ 54, -4], [ 68, 12], [ 58, 28],  // right wing
+  ]
   for (const [offX, offY] of mgOffsets) {
     const gg = new Graphics()
     drawTrumSoMachineGun(gg)
@@ -143,8 +147,8 @@ export function spawnBossTrumSo(ctx: GameContext, game: GameStore): void {
     })
   }
 
-  // ── 3 Missile pods ─────────────────────────────────────────────────────────
-  const missileOffsets: [number, number][] = [[-38, -28], [0, 28], [38, -28]]
+  // ── 2 Missile pods — 1 per wing ────────────────────────────────────────────
+  const missileOffsets: [number, number][] = [[-46, 18], [46, 18]]
   for (const [offX, offY] of missileOffsets) {
     const pg = new Graphics()
     drawTrumSoMissilePod(pg)
@@ -159,9 +163,9 @@ export function spawnBossTrumSo(ctx: GameContext, game: GameStore): void {
     })
   }
 
-  // ── 6 Laser emitter nodes (world-space laser graphics) ─────────────────────
+  // ── 4 Laser emitter nodes — concentrated in head section ───────────────────
   const laserNodeOffsets: [number, number][] = [
-    [0, -62], [54, -30], [60, 26], [28, 58], [-28, 58], [-60, 26],
+    [-18, -52], [18, -52], [-30, -24], [30, -24],
   ]
   const trumSoLasers: TrumSoLaser[] = []
   for (let li = 0; li < laserNodeOffsets.length; li++) {
@@ -175,7 +179,7 @@ export function spawnBossTrumSo(ctx: GameContext, game: GameStore): void {
     trumSoLasers.push({
       gfx: laserGfx, offsetX: offX, offsetY: offY,
       state: 'idle',
-      timer: 120 + li * 50 + Math.random() * 80,
+      timer: 100 + li * 60 + Math.random() * 60,
       angle: 0,
     })
   }
@@ -232,7 +236,9 @@ export function spawnBossTrumSo(ctx: GameContext, game: GameStore): void {
     trumSoChargeTimer: 900,
     trumSoChargeLane: GAME_W / 2,
     trumSoChargeLineGfx: chargeLineGfx,
-    trumSoContinuousDmgTimer: 30,
+    trumSoContinuousDmgTimer: 400,
+    trumSoPhase2LaserState: 'idle',
+    trumSoPhase2LaserAngle: 0,
   })
   game.stageEnemiesTotal++
 }

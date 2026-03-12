@@ -200,6 +200,10 @@ function startGame() {
   router.push('/game')
 }
 
+function goToTest() {
+  router.push('/test')
+}
+
 const canPlay = computed(() => {
   const dur = game.shipDurabilities[game.selectedShip] ?? (SHIP_DURABILITY_MAX[game.selectedShip] ?? 100)
   return dur >= 10
@@ -419,6 +423,10 @@ function onShipNameKey(e: KeyboardEvent) {
           <button class="menu-tile" @click="showSettingsPanel = true">
             <PhGear :size="24" weight="fill" />
             <span>Cài Đặt</span>
+          </button>
+          <button v-if="game.isAdminMode" class="menu-tile menu-tile--test" @click="goToTest">
+            <PhWrench :size="24" weight="fill" />
+            <span>Thử Nghiệm</span>
           </button>
         </div>
       </div>
@@ -1287,6 +1295,8 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .menu-tile:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .menu-tile:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--color-border-dark); }
+.menu-tile--test { border-color: #f39c12; color: #f39c12; }
+.menu-tile--test:hover { border-color: #f1c40f; color: #f1c40f; }
 
 /* Footer */
 .home__footer {
