@@ -96,8 +96,9 @@ export function spawnBossTinhVan(ctx: GameContext, game: GameStore): void {
     gg.x = offX; gg.y = offY
     return {
       gfx: gg, offsetX: offX, offsetY: offY,
-      shootTimer: 180, burstLeft: 0,
-      pauseTimer: 30 + idx * 30,  // stagger initial bursts
+      shootTimer: 45 + idx * 45,  // stagger: 45, 90, 135, 180 frames
+      burstLeft: 0,
+      pauseTimer: 0,
     }
   })
 
@@ -138,7 +139,7 @@ export function spawnBossTinhVan(ctx: GameContext, game: GameStore): void {
     bossTargetY: GAME_H * 0.20,
     bossPhase: 1,
     attack1Timer: 360,    // first black hole after 6s
-    attack2Timer: 1800,   // phase 2 summon cooldown: 30s
+    attack2Timer: 2100,   // phase 2 summon cooldown: 35s
     bossDriftTimer: 0,
     tinhVanGuns: guns,
     blackHoles: [],

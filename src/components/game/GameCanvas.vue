@@ -1,9 +1,9 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { Application, Graphics, Container, Text, TextStyle, Ticker } from 'pixi.js'
 import { useGameStore } from '../../stores/gameStore'
 
-// ─── Modular game system imports ──────────────────────────────────────────────
+// --- Modular game system imports ----------------------------------------------
 import { createGameContext } from '../../game/context'
 import { GAME_W, GAME_H, TOUCH_Y_OFFSET, INTRO_FRAMES, STAGE_TITLE_FRAMES } from '../../game/constants'
 import { dist2, redrawHpBar, findNearestEnemy } from '../../game/utils'
@@ -37,7 +37,7 @@ let zoomIndicatorText: Text | null = null
 let zoomIndicatorTimer = 0
 let zoomIndicatorLastZoom = 1.0
 
-// ─── Auto-pause on tab switch / window blur ───────────────────────────────────
+// --- Auto-pause on tab switch / window blur -----------------------------------
 function handleVisibilityChange() {
   if (document.hidden) {
     if (game.isPlaying && !game.isPaused) {
@@ -45,7 +45,7 @@ function handleVisibilityChange() {
       autoPaused = true
     }
   } else if (autoPaused) {
-    // Game stays paused — player must press "Tiếp Tục" manually
+    // Game stays paused � player must press "Ti?p T?c" manually
     autoPaused = false
   }
 }
@@ -56,11 +56,11 @@ function handleWindowBlur() {
   }
 }
 function handleWindowFocus() {
-  // Game stays paused — player must press "Tiếp Tục" manually
+  // Game stays paused � player must press "Ti?p T?c" manually
   if (autoPaused) autoPaused = false
 }
 
-// ─── Shoot ────────────────────────────────────────────────────────────────────
+// --- Shoot --------------------------------------------------------------------
 function shoot(offsetX = 0, vxDrift = 0) {
   if (!ctx.playerShip) return
   const g = new Graphics()
@@ -71,7 +71,7 @@ function shoot(offsetX = 0, vxDrift = 0) {
   ctx.bullets.push({ gfx: g, vy: 8 * game.upgrades.bulletSpeed, vx: vxDrift })
 }
 
-// ─── Game loop ────────────────────────────────────────────────────────────────
+// --- Game loop ----------------------------------------------------------------
 function gameLoop(ticker: Ticker) {
   if (!app || !game.isPlaying || game.isGameOverSequence) return
   const dt = ticker.deltaTime
@@ -82,7 +82,7 @@ function gameLoop(ticker: Ticker) {
     if (s.gfx.y > GAME_H) s.gfx.y = -4
   }
 
-  // ── INTRO PHASE ──────────────────────────────────────────────────────────
+  // -- INTRO PHASE ----------------------------------------------------------
   if (ctx.gamePhase === 'intro') {
     ctx.introTimer += dt
     const progress = Math.min(ctx.introTimer / INTRO_FRAMES, 1)
@@ -102,7 +102,7 @@ function gameLoop(ticker: Ticker) {
         stroke: { color: 0x000000, width: 4 },
         dropShadow: { color: 0xff8800, blur: 12, distance: 0, angle: 0, alpha: 0.9 },
       })
-      ctx.stageTitleText = new Text({ text: 'CHẾ ĐỘ VÔ TẬN', style })
+      ctx.stageTitleText = new Text({ text: 'CH? �? V� T?N', style })
       ctx.stageTitleText.anchor.set(0.5, 0.5)
       ctx.stageTitleText.x = GAME_W / 2
       ctx.stageTitleText.y = GAME_H * 0.38
@@ -112,7 +112,7 @@ function gameLoop(ticker: Ticker) {
     return
   }
 
-  // ── STAGE TITLE PHASE ────────────────────────────────────────────────────
+  // -- STAGE TITLE PHASE ----------------------------------------------------
   if (ctx.gamePhase === 'stageTitle') {
     ctx.stageTitleTimer += dt
     if (ctx.stageTitleText) {
@@ -149,9 +149,9 @@ function gameLoop(ticker: Ticker) {
     return
   }
 
-  // ── BOSS INTRO PHASE: boss đang trượt vào, không bắn, chỉ di chuyển ─────
+  // -- BOSS INTRO PHASE: boss dang tru?t v�o, kh�ng b?n, ch? di chuy?n -----
   if (ctx.gamePhase === 'bossIntro') {
-    // Tiếp tục di chuyển các viên đạn đã bắn ra trước đó
+    // Ti?p t?c di chuy?n c�c vi�n d?n d� b?n ra tru?c d�
     for (let i = ctx.bullets.length - 1; i >= 0; i--) {
       const b = ctx.bullets[i]
       b.gfx.y -= b.vy * dt
@@ -161,7 +161,7 @@ function gameLoop(ticker: Ticker) {
         ctx.bullets.splice(i, 1)
       }
     }
-    // Cho phép di chuyển máy bay người chơi
+    // Cho ph�p di chuy?n m�y bay ngu?i choi
     if (ctx.playerShip && ctx.isDragging) {
       const _bz = ctx.bossZoom
       const _blx = GAME_W * (1 - _bz) / 2; const _bly = GAME_H * (1 - _bz) / 2
@@ -174,7 +174,7 @@ function gameLoop(ticker: Ticker) {
       ctx.playerShip.x = Math.max(20, Math.min(GAME_W - 20, ctx.playerShip.x))
       ctx.playerShip.y = Math.max(60, Math.min(GAME_H - 60, ctx.playerShip.y))
     }
-    // Chạy entry animation + post-entry timer cho boss
+    // Ch?y entry animation + post-entry timer cho boss
     let battleReady = false
     for (const e of ctx.enemies) {
       if (!e.kind.startsWith('boss')) continue
@@ -193,11 +193,11 @@ function gameLoop(ticker: Ticker) {
           const targetY = e.bossTargetY ?? GAME_H * 0.20
           if (e.container.y >= targetY) {
             e.container.y = targetY; e.bossEntered = true
-            e.bossBattleTimer = 60  // thêm 1s delay sau khi vào vị trí
+            e.bossBattleTimer = 60  // th�m 1s delay sau khi v�o v? tr�
           }
         }
       } else {
-        // Đã vào vị trí, chờ timer trước khi bắt đầu chiến đấu
+        // �� v�o v? tr�, ch? timer tru?c khi b?t d?u chi?n d?u
         if (e.kind === 'boss_tinhvan') {
           if (e.body) e.body.rotation += 0.003 * dt
           e.bossBattleTimer = (e.bossBattleTimer ?? 180) - dt
@@ -221,7 +221,7 @@ function gameLoop(ticker: Ticker) {
     }
     ctx.gameLayer.scale.set(ctx.bossZoom)
     ctx.gameLayer.position.set(GAME_W * (1 - ctx.bossZoom) / 2, GAME_H * (1 - ctx.bossZoom) / 2)
-    // Chuyển sang 'playing' sau khi hết delay — reset shootTimer để không bắn ngay lập tức
+    // Chuy?n sang 'playing' sau khi h?t delay � reset shootTimer d? kh�ng b?n ngay l?p t?c
     if (battleReady) {
       ctx.gamePhase = 'playing'
       ctx.shootTimer = 0
@@ -229,7 +229,7 @@ function gameLoop(ticker: Ticker) {
     return
   }
 
-  // ── PLAYING PHASE ────────────────────────────────────────────────────────
+  // -- PLAYING PHASE --------------------------------------------------------
   if (game.isPaused) return
 
   game.tickSkillCooldown(dt / 60)
@@ -389,7 +389,7 @@ function gameLoop(ticker: Ticker) {
     const pdist = Math.sqrt(pdx * pdx + pdy * pdy) || 1
     const projSpd = 11 * dt
     if (pdist <= projSpd + 2) {
-      // Arrived — spawn black hole at target position
+      // Arrived � spawn black hole at target position
       if (!proj.destroyed) ctx.gameLayer.removeChild(proj)
       ctx.shooterBlackHoleProjGfx = null
       const g = new Graphics()
@@ -585,11 +585,11 @@ function gameLoop(ticker: Ticker) {
   // Pioneer, Kamikaze, Sniper, BossStarDestroyer, BossInvader are updated inline here
   // since they reach into ctx directly for PixiJS ops and shared state.
 
-  // ── Boss zoom: smooth scale-out when Tinh Vân boss is alive ──────────────────
+  // -- Boss zoom: smooth scale-out when Tinh V�n boss is alive ------------------
   const tinhVanAlive = ctx.enemies.some(e => e.kind === 'boss_tinhvan' && e.bossEntered)
   ctx.bossZoomTarget = tinhVanAlive ? 0.75 : 1.0
   if (Math.abs(ctx.bossZoom - ctx.bossZoomTarget) > 0.001) {
-    const zSpeed = 0.006 * dt  // chậm hơn — zoom mượt hơn
+    const zSpeed = 0.006 * dt  // ch?m hon � zoom mu?t hon
     ctx.bossZoom += Math.sign(ctx.bossZoomTarget - ctx.bossZoom) * Math.min(zSpeed, Math.abs(ctx.bossZoomTarget - ctx.bossZoom))
   }
   const bz = ctx.bossZoom
@@ -600,7 +600,7 @@ function gameLoop(ticker: Ticker) {
   if (zoomIndicatorText) {
     if (Math.abs(bz - zoomIndicatorLastZoom) > 0.002) {
       zoomIndicatorLastZoom = bz
-      zoomIndicatorText.text = `TẦM NHÌN: ${Math.round(bz * 100)}%`
+      zoomIndicatorText.text = `T?M NH�N: ${Math.round(bz * 100)}%`
       zoomIndicatorText.alpha = 1
       zoomIndicatorTimer = 150
     } else if (zoomIndicatorTimer > 0) {
@@ -611,14 +611,14 @@ function gameLoop(ticker: Ticker) {
     }
   }
 
-  // ── Thủ Hộ swarm reflect (global) ──────────────────────────────────────────
+  // -- Th? H? swarm reflect (global) ------------------------------------------
   const thuHoAlive = ctx.enemies.filter(e => e.kind === 'thu_ho').length
   if (thuHoAlive >= 4) {
     ctx.thuHoReflectTimer -= dt
     if (!ctx.thuHoReflecting && ctx.thuHoReflectTimer <= 0) {
       ctx.thuHoReflecting = true
       ctx.thuHoReflectGlow = 30             // 0.5 s at 60 fps
-      ctx.thuHoReflectTimer = 300 + Math.random() * 120  // 5–7 s
+      ctx.thuHoReflectTimer = 300 + Math.random() * 120  // 5�7 s
       for (const _e of ctx.enemies) {
         if (_e.kind === 'thu_ho') drawThuHo(_e.body, 13, true)
       }
@@ -940,7 +940,7 @@ function gameLoop(ticker: Ticker) {
           e.container.x = Math.max(15, Math.min(GAME_W - 15, e.container.x))
           e.container.y = Math.max(15, Math.min(GAME_H - 60, e.container.y))
         } else {
-          // No shield available — gentle oscillation while looking for one
+          // No shield available � gentle oscillation while looking for one
           const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.008
           e.container.x += Math.sin(t * 0.9) * 0.4 * dt
           e.container.x = Math.max(20, Math.min(GAME_W - 20, e.container.x))
@@ -999,7 +999,7 @@ function gameLoop(ticker: Ticker) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.18
           e.bossEntered = true
         }
-        continue  // chưa vào vị trí, không tấn công
+        continue  // chua v�o v? tr�, kh�ng t?n c�ng
       }
       if (e.bossEntered) {
         if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
@@ -1007,7 +1007,7 @@ function gameLoop(ticker: Ticker) {
           screenFlash(ctx, 0x4466ff, 0.5, 600)
           spawnExplosion(ctx, e.container.x, e.container.y, 28, 0x4466ff, 0xaaccff)
           if (e.bossLabel) {
-            e.bossLabel.text = 'ANOX - DIỆT SAO [PHASE 2]'
+            e.bossLabel.text = 'ANOX - DI?T SAO [PHASE 2]'
             e.bossLabel.style = new TextStyle({ fill: 0xff88cc, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000022, width: 3 } })
           }
           if (e.laserLine) { e.laserLine.clear(); e.laserLine.visible = false }
@@ -1110,7 +1110,7 @@ function gameLoop(ticker: Ticker) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.22
           e.bossEntered = true
         }
-        continue  // chưa vào vị trí, không tấn công
+        continue  // chua v�o v? tr�, kh�ng t?n c�ng
       }
       if (e.bossEntered) {
         if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
@@ -1118,7 +1118,7 @@ function gameLoop(ticker: Ticker) {
           screenFlash(ctx, 0x2255ff, 0.5, 600)
           spawnExplosion(ctx, e.container.x, e.container.y, 28, 0x2255ff, 0x88bbff)
           if (e.bossLabel) {
-            e.bossLabel.text = 'ANOX - KẺ XÂM LĂNG [PHASE 2]'
+            e.bossLabel.text = 'ANOX - K? X�M LANG [PHASE 2]'
             e.bossLabel.style = new TextStyle({ fill: 0xff88cc, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000022, width: 3 } })
           }
           if (e.bossTurrets) {
@@ -1238,19 +1238,19 @@ function gameLoop(ticker: Ticker) {
     }
 
     else if (e.kind === 'boss_tinhvan') {
-      // ── Entry ─────────────────────────────────────────────────────────────
+      // -- Entry -------------------------------------------------------------
       if (!e.bossEntered) {
         e.container.y += 1.0 * dt
         if (e.container.y >= (e.bossTargetY ?? GAME_H * 0.20)) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.20
           e.bossEntered = true
           e.bossBattleReady = false
-          e.bossBattleTimer = 180  // 3s: chờ zoom xong + delay trước khi tấn công
+          e.bossBattleTimer = 180  // 3s: ch? zoom xong + delay tru?c khi t?n c�ng
         }
-        continue  // chưa vào vị trí, không làm gì cả
+        continue  // chua v�o v? tr�, kh�ng l�m g� c?
       }
 
-      // Chờ timer đếm xuống 0 trước khi bắt đầu trận chiến
+      // Ch? timer d?m xu?ng 0 tru?c khi b?t d?u tr?n chi?n
       if (!e.bossBattleReady) {
         e.body.rotation += 0.003 * dt
         e.bossBattleTimer = (e.bossBattleTimer ?? 180) - dt
@@ -1258,20 +1258,20 @@ function gameLoop(ticker: Ticker) {
           e.bossBattleReady = true
           screenFlash(ctx, 0x6600aa, 0.3, 400)
         }
-        continue  // chưa sẵn sàng, bỏ qua toàn bộ logic tấn công
+        continue  // chua s?n s�ng, b? qua to�n b? logic t?n c�ng
       }
 
       if (e.bossEntered && e.bossBattleReady) {
         // Body slow rotation
         e.body.rotation += 0.003 * dt
 
-        // Phase 1 → 2 transition at 50% HP
+        // Phase 1 ? 2 transition at 50% HP
         if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
           e.bossPhase = 2
           screenFlash(ctx, 0x660099, 0.6, 700)
           spawnExplosion(ctx, e.container.x, e.container.y, 36, 0x6600aa, 0xcc44ff)
           if (e.bossLabel) {
-            e.bossLabel.text = 'BNOX - TINH VÂN HẮC ÁM [PHASE 2]'
+            e.bossLabel.text = 'BNOX - TINH V�N H?C �M [PHASE 2]'
             e.bossLabel.style = new TextStyle({ fill: 0xff44ff, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000011, width: 3 } })
           }
           // Remove lingering black holes
@@ -1294,33 +1294,50 @@ function gameLoop(ticker: Ticker) {
           e.container.x += Math.min(Math.abs(ddx), 1.5 * dt) * Math.sign(ddx)
         }
 
-        // ── Gun burst fire (both phases) ────────────────────────────────────
+        // -- Gun burst fire (both phases) ------------------------------------
         if (e.tinhVanGuns) {
-          const phase2Boost = e.bossPhase === 2 ? 1 : 0
+          const phase2 = e.bossPhase === 2
+          const spd = 3.5 + (phase2 ? 1.2 : 0) + game.currentStage * 0.1
+          const spread = phase2 ? 0.20 : 0.13
           for (const gun of e.tinhVanGuns) {
-            // Mỗi 2s (120 frame) bắn 2 viên cùng lúc
-            gun.shootTimer -= dt
-            if (gun.shootTimer <= 0 && ctx.playerShip) {
-              gun.shootTimer = 120
-              const worldX = e.container.x + gun.offsetX
-              const worldY = e.container.y + gun.offsetY
-              const tx = ctx.playerShip.x - worldX
-              const ty = ctx.playerShip.y - worldY
-              const spd = 3.5 + phase2Boost * 0.8 + game.currentStage * 0.1
-              const baseAngle = Math.atan2(ty, tx)
-              const spread = 0.13  // ~7.5°
-              for (const ao of [-spread, spread]) {
-                const bg = new Graphics()
-                drawEnemyBullet(bg)
-                bg.x = worldX; bg.y = worldY + 10
-                ctx.gameLayer.addChild(bg)
-                ctx.enemyBullets.push({ gfx: bg, vx: Math.cos(baseAngle + ao) * spd, vy: Math.sin(baseAngle + ao) * spd })
+            if (gun.burstLeft > 0) {
+              // �ang trong burst: d?m cooldown gi?a m?i lo?t
+              gun.shootTimer -= dt
+              if (gun.shootTimer <= 0 && ctx.playerShip) {
+                gun.shootTimer = phase2 ? 40 : 36  // 0.67s / 0.6s gi?a m?i lo?t
+                gun.burstLeft--
+                const worldX = e.container.x + gun.offsetX
+                const worldY = e.container.y + gun.offsetY
+                const baseAngle = Math.atan2(ctx.playerShip.y - (worldY + 10), ctx.playerShip.x - worldX)
+                for (const ao of [-spread, spread]) {
+                  const bg = new Graphics()
+                  drawEnemyBullet(bg)
+                  bg.x = worldX; bg.y = worldY + 10
+                  ctx.gameLayer.addChild(bg)
+                  ctx.enemyBullets.push({ gfx: bg, vx: Math.cos(baseAngle + ao) * spd, vy: Math.sin(baseAngle + ao) * spd })
+                }
+                if (phase2) {
+                  // Vi�n gi?a b?n th?ng v�o ngu?i choi
+                  const bgC = new Graphics()
+                  drawEnemyBullet(bgC)
+                  bgC.x = worldX; bgC.y = worldY + 10
+                  ctx.gameLayer.addChild(bgC)
+                  ctx.enemyBullets.push({ gfx: bgC, vx: Math.cos(baseAngle) * spd, vy: Math.sin(baseAngle) * spd })
+                }
+                if (gun.burstLeft === 0) gun.shootTimer = phase2 ? 240 : 240  // ngh? 4s sau burst
+              }
+            } else {
+              // Ngh?: d?m cooldown, khi xong k�ch ho?t burst
+              gun.shootTimer -= dt
+              if (gun.shootTimer <= 0) {
+                gun.burstLeft = phase2 ? 3 : 2
+                gun.shootTimer = 0  // b?n ngay tick sau
               }
             }
           }
         }
 
-        // ── Phase 1: Black hole spawn ────────────────────────────────────────
+        // -- Phase 1: Black hole spawn ----------------------------------------
         if (e.bossPhase === 1) {
           e.attack1Timer = (e.attack1Timer ?? 600) - dt
           if ((e.attack1Timer ?? 0) <= 0) {
@@ -1335,7 +1352,7 @@ function gameLoop(ticker: Ticker) {
           }
         }
 
-        // ── Black hole update (both phases) ─────────────────────────────────
+        // -- Black hole update (both phases) ---------------------------------
         if (e.blackHoles) {
           for (let bhi = e.blackHoles.length - 1; bhi >= 0; bhi--) {
             const bh = e.blackHoles[bhi]!
@@ -1379,11 +1396,11 @@ function gameLoop(ticker: Ticker) {
               const pdy = bh.y - ctx.playerShip.y
               const pd = Math.sqrt(pdx * pdx + pdy * pdy) || 1
               if (pd < pullR) {
-                // Nếu người chơi đang di chuyển ra ngoài, kháng lại một phần
+                // N?u ngu?i choi dang di chuy?n ra ngo�i, kh�ng l?i m?t ph?n
                 if (bh.lastPlayerX !== undefined && bh.lastPlayerY !== undefined) {
                   const moveDx = ctx.playerShip.x - bh.lastPlayerX
                   const moveDy = ctx.playerShip.y - bh.lastPlayerY
-                  // Thành phần hướng ra ngoài: dương = đang thoát khỏi hố đen
+                  // Th�nh ph?n hu?ng ra ngo�i: duong = dang tho�t kh?i h? den
                   const outwardDot = moveDx * (-pdx / pd) + moveDy * (-pdy / pd)
                   if (outwardDot > 0) {
                     const resistFactor = (1 - pd / pullR) * 0.6 * fadeA
@@ -1444,22 +1461,22 @@ function gameLoop(ticker: Ticker) {
                 ctx.shooterMissiles.splice(mi, 1)
               }
             }
-            // Enemy bullets are NOT pulled by black holes — only player projectiles are affected
+            // Enemy bullets are NOT pulled by black holes � only player projectiles are affected
           }
         }
 
-        // ── Phase 2: Nebula portal summon (30s cooldown) ─────────────────────
+        // -- Phase 2: Nebula portal summon (30s cooldown) ---------------------
         if (e.bossPhase === 2) {
           if ((e.pendingMissiles ?? 0) === 0) {
-            e.attack2Timer = (e.attack2Timer ?? 1800) - dt
+            e.attack2Timer = (e.attack2Timer ?? 2100) - dt
             if ((e.attack2Timer ?? 0) <= 0) {
-              e.pendingMissiles = 4   // 4 spawn calls → ~7 Bnox enemies
+              e.pendingMissiles = 4   // 4 spawn calls ? ~7 Bnox enemies
               e.missileFireTimer = 50
               // Create 2 portal black holes at random screen positions
               e.blackHoles = e.blackHoles ?? []
               for (let pi = 0; pi < 2; pi++) {
                 const pX = GAME_W * 0.15 + Math.random() * GAME_W * 0.70
-                const pY = GAME_H * 0.02 + Math.random() * GAME_H * 0.10  // mở cổng ở trên cùng
+                const pY = GAME_H * 0.02 + Math.random() * GAME_H * 0.10  // m? c?ng ? tr�n c�ng
                 const pGfx = new Graphics()
                 pGfx.x = pX; pGfx.y = pY
                 ctx.gameLayer.addChild(pGfx)
@@ -1483,13 +1500,13 @@ function gameLoop(ticker: Ticker) {
               if (r < 0.45) { spawnDaiLienPair(ctx, game); spawnType = 'dai_lien' }
               else if (r < 0.75) { spawnThuatSi(ctx, game); spawnType = 'thuat_si' }
               else { spawnThuHoSwarm(ctx, game); spawnType = 'thu_ho' }
-              // Teleport newly spawned enemies to portal, mỗi loại giữ vị trí chiến thuật của mình
+              // Teleport newly spawned enemies to portal, m?i lo?i gi? v? tr� chi?n thu?t c?a m�nh
               for (let ni = beforeCount; ni < ctx.enemies.length; ni++) {
                 const ne = ctx.enemies[ni]!
                 ne.container.x = spawnX + (Math.random() - 0.5) * 30
                 ne.container.y = spawnY
                 const atkX = GAME_W * 0.10 + Math.random() * GAME_W * 0.80
-                // Liên xạ: giữ tầm cao; Thử hộ: tầm giữa chắn đạn; Thuật sĩ: tầm dưới để hồi máu
+                // Li�n x?: gi? t?m cao; Th? h?: t?m gi?a ch?n d?n; Thu?t si: t?m du?i d? h?i m�u
                 const atkY = spawnType === 'dai_lien'
                   ? GAME_H * 0.15 + Math.random() * GAME_H * 0.15
                   : spawnType === 'thu_ho'
@@ -1513,7 +1530,7 @@ function gameLoop(ticker: Ticker) {
                     }
                   }
                 }
-                e.attack2Timer = 1800  // 30s cooldown
+                e.attack2Timer = 2100  // 35s cooldown
               }
             }
           }
@@ -1522,14 +1539,14 @@ function gameLoop(ticker: Ticker) {
     }
 
     else if (e.kind === 'boss_trumso') {
-      // ── Entry ──────────────────────────────────────────────────────────────
+      // -- Entry --------------------------------------------------------------
       if (!e.bossEntered) {
         e.container.y += 1.2 * dt
         if (e.container.y >= (e.bossTargetY ?? GAME_H * 0.20)) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.20
           e.bossEntered = true
         }
-        // Bất tử khi tái xuất: hấp thụ đạn (không xuyên qua) nhưng không nhận sát thương
+        // B?t t? khi t�i xu?t: h?p th? d?n (kh�ng xuy�n qua) nhung kh�ng nh?n s�t thuong
         for (let j = ctx.bullets.length - 1; j >= 0; j--) {
           if (dist2(ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, e.container.x, e.container.y) < 45 * 45) {
             spawnExplosion(ctx, ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, 4, 0x8888bb, 0xaaaadd)
@@ -1537,16 +1554,16 @@ function gameLoop(ticker: Ticker) {
             ctx.bullets.splice(j, 1)
           }
         }
-        continue  // chưa vào vị trí, không tấn công
+        continue  // chua v�o v? tr�, kh�ng t?n c�ng
       }
       if (e.bossEntered) {
-        // ── Phase 2 transition at 50% HP ──────────────────────────────────
+        // -- Phase 2 transition at 50% HP ----------------------------------
         if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
           e.bossPhase = 2
           screenFlash(ctx, 0x6600cc, 0.55, 700)
           spawnExplosion(ctx, e.container.x, e.container.y, 34, 0x6600cc, 0xcc44ff)
           if (e.bossLabel) {
-            e.bossLabel.text = 'BNOX - TRÙM SÒ [PHASE 2]'
+            e.bossLabel.text = 'BNOX - TR�M S� [PHASE 2]'
             e.bossLabel.style = new TextStyle({ fill: 0xff88ff, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000011, width: 3 } })
           }
           if (e.trumSoLasers) {
@@ -1556,7 +1573,7 @@ function gameLoop(ticker: Ticker) {
           e.trumSoContinuousDmgTimer = 30
         }
 
-        // ── Horizontal drift (skipped during charge) ──────────────────────
+        // -- Horizontal drift (skipped during charge) ----------------------
         if (e.trumSoCharge !== 'charging') {
           e.bossDriftTimer = (e.bossDriftTimer ?? 0) - dt
           if ((e.bossDriftTimer ?? 0) <= 0) {
@@ -1569,22 +1586,22 @@ function gameLoop(ticker: Ticker) {
           }
         }
 
-        // ── Machine gun turrets ────────────────────────────────────────────
-        if (e.trumSoGuns) {
+        // -- Machine gun turrets --------------------------------------------
+        if (e.trumSoGuns && e.trumSoCharge === 'idle') {
           for (const gun of e.trumSoGuns.filter(g => g.type === 'machinegun')) {
             if (ctx.playerShip) {
               const adx = ctx.playerShip.x - (e.container.x + gun.offsetX)
               const ady = ctx.playerShip.y - (e.container.y + gun.offsetY)
               gun.gfx.rotation = Math.atan2(ady, adx) - Math.PI / 2
             }
-            // Cả 2 phase: bắn hình nón 2 lần (cách 0.5s), nghỉ 3s
-            const coneCount = e.bossPhase === 2 ? 5 : 3  // số viên mỗi lần bắn
-            const coneSpread = e.bossPhase === 2 ? 0.30 : 0.22  // góc nón tổng (rad)
+            // C? 2 phase: b?n h�nh n�n 2 l?n (c�ch 0.5s), ngh? 3s
+            const coneCount = e.bossPhase === 2 ? 5 : 3  // s? vi�n m?i l?n b?n
+            const coneSpread = e.bossPhase === 2 ? 0.30 : 0.22  // g�c n�n t?ng (rad)
             const spd = (e.bossPhase === 2 ? 5 : 4.5) + game.currentStage * 0.05
             if (gun.burstLeft > 0) {
               gun.rapidTimer -= dt
               if (gun.rapidTimer <= 0) {
-                gun.rapidTimer = 30  // 0.5s giữa mỗi lần bắn
+                gun.rapidTimer = 30  // 0.5s gi?a m?i l?n b?n
                 gun.burstLeft--
                 if (ctx.playerShip) {
                   const wx = e.container.x + gun.offsetX
@@ -1603,12 +1620,13 @@ function gameLoop(ticker: Ticker) {
               }
             } else {
               gun.timer -= dt
-              if (gun.timer <= 0) { gun.timer = 180; gun.burstLeft = 2; gun.rapidTimer = 30 }  // nghỉ 3s
+              if (gun.timer <= 0) { gun.timer = 180; gun.burstLeft = 2; gun.rapidTimer = 30 }  // ngh? 3s
             }
           }
         }
 
-          // ── Missile salvos ───────────────────────────────────────────────
+          if (e.trumSoCharge === 'idle') {
+          // -- Missile salvos -----------------------------------------------
           if ((e.pendingMissiles ?? 0) > 0) {
             e.missileFireTimer = (e.missileFireTimer ?? 0) - dt
             if ((e.missileFireTimer ?? 0) <= 0) {
@@ -1642,17 +1660,18 @@ function gameLoop(ticker: Ticker) {
             e.attack2Timer = 300
             spawnMissileWarning(ctx, tx, ty)
           }
+          }
 
-        // ── Phase 1: Simultaneous salvo lasers (all fire at once) ────────────
+        // -- Phase 1: Simultaneous salvo lasers (all fire at once) ------------
         if (e.bossPhase === 1 && e.trumSoLasers) {
           const len = GAME_W + GAME_H
           // Tick idle timers independently
           for (const laser of e.trumSoLasers) {
             if (laser.state === 'idle') laser.timer -= dt
           }
-          // When any idle laser is ready and none are active → trigger ALL at once
+          // When any idle laser is ready and none are active ? trigger ALL at once
           const anyActive = e.trumSoLasers.some(l => l.state !== 'idle')
-          if (!anyActive && e.trumSoLasers.some(l => l.timer <= 0)) {
+          if (!anyActive && e.trumSoLasers.some(l => l.timer <= 0) && e.trumSoCharge === 'idle') {
             screenFlash(ctx, 0x5500aa, 0.15, 160)
             for (const laser of e.trumSoLasers) {
               const wx = e.container.x + laser.offsetX
@@ -1700,14 +1719,14 @@ function gameLoop(ticker: Ticker) {
           }
         }
 
-        // ── Phase 2: Core mega-laser (warning → fire, instant-kill) ──────────
+        // -- Phase 2: Core mega-laser (warning ? fire, instant-kill) ----------
         if (e.bossPhase === 2 && e.trumSoPhase2LaserGfx) {
           const bx = e.container.x; const by = e.container.y
           const len = GAME_W + GAME_H
           if (e.trumSoPhase2LaserState === 'idle' || e.trumSoPhase2LaserState === undefined) {
             e.trumSoContinuousDmgTimer = (e.trumSoContinuousDmgTimer ?? 400) - dt
             e.trumSoPhase2LaserGfx.clear()
-            if ((e.trumSoContinuousDmgTimer ?? 0) <= 0) {
+            if ((e.trumSoContinuousDmgTimer ?? 0) <= 0 && e.trumSoCharge === 'idle') {
               const tx = GAME_W * 0.06 + Math.random() * GAME_W * 0.88
               const ty = GAME_H * 0.25 + Math.random() * GAME_H * 0.55
               e.trumSoPhase2LaserAngle = Math.atan2(ty - by, tx - bx)
@@ -1761,7 +1780,7 @@ function gameLoop(ticker: Ticker) {
           }
         }
 
-        // ── Phase 2: Charge dash ──────────────────────────────────────────
+        // -- Phase 2: Charge dash ------------------------------------------
         if (e.bossPhase === 2) {
           if (e.trumSoCharge === 'idle') {
             e.trumSoChargeTimer = (e.trumSoChargeTimer ?? 900) - dt
@@ -1813,9 +1832,9 @@ function gameLoop(ticker: Ticker) {
       }
     }
 
-    // ── Hit by player bullets ──────────────────────────────────────────────
+    // -- Hit by player bullets ----------------------------------------------
     let killed = false
-    // Thủ Hộ reflect: during swarm reflect phase, bullets are bounced back
+    // Th? H? reflect: during swarm reflect phase, bullets are bounced back
     if (e.kind === 'thu_ho' && ctx.thuHoReflecting) {
       for (let j = ctx.bullets.length - 1; j >= 0; j--) {
         if (dist2(ctx.bullets[j]!.gfx.x, ctx.bullets[j]!.gfx.y, e.container.x, e.container.y) < 16 * 16) {
@@ -1830,7 +1849,7 @@ function gameLoop(ticker: Ticker) {
           ctx.bullets.splice(j, 1)
         }
       }
-      // Reflect shooter missiles (Star Shooter) — loses homing
+      // Reflect shooter missiles (Star Shooter) � loses homing
       for (let j = ctx.shooterMissiles.length - 1; j >= 0; j--) {
         const m = ctx.shooterMissiles[j]!
         if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < 20 * 20) {
@@ -1843,7 +1862,7 @@ function gameLoop(ticker: Ticker) {
           ctx.shooterMissiles.splice(j, 1)
         }
       }
-      // Reflect player card missiles — loses homing
+      // Reflect player card missiles � loses homing
       for (let j = ctx.playerMissiles.length - 1; j >= 0; j--) {
         const m = ctx.playerMissiles[j]!
         if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < 20 * 20) {
@@ -2063,7 +2082,7 @@ function gameLoop(ticker: Ticker) {
   }
 }
 
-// ─── Setup ────────────────────────────────────────────────────────────────────
+// --- Setup --------------------------------------------------------------------
 async function initPixi() {
   app = new Application()
   await app.init({
