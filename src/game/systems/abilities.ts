@@ -8,6 +8,18 @@ import { killEnemy } from '../entities/kill'
 
 type GameStore = ReturnType<typeof useGameStore>
 
+interface AbilityTargetPoint {
+  x: number
+  y: number
+}
+
+function pickDistinctTargets(ctx: GameContext, fromX: number, fromY: number, count: number): AbilityTargetPoint[] {
+  if (count <= 0 || ctx.enemies.length === 0) return []
+  const sorted = [...ctx.enemies].sort((a, b) => dist2(fromX, fromY, a.container.x, a.container.y) - dist2(fromX, fromY, b.container.x, b.container.y))
+  const picked = sorted.slice(0, count)
+  return picked.map((e) => ({ x: e.container.x, y: e.container.y }))
+}
+
 // ─── Missile launcher graphics ────────────────────────────────────────────────
 function drawMissileLauncher(g: Graphics): void {
   g.clear()
@@ -147,7 +159,7 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
 // ─── Plasma beam ──────────────────────────────────────────────────────────────
 export function spawnPlasmaBeam(ctx: GameContext, game: GameStore, x: number, damage: number): void {
   if (!ctx.app || !ctx.gameLayer) return
-  const beamW = 20
+  const beamW = Math.round(20 * game.cardStats.plasmaBoltWidthMult)
   const isDevastation = game.cardStats.plasmaClearsBullets
   screenFlash(ctx, 0x4488ff, 0.22, 300)
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
@@ -195,11 +207,12 @@ export function spawnPlasmaBeam(ctx: GameContext, game: GameStore, x: number, da
 }
 
 // ─── Cluster bomb ─────────────────────────────────────────────────────────────
-export function dropClusterBomb(ctx: GameContext, game: GameStore, fromX: number, fromY: number, damage: number): void {
+export function dropClusterBomb(ctx: GameContext, game: GameStore, fromX: number, fromY: number, damage: number, target?: AbilityTargetPoint): void {
   if (!ctx.app || !ctx.gameLayer) return
-  let tx: number, ty: number
-  tx = Math.max(40, Math.min(GAME_W - 40, fromX + (Math.random() - 0.5) * 240))
-  ty = GAME_H * 0.1 + Math.random() * GAME_H * 0.5
+  const fallbackTarget: AbilityTargetPoint = { x: fromX, y: Math.max(80, fromY - 220) }
+  const aim = target ?? fallbackTarget
+  const tx = Math.max(40, Math.min(GAME_W - 40, aim.x))
+  const ty = Math.max(GAME_H * 0.08, Math.min(GAME_H * 0.75, aim.y))
   const bomb = new Graphics()
   bomb.circle(0, 0, 9).fill(0xff6600)
   bomb.circle(0, 0, 5).fill(0xffee44)
@@ -233,10 +246,9 @@ export function dropClusterBomb(ctx: GameContext, game: GameStore, fromX: number
 }
 
 // ─── Laser sweep ──────────────────────────────────────────────────────────────
-export function fireLaserSweep(ctx: GameContext, game: GameStore, damage: number): void {
+export function fireLaserSweep(ctx: GameContext, game: GameStore, damage: number, targetY?: number): void {
   if (!ctx.app || !ctx.gameLayer) return
-  let sweepY: number
-  sweepY = GAME_H * 0.1 + Math.random() * GAME_H * 0.5
+  const sweepY = Math.max(GAME_H * 0.08, Math.min(GAME_H * 0.78, targetY ?? (ctx.playerShip?.y ?? GAME_H * 0.6) - 140))
   screenFlash(ctx, 0xff4400, 0.18, 220)
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
     const e = ctx.enemies[i]
@@ -323,10 +335,14 @@ export function updatePeriodicAbilities(ctx: GameContext, game: GameStore, dt: n
     if (ctx.cbTimer <= 0) {
       ctx.cbTimer = cs.clusterBombIntervalFrames
       const dmg = Math.round(70 * cs.clusterBombDmgMult)
-      dropClusterBomb(ctx, game, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+      const bombCount = cs.clusterBombDouble ? 2 : 1
+      const bombTargets = pickDistinctTargets(ctx, ctx.playerShip.x, ctx.playerShip.y, bombCount)
+      const capX = ctx.playerShip.x
+      const capY = ctx.playerShip.y
+      dropClusterBomb(ctx, game, capX, capY - 20, dmg, bombTargets[0])
       if (cs.clusterBombDouble) {
-        const capX = ctx.playerShip.x; const capY = ctx.playerShip.y
-        setTimeout(() => { if (ctx.app && ctx.playerShip) dropClusterBomb(ctx, game, capX + 40, capY - 20, dmg) }, 430)
+        const secondTarget = bombTargets[1]
+        setTimeout(() => { if (ctx.app && ctx.playerShip) dropClusterBomb(ctx, game, capX + 40, capY - 20, dmg, secondTarget) }, 430)
       }
     }
   }
@@ -336,9 +352,12 @@ export function updatePeriodicAbilities(ctx: GameContext, game: GameStore, dt: n
     if (ctx.lsTimer <= 0) {
       ctx.lsTimer = cs.laserSweepIntervalFrames
       const dmg = Math.round(50 * cs.laserSweepDmgMult)
-      fireLaserSweep(ctx, game, dmg)
+      const laserCount = cs.laserSweepDouble ? 2 : 1
+      const laserTargets = pickDistinctTargets(ctx, ctx.playerShip.x, ctx.playerShip.y, laserCount)
+      fireLaserSweep(ctx, game, dmg, laserTargets[0]?.y)
       if (cs.laserSweepDouble) {
-        setTimeout(() => { if (ctx.app) fireLaserSweep(ctx, game, dmg) }, 380)
+        const secondY = laserTargets[1]?.y
+        setTimeout(() => { if (ctx.app) fireLaserSweep(ctx, game, dmg, secondY) }, 380)
       }
     }
   }

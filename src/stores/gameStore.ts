@@ -38,6 +38,7 @@ export interface CardStats {
   plasmaBoltDmgMult: number
   plasmaBoltIntervalFrames: number
   plasmaBoltCount: number
+  plasmaBoltWidthMult: number
   clusterBomb: boolean
   clusterBombDmgMult: number
   clusterBombIntervalFrames: number
@@ -93,7 +94,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     levels: [
       { desc: 'Mỗi 6s phóng 1 tia plasma xuyên thấu, gây 80 sát thương.' },
       { desc: 'Sát thương +25%.' },
-      { desc: 'Tia plasma làm chậm kẻ địch trúng đòn.' },
+      { desc: 'Tia plasma rộng hơn, tăng vùng trúng đòn.' },
       { desc: 'Sát thương +30%.' },
       { desc: 'Bắn 2 tia plasma song song.' },
     ],
@@ -200,7 +201,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     id: 'weapon_cache_star_ult', name: 'Đạn Xuyên Phá', type: 'ultimate', icon: 'PhDiamondsFour', maxLevel: 1, shipId: 'star_keeper',
     requiresAttackId: 'weapon_cache_star',
     levels: [
-      { desc: 'Đạn xuyên qua kẻ địch khi tiêu diệt, tiếp tục tấn công mục tiêu phía sau. (Yêu cầu: Kho Vũ Khí - Star Keeper Lv5)' },
+      { desc: 'Mỗi viên đạn xuyên qua tối đa 2 mục tiêu trước khi biến mất. (Yêu cầu: Kho Vũ Khí - Star Keeper Lv5)' },
     ],
   },
   {
@@ -525,6 +526,7 @@ export const useGameStore = defineStore('game', () => {
       plasmaBoltDmgMult: 1,
       plasmaBoltIntervalFrames: 360,
       plasmaBoltCount: 1,
+      plasmaBoltWidthMult: 1,
       clusterBomb: false,
       clusterBombDmgMult: 1,
       clusterBombIntervalFrames: 480,
@@ -568,6 +570,7 @@ export const useGameStore = defineStore('game', () => {
     const pbLv = c['plasma_bolt'] ?? 0
     if (pbLv >= 1) stats.plasmaBolt = true
     if (pbLv >= 2) stats.plasmaBoltDmgMult = 1.25
+    if (pbLv >= 3) stats.plasmaBoltWidthMult = 1.5
     if (pbLv >= 4) stats.plasmaBoltDmgMult = 1.625  // 1.25 × 1.3
     if (pbLv >= 5) stats.plasmaBoltCount = 2
 

@@ -5,6 +5,7 @@ export interface Bullet {
   gfx: Graphics
   vy: number
   vx?: number
+  pierceLeft?: number
 }
 
 export type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'

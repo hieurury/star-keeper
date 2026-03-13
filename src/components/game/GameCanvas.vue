@@ -68,7 +68,8 @@ function shoot(offsetX = 0, vxDrift = 0) {
   g.x = ctx.playerShip.x + offsetX
   g.y = ctx.playerShip.y - 22
   ctx.gameLayer.addChild(g)
-  ctx.bullets.push({ gfx: g, vy: 8 * game.upgrades.bulletSpeed, vx: vxDrift })
+  const pierceLeft = game.cardStats.bulletPierceOnKill ? 2 : undefined
+  ctx.bullets.push({ gfx: g, vy: 8 * game.upgrades.bulletSpeed, vx: vxDrift, pierceLeft })
 }
 
 // --- Game loop ----------------------------------------------------------------
@@ -149,31 +150,9 @@ function gameLoop(ticker: Ticker) {
     return
   }
 
-  // -- BOSS INTRO PHASE: boss dang tru?t v�o, kh�ng b?n, ch? di chuy?n -----
-  if (ctx.gamePhase === 'bossIntro') {
-    // Ti?p t?c di chuy?n c�c vi�n d?n d� b?n ra tru?c d�
-    for (let i = ctx.bullets.length - 1; i >= 0; i--) {
-      const b = ctx.bullets[i]
-      b.gfx.y -= b.vy * dt
-      if (b.vx) b.gfx.x += b.vx * dt
-      if (b.gfx.y < -20 || b.gfx.x < -10 || b.gfx.x > GAME_W + 10) {
-        if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
-        ctx.bullets.splice(i, 1)
-      }
-    }
-    // Cho ph�p di chuy?n m�y bay ngu?i choi
-    if (ctx.playerShip && ctx.isDragging) {
-      const _bz = ctx.bossZoom
-      const _blx = GAME_W * (1 - _bz) / 2; const _bly = GAME_H * (1 - _bz) / 2
-      const dx = (ctx.touchX - _blx) / _bz - ctx.playerShip.x
-      const dy = ((ctx.touchY - _bly) / _bz - TOUCH_Y_OFFSET) - ctx.playerShip.y
-      const hpPenalty = Math.max(0.7, Math.pow(100 / game.playerMaxHp, 0.15))
-      const spd = 5.5 * game.upgrades.shipSpeed * hpPenalty
-      ctx.playerShip.x += dx * 0.055 * spd * dt * 0.5
-      ctx.playerShip.y += dy * 0.055 * spd * dt * 0.5
-      ctx.playerShip.x = Math.max(20, Math.min(GAME_W - 20, ctx.playerShip.x))
-      ctx.playerShip.y = Math.max(60, Math.min(GAME_H - 60, ctx.playerShip.y))
-    }
+  // -- BOSS INTRO PHASE: keep cinematic entry but do not freeze other systems --
+  const isBossIntro = ctx.gamePhase === 'bossIntro'
+  if (isBossIntro) {
     // Ch?y entry animation + post-entry timer cho boss
     let battleReady = false
     for (const e of ctx.enemies) {
@@ -226,7 +205,6 @@ function gameLoop(ticker: Ticker) {
       ctx.gamePhase = 'playing'
       ctx.shootTimer = 0
     }
-    return
   }
 
   // -- PLAYING PHASE --------------------------------------------------------
@@ -276,12 +254,14 @@ function gameLoop(ticker: Ticker) {
     }
   }
 
-  // Card abilities
-  updateMissileLaunchers(ctx, game, dt)
-  updatePeriodicAbilities(ctx, game, dt)
+  // Card abilities (blocked during boss entry animation)
+  if (!isBossIntro) {
+    updateMissileLaunchers(ctx, game, dt)
+    updatePeriodicAbilities(ctx, game, dt)
+  }
 
-  // Soul missile firing (Star Holder)
-  if (ctx.soulMissileQueue > 0 && ctx.playerShip) {
+  // Soul missile firing (Star Holder) - blocked during boss entry
+  if (!isBossIntro && ctx.soulMissileQueue > 0 && ctx.playerShip) {
     ctx.soulMissileFireTimer -= dt
     if (ctx.soulMissileFireTimer <= 0) {
       ctx.soulMissileFireTimer = 6
@@ -337,7 +317,7 @@ function gameLoop(ticker: Ticker) {
   const baseShootInterval = isHolder ? 60 : (isShooter ? 80 : 18)
   const shootCount = isShooter ? effectiveMissileCount : effectiveBulletCount
   const shootInterval = (baseShootInterval / Math.sqrt(shootCount)) / (1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100)
-  if (ctx.shootTimer >= shootInterval) {
+  if (!isBossIntro && ctx.shootTimer >= shootInterval) {
     ctx.shootTimer = 0
     const cnt = isShooter ? effectiveMissileCount : effectiveBulletCount
     if (isHolder && ctx.playerShip) {
@@ -638,6 +618,10 @@ function gameLoop(ticker: Ticker) {
 
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
     const e = ctx.enemies[i]
+
+    if (isBossIntro && e.kind.startsWith('boss')) {
+      continue
+    }
 
     if (e.kind === 'pioneer') {
       if (e.pioneerPhase === 'enter') {
@@ -1461,6 +1445,36 @@ function gameLoop(ticker: Ticker) {
                 ctx.shooterMissiles.splice(mi, 1)
               }
             }
+            // Pull fragment missiles toward black hole, absorb at core
+            for (let mi = ctx.fragmentMissiles.length - 1; mi >= 0; mi--) {
+              const m = ctx.fragmentMissiles[mi]!
+              const mdx = bh.x - m.gfx.x; const mdy = bh.y - m.gfx.y
+              const md = Math.sqrt(mdx * mdx + mdy * mdy) || 1
+              if (md < pullR) {
+                const mPull = (1 - md / pullR) * 5 * dt
+                m.vx += (mdx / md) * mPull
+                m.vy += (mdy / md) * mPull
+              }
+              if (md < apparentR * 1.8) {
+                if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+                ctx.fragmentMissiles.splice(mi, 1)
+              }
+            }
+            // Pull player card missiles toward black hole, absorb at core
+            for (let mi = ctx.playerMissiles.length - 1; mi >= 0; mi--) {
+              const m = ctx.playerMissiles[mi]!
+              const mdx = bh.x - m.gfx.x; const mdy = bh.y - m.gfx.y
+              const md = Math.sqrt(mdx * mdx + mdy * mdy) || 1
+              if (md < pullR) {
+                const mPull = (1 - md / pullR) * 5 * dt
+                m.vx += (mdx / md) * mPull
+                m.vy += (mdy / md) * mPull
+              }
+              if (md < apparentR * 1.8) {
+                if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+                ctx.playerMissiles.splice(mi, 1)
+              }
+            }
             // Enemy bullets are NOT pulled by black holes � only player projectiles are affected
           }
         }
@@ -1887,8 +1901,17 @@ function gameLoop(ticker: Ticker) {
             spawnDamageText(ctx, wx, wy - 16, bulletDmg)
             if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
             redrawHpBar(t.hpBarBg, t.hpBar, t.hp / t.maxHp, 24)
-            if (!game.cardStats.bulletPierceOnKill || t.hp <= 0) {
-              if (!ctx.bullets[j].gfx.destroyed) ctx.gameLayer.removeChild(ctx.bullets[j].gfx)
+            const bullet = ctx.bullets[j]!
+            if (game.cardStats.bulletPierceOnKill) {
+              bullet.pierceLeft = Math.max(0, (bullet.pierceLeft ?? 2) - 1)
+              if ((bullet.pierceLeft ?? 0) <= 0) {
+                if (!bullet.gfx.destroyed) ctx.gameLayer.removeChild(bullet.gfx)
+                ctx.bullets.splice(j, 1)
+              } else {
+                bullet.gfx.y = wy - 13  // snap above turret hitbox to prevent re-hit
+              }
+            } else {
+              if (!bullet.gfx.destroyed) ctx.gameLayer.removeChild(bullet.gfx)
               ctx.bullets.splice(j, 1)
             }
             if (t.hp <= 0) {
@@ -1917,8 +1940,17 @@ function gameLoop(ticker: Ticker) {
         hitFlash(e.body)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
         if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
-        if (!game.cardStats.bulletPierceOnKill || e.hp > 0) {
-          if (!ctx.bullets[j].gfx.destroyed) ctx.gameLayer.removeChild(ctx.bullets[j].gfx)
+        const bullet = ctx.bullets[j]!
+        if (game.cardStats.bulletPierceOnKill) {
+          bullet.pierceLeft = Math.max(0, (bullet.pierceLeft ?? 2) - 1)
+          if ((bullet.pierceLeft ?? 0) <= 0) {
+            if (!bullet.gfx.destroyed) ctx.gameLayer.removeChild(bullet.gfx)
+            ctx.bullets.splice(j, 1)
+          } else {
+            bullet.gfx.y = e.container.y - bulletHitR - 1  // snap past hitbox to prevent re-hit same target
+          }
+        } else {
+          if (!bullet.gfx.destroyed) ctx.gameLayer.removeChild(bullet.gfx)
           ctx.bullets.splice(j, 1)
         }
         if (e.hp <= 0) { killEnemy(ctx, game, e, i); killed = true; break }

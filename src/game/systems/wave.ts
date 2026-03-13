@@ -83,10 +83,10 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
   if (game.testMode) {
     if (game.testMode.type === 'boss') {
       const k = game.testMode.bossKind
-      if (k === 'boss_stardestroyer') { wave.push(() => { spawnStarDestroyer(ctx, game) }) }
-      else if (k === 'boss_invader')  { wave.push(() => { spawnBossInvader(ctx, game) }) }
-      else if (k === 'boss_tinhvan')  { wave.push(() => { spawnBossTinhVan(ctx, game) }) }
-      else if (k === 'boss_trumso')   { wave.push(() => { spawnBossTrumSo(ctx, game) }) }
+      if (k === 'boss_stardestroyer') { wave.push(() => { spawnStarDestroyer(ctx, game); ctx.gamePhase = 'bossIntro' }) }
+      else if (k === 'boss_invader')  { wave.push(() => { spawnBossInvader(ctx, game);   ctx.gamePhase = 'bossIntro' }) }
+      else if (k === 'boss_tinhvan')  { wave.push(() => { spawnBossTinhVan(ctx, game);   ctx.gamePhase = 'bossIntro' }) }
+      else if (k === 'boss_trumso')   { wave.push(() => { spawnBossTrumSo(ctx, game);    ctx.gamePhase = 'bossIntro' }) }
       return wave
     } else if (game.testMode.type === 'faction') {
       ctx.activeFaction = game.testMode.faction
@@ -112,11 +112,11 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
   if (isBossStage) {
     const bossIdx = Math.floor(stage / 5)
     if (ctx.activeFaction === 'anox') {
-      if (bossIdx % 2 === 1) { wave.push(() => { spawnBossInvader(ctx, game) }) }
-      else { wave.push(() => { spawnStarDestroyer(ctx, game) }) }
+      if (bossIdx % 2 === 1) { wave.push(() => { spawnBossInvader(ctx, game); ctx.gamePhase = 'bossIntro' }) }
+      else { wave.push(() => { spawnStarDestroyer(ctx, game); ctx.gamePhase = 'bossIntro' }) }
     } else {
-      if (bossIdx % 2 === 1) { wave.push(() => { spawnBossTinhVan(ctx, game) }) }
-      else { wave.push(() => { spawnBossTrumSo(ctx, game) }) }
+      if (bossIdx % 2 === 1) { wave.push(() => { spawnBossTinhVan(ctx, game); ctx.gamePhase = 'bossIntro' }) }
+      else { wave.push(() => { spawnBossTrumSo(ctx, game); ctx.gamePhase = 'bossIntro' }) }
     }
     return wave
   }
