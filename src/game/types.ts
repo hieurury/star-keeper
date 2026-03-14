@@ -6,10 +6,12 @@ export interface Bullet {
   vy: number
   vx?: number
   pierceLeft?: number
+  pierceDmgMult?: number
 }
 
 export type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'
   | 'dai_lien' | 'thu_ho' | 'thuat_si' | 'boss_tinhvan' | 'boss_trumso'
+  | 'cnox_greedy' | 'cnox_shield' | 'cnox_spark' | 'boss_cnox_sun'
 export type KamiState = 'descend' | 'aim' | 'charge' | 'prexplode' | 'dead'
 export type BossAttack2State = 'ready' | 'locking'
 export type PioneerPhase = 'enter' | 'patrol' | 'approach'
@@ -44,6 +46,7 @@ export interface Enemy {
   hp: number
   maxHp: number
   barW: number
+  contactDamageCd?: number
   // kamikaze
   kamiState?: KamiState
   kamiTimer?: number
@@ -60,7 +63,7 @@ export interface Enemy {
   bossBattleReady?: boolean   // true after entry + zoom + 1s delay
   bossBattleTimer?: number    // countdown after zoom completes
   bossTargetY?: number
-  bossPhase?: 1 | 2
+  bossPhase?: 1 | 2 | 3
   attack1Timer?: number
   attack2Timer?: number
   bossAttack2State?: BossAttack2State
@@ -95,6 +98,22 @@ export interface Enemy {
   isDyingMeteor?: boolean
   meteorVx?: number
   meteorVy?: number
+  // cnox_greedy
+  cnoxStolenExp?: number
+  cnoxPowerMult?: number
+  cnoxBaseMaxHp?: number
+  cnoxBaseBarW?: number
+  cnoxBaseSize?: number
+  // cnox_shield
+  cnoxShields?: Graphics[]
+  cnoxShieldAngle?: number
+  // cnox_spark
+  cnoxLaserGfx?: Graphics
+  cnoxWarnGfx?: Graphics
+  cnoxLaserState?: 'idle' | 'warning' | 'firing' | 'link_warning' | 'link_firing'
+  cnoxLaserTimer?: number
+  cnoxLaserAngle?: number
+  cnoxLinkOrder?: number
   // boss_tinhvan
   tinhVanGuns?: TinhVanGun[]
   blackHoles?: BlackHoleEntity[]
@@ -110,6 +129,48 @@ export interface Enemy {
   trumSoContinuousDmgTimer?: number
   trumSoPhase2LaserState?: 'idle' | 'warning' | 'firing'
   trumSoPhase2LaserAngle?: number
+  // boss_cnox_sun
+  sunStars?: SunWeaponStar[]
+  sunEnergyCrystals?: SunEnergyCrystal[]
+  sunCrystalSpawnCd?: number
+  sunAttackQueue?: Array<'triangle' | 'circle' | 'diamond' | 'pentagon'>
+  sunActiveStars?: Array<'triangle' | 'circle' | 'diamond' | 'pentagon'>
+  sunDiamondCycleSkip?: boolean
+  sunLinkGfx?: Graphics
+  sunCoreLaserGfx?: Graphics
+  sunCoreSpin?: number
+  sunCoreLaserState?: 'idle' | 'warning' | 'firing'
+  sunCoreLaserTimer?: number
+  sunCoreLaserAngle?: number
+  sunCoreLaserStartAngle?: number
+  sunCoreLaserSweepSpan?: number
+}
+
+export interface SunWeaponStar {
+  kind: 'triangle' | 'circle' | 'diamond' | 'pentagon'
+  gfx: Graphics
+  warningGfx: Graphics
+  beamGfx: Graphics
+  orbitAngle: number
+  orbitRadius: number
+  attackPush?: number
+  state: 'idle' | 'warning' | 'firing' | 'cooldown'
+  timer: number
+  burstLeft?: number
+  targetX?: number
+  targetY?: number
+  missileTargets?: Array<{ x: number, y: number }>
+  missileIndex?: number
+  attackAngle?: number
+}
+
+export interface SunEnergyCrystal {
+  gfx: Graphics
+  x: number
+  y: number
+  hp: number
+  maxHp: number
+  contactDamageCd?: number
 }
 
 export interface TrumSoGun {
@@ -159,11 +220,17 @@ export interface EnemyBullet {
   homing?: boolean
   homingLife?: number
   homingSpeed?: number
+  homingRange?: number
   onHitPlayer?: () => void
   aoe?: boolean
   targetX?: number
   targetY?: number
   damage?: number   // override default hit damage (e.g. 50% for reflected)
+  sunShardBurst?: boolean
+  sunShardCount?: number
+  missileTrail?: boolean
+  missileTrailColor?: number
+  trailPulse?: number
 }
 
 export interface StarBg {
@@ -216,6 +283,9 @@ export interface PlayerMissile {
   vy: number
   damage: number
   aoe: boolean
+  targetEnemy?: Enemy
+  targetX?: number
+  targetY?: number
 }
 
 export type WaveSpawner = () => void

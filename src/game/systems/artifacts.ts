@@ -91,6 +91,23 @@ export function activateManaCoreOverload(ctx: GameContext, game: GameStore): voi
       if (e.hp <= 0) killEnemy(ctx, game, e, i)
     }
   }
+  for (const boss of ctx.enemies) {
+    if (boss.kind !== 'boss_cnox_sun') continue
+    const crystals = boss.sunEnergyCrystals ?? []
+    for (let ci = crystals.length - 1; ci >= 0; ci--) {
+      const c = crystals[ci]!
+      const dx = c.x - ctx.playerShip.x
+      const dy = c.y - ctx.playerShip.y
+      if (Math.sqrt(dx * dx + dy * dy) <= blastRadius) {
+        c.hp = Math.max(0, c.hp - blastDmg)
+        spawnDamageText(ctx, c.x, c.y - 14, blastDmg)
+        if (c.hp <= 0) {
+          if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+          crystals.splice(ci, 1)
+        }
+      }
+    }
+  }
   let fadeAlpha = 0.9
   const fadeFn = () => {
     fadeAlpha -= 0.08

@@ -133,19 +133,19 @@ export const ALL_CARD_DEFS: CardDef[] = [
     id: 'weapon_cache_shooter', name: 'Kho Vũ Khí - Star Shooter', type: 'attack', icon: 'PhRocketLaunch', maxLevel: 5, shipId: 'star_shooter',
     levels: [
       { desc: 'Tăng thêm 1 tên lửa bắn ra.' },
-      { desc: 'Tên lửa bây giờ gây sát thương AOE khi nổ.' },
-      { desc: 'Tăng 30% tốc độ bay và 40% sát thương cho tên lửa.' },
-      { desc: 'Tăng phạm vi nổ AOE lên 25%.' },
+      { desc: 'Tên lửa bây giờ gây sát thương AOE tầm gần khi nổ.' },
+      { desc: 'Tăng 20% tốc độ bay và 40% sát thương cho tên lửa.' },
+      { desc: 'Tăng nhẹ phạm vi nổ AOE thêm 15%.' },
       { desc: 'Thêm 2 tên lửa bắn ra, tăng thêm 30% sát thương.' },
     ],
   },
   { id: 'weapon_cache_holder', name: 'Kho Vũ Khí - Star Holder', type: 'attack', icon: 'PhFire', maxLevel: 5, shipId: 'star_holder',
     levels: [
-      { desc: 'Tăng kích thước tia lazer +25%.' },
-      { desc: 'Bắn thêm 1 tia lazer song song.' },
-      { desc: '+30% sát thương lazer và +20% tốc độ bắn.' },
-      { desc: 'Bắn thêm 1 tia lazer nữa (tổng +2 tia).' },
-      { desc: '+40% sát thương lazer và +20% kích thước lazer.' },
+      { desc: 'Tăng kích thước tia laser +25%.' },
+      { desc: 'Bắn thêm 1 tia laser song song.' },
+      { desc: '+30% sát thương laser và +20% tốc độ bắn.' },
+      { desc: 'Bắn thêm 1 tia laser nữa (tổng +2 tia).' },
+      { desc: '+40% sát thương laser và +20% kích thước laser.' },
     ],
   },
   // ── Hỗ trợ ──────────────────────────────────────────────────────────────────
@@ -194,21 +194,21 @@ export const ALL_CARD_DEFS: CardDef[] = [
     id: 'weapon_cache_shooter_ult', name: 'Tên Lửa Lạnh Lùng', type: 'ultimate', icon: 'PhTarget', maxLevel: 1, shipId: 'star_shooter',
     requiresAttackId: 'weapon_cache_shooter',
     levels: [
-      { desc: 'Kẻ địch bị tên lửa tiêu diệt giảm 0.5s hồi chiêu kỹ năng. (Yêu cầu: Kho Vũ Khí - Star Shooter Lv5)' },
+      { desc: 'Kẻ địch bị tên lửa tiêu diệt giảm 0.5s hồi chiêu kỹ năng.' },
     ],
   },
   {
     id: 'weapon_cache_star_ult', name: 'Đạn Xuyên Phá', type: 'ultimate', icon: 'PhDiamondsFour', maxLevel: 1, shipId: 'star_keeper',
     requiresAttackId: 'weapon_cache_star',
     levels: [
-      { desc: 'Mỗi viên đạn xuyên qua tối đa 2 mục tiêu trước khi biến mất. (Yêu cầu: Kho Vũ Khí - Star Keeper Lv5)' },
+      { desc: 'Mỗi viên đạn xuyên qua tối đa 2 mục tiêu trước khi biến mất.' },
     ],
   },
   {
     id: 'weapon_cache_holder_ult', name: 'Thu Hồn Tự Động', type: 'ultimate', icon: 'PhGhost', maxLevel: 1, shipId: 'star_holder',
     requiresAttackId: 'weapon_cache_holder',
     levels: [
-      { desc: 'Kẻ địch bị tiêu diệt bởi lazer có 100% cơ hội rơi linh hồn. (Yêu cầu: Kho Vũ Khí - Star Holder Lv5)' },
+      { desc: 'Kẻ địch bị tiêu diệt bởi laser có 100% cơ hội rơi linh hồn.' },
     ],
   },
   {
@@ -216,7 +216,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     requiresAttackId: 'heat_missile',
     requiresSupportId: 'skill_recovery',
     levels: [
-      { desc: 'Tên lửa nhỏ bắn mỗi 0.5s, luôn bám sát và trúng mục tiêu. (Yêu cầu: Tên Lửa Tầm Nhiệt Lv5 + Phục Hồi Kỹ Năng)' },
+      { desc: 'Tên lửa nhỏ bắn mỗi 0.5s, luôn bám sát và trúng mục tiêu.' },
     ],
   },
   // ── Hỗ trợ (mới) ────────────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     requiresAttackId: 'plasma_bolt',
     requiresSupportId: 'energy_shield',
     levels: [
-      { desc: 'Tia plasma tiêu diệt tất cả đạn kẻ địch trên đường đi. (Yêu cầu: Tia Plasma Lv5 + Lá Chắn Năng Lượng)' },
+      { desc: 'Tia plasma tiêu diệt tất cả đạn kẻ địch trên đường đi.' },
     ],
   },
   {
@@ -244,7 +244,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     requiresAttackId: 'laser_sweep',
     requiresSupportId: 'exp_magnet',
     levels: [
-      { desc: 'Thay thế quét laser bằng vùng tĩnh điện bao quanh phi cơ, gây sát thương mỗi 0.5s cho kẻ địch bên trong. (Yêu cầu: Quét Laser Lv5 + Nam Châm EXP)' },
+      { desc: 'Thay thế quét laser bằng vùng tĩnh điện bao quanh phi cơ, gây sát thương mỗi 0.5s cho kẻ địch bên trong.' },
     ],
   },
   // ── Hỗ trợ (tốc độ & tốc bắn) ───────────────────────────────────────────────
@@ -274,7 +274,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     requiresAttackId: 'cluster_bomb',
     requiresSupportId: 'turbo_fire_card',
     levels: [
-      { desc: 'Bom cụm bắn nhanh gấp đôi, luôn bắn kép. (Yêu cầu: Bom Cụm Lv5 + Xạ Thủ Nhanh)' },
+      { desc: 'Bom cụm bắn nhanh gấp đôi, luôn bắn kép.' },
     ],
   },
 ]
@@ -424,6 +424,64 @@ const MISSION_POOL: Array<{
 // loadProgress() sẽ dùng số này để chạy migration thích hợp.
 const SAVE_VERSION = 1
 const SAVE_KEY = 'ban-may-bay-save'
+const SAVE_ENVELOPE_VERSION = 1
+const SAVE_SIGNATURE_PEPPER = 'ban-may-bay::save-signature::2026'
+
+interface SaveEnvelope {
+  format: 'signed'
+  envelopeVersion: number
+  payload: Record<string, unknown>
+  sig: string
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  const obj = value as Record<string, unknown>
+  const keys = Object.keys(obj).sort()
+  const parts: string[] = []
+  for (const key of keys) {
+    parts.push(`${JSON.stringify(key)}:${stableStringify(obj[key])}`)
+  }
+  return `{${parts.join(',')}}`
+}
+
+function fnv1aHash(input: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(16).padStart(8, '0')
+}
+
+function createSaveSignature(payload: Record<string, unknown>): string {
+  return fnv1aHash(`${stableStringify(payload)}|${SAVE_SIGNATURE_PEPPER}`)
+}
+
+function buildSaveEnvelope(payload: Record<string, unknown>): SaveEnvelope {
+  return {
+    format: 'signed',
+    envelopeVersion: SAVE_ENVELOPE_VERSION,
+    payload,
+    sig: createSaveSignature(payload),
+  }
+}
+
+function isSaveEnvelope(data: unknown): data is SaveEnvelope {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false
+  const obj = data as Record<string, unknown>
+  return obj.format === 'signed'
+    && typeof obj.envelopeVersion === 'number'
+    && !!obj.payload
+    && typeof obj.payload === 'object'
+    && !Array.isArray(obj.payload)
+    && typeof obj.sig === 'string'
+}
+
+function verifySaveEnvelope(envelope: SaveEnvelope): boolean {
+  return envelope.sig === createSaveSignature(envelope.payload)
+}
 
 export const useGameStore = defineStore('game', () => {
   // Tiến độ người chơi
@@ -447,7 +505,7 @@ export const useGameStore = defineStore('game', () => {
   const accountExp = ref(0)
 
   // Test mode (không ảnh hưởng save / kết quả thật)
-  const testMode = ref<{ type: 'faction'; faction: 'anox' | 'bnox' } | { type: 'boss'; bossKind: string } | null>(null)
+  const testMode = ref<{ type: 'faction'; faction: 'anox' | 'bnox' | 'cnox' } | { type: 'boss'; bossKind: string } | null>(null)
 
   // Phi cơ sở hữu
   const ownedShips = ref<string[]>(['star_keeper'])
@@ -657,8 +715,8 @@ export const useGameStore = defineStore('game', () => {
     const sc = c['weapon_cache_shooter'] ?? 0
     if (sc >= 1) stats.shooterMissileBonus = 1
     if (sc >= 2) stats.shooterMissileAoe = true
-    if (sc >= 3) { stats.shooterMissileSpdMult = 1.3; stats.shooterMissileDmgMult = 1.4 }
-    if (sc >= 4) stats.shooterMissileAoeSizeBonus = 0.25
+    if (sc >= 3) { stats.shooterMissileSpdMult = 1.2; stats.shooterMissileDmgMult = 1.4 }
+    if (sc >= 4) stats.shooterMissileAoeSizeBonus = 0.15
     if (sc >= 5) { stats.shooterMissileBonus = 3; stats.shooterMissileDmgMult = (sc >= 3 ? 1.4 : 1.0) * 1.3 }
     if ((c['weapon_cache_shooter_ult'] ?? 0) >= 1) stats.shooterMissileKillCdReduce = 0.5
 
@@ -1280,6 +1338,41 @@ export const useGameStore = defineStore('game', () => {
     saveProgress()
   }
 
+  function sanitizeLoadedStateForNonAdmin() {
+    playerCoins.value = Math.max(0, Math.floor(playerCoins.value))
+    playerRuby.value = Math.max(0, Math.floor(playerRuby.value))
+    highScore.value = Math.max(0, Math.floor(highScore.value))
+    accountLevel.value = Math.max(1, Math.floor(accountLevel.value))
+    accountExp.value = Math.max(0, Math.floor(accountExp.value))
+
+    const validShipIds = new Set(['star_keeper', 'star_holder', 'star_shooter'])
+    const safeOwnedShips = ownedShips.value.filter(id => validShipIds.has(id))
+    ownedShips.value = safeOwnedShips.length > 0 ? [...new Set(safeOwnedShips)] : ['star_keeper']
+    if (!ownedShips.value.includes(selectedShip.value)) selectedShip.value = ownedShips.value[0] ?? 'star_keeper'
+
+    const validAchievementIds = new Set(ALL_ACHIEVEMENTS.map(a => a.id))
+    unlockedAchievements.value = [...new Set(unlockedAchievements.value.filter(id => validAchievementIds.has(id)))]
+
+    const perm = { ...permUpgrades.value }
+    for (const def of PERM_UPGRADE_DEFS) {
+      const maxLv = def.costs.length
+      const lv = Math.floor(Math.max(0, perm[def.key] ?? 0))
+      perm[def.key] = Math.min(maxLv, lv)
+    }
+    permUpgrades.value = perm
+
+    const validArtifactIds = new Set(ALL_ARTIFACT_DEFS.map(a => a.id))
+    ownedArtifacts.value = [...new Set(ownedArtifacts.value.filter(id => validArtifactIds.has(id)))]
+
+    const nextEquip: Record<string, string[]> = {}
+    for (const shipId of Object.keys(SHIP_ARTIFACT_SLOTS)) {
+      const slots = SHIP_ARTIFACT_SLOTS[shipId] ?? 1
+      const list = equippedArtifacts.value[shipId] ?? []
+      nextEquip[shipId] = [...new Set(list.filter(id => ownedArtifacts.value.includes(id) && validArtifactIds.has(id)))].slice(0, slots)
+    }
+    equippedArtifacts.value = nextEquip
+  }
+
   function saveProgress() {
     const data = {
       version: SAVE_VERSION,
@@ -1311,7 +1404,8 @@ export const useGameStore = defineStore('game', () => {
       milestone3Claimed: milestone3Claimed.value,
       milestone5Claimed: milestone5Claimed.value,
     }
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data))
+    const envelope = buildSaveEnvelope(data as Record<string, unknown>)
+    localStorage.setItem(SAVE_KEY, JSON.stringify(envelope))
   }
 
   function _applyDataToStore(data: Record<string, unknown>) {
@@ -1364,15 +1458,35 @@ export const useGameStore = defineStore('game', () => {
     const saved = localStorage.getItem(SAVE_KEY)
     if (saved) {
       try {
-        let data = JSON.parse(saved) as Record<string, unknown>
+        const parsed = JSON.parse(saved) as unknown
+        let data: Record<string, unknown> | null = null
+
+        if (isSaveEnvelope(parsed)) {
+          if (!isAdminMode.value && !verifySaveEnvelope(parsed)) {
+            localStorage.removeItem(SAVE_KEY)
+            generateDailyMissions()
+            return
+          }
+          data = parsed.payload
+        } else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          // Legacy plain-object save. Load once then re-save in signed format.
+          data = parsed as Record<string, unknown>
+        }
+
+        if (!data) {
+          generateDailyMissions()
+          return
+        }
+
         // ── Migration chain ──────────────────────────────────────────────────
         const ver = typeof data.version === 'number' ? data.version : 0
         if (ver < 1) data = _migrateV0toV1(data)
         // (thêm các bước migrate tiếp theo ở đây khi cần)
         // ────────────────────────────────────────────────────────────────────
         _applyDataToStore(data)
+        if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
         // Lưu lại với version mới nhất nếu đã migrate
-        if (ver < SAVE_VERSION) saveProgress()
+        if (ver < SAVE_VERSION || !isSaveEnvelope(parsed)) saveProgress()
       } catch {
         // Dữ liệu save bị hỏng hoàn toàn → giữ giá trị mặc định
       }
@@ -1404,9 +1518,16 @@ export const useGameStore = defineStore('game', () => {
    */
   function importSave(jsonStr: string): boolean {
     try {
-      const data = JSON.parse(jsonStr)
-      if (typeof data !== 'object' || data === null || Array.isArray(data)) return false
-      localStorage.setItem(SAVE_KEY, JSON.stringify(data))
+      const raw = JSON.parse(jsonStr) as unknown
+      if (isSaveEnvelope(raw)) {
+        if (!isAdminMode.value && !verifySaveEnvelope(raw)) return false
+        localStorage.setItem(SAVE_KEY, JSON.stringify(raw))
+      } else {
+        // Chỉ admin mới được import save dạng không ký.
+        if (!isAdminMode.value) return false
+        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return false
+        localStorage.setItem(SAVE_KEY, JSON.stringify(raw))
+      }
       loadProgress()
       return true
     } catch {

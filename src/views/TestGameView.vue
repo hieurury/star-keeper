@@ -12,14 +12,15 @@ const game = useGameStore()
 // ── Selection state (before game starts) ──────────────────────────────────────
 type TestType = 'faction' | 'boss'
 const testType = ref<TestType>('boss')
-const selectedFaction = ref<'anox' | 'bnox'>('anox')
+const selectedFaction = ref<'anox' | 'bnox' | 'cnox'>('anox')
 const selectedBoss = ref<string>('boss_stardestroyer')
 
 const BOSSES: Array<{ kind: string; label: string; emoji: string }> = [
-  { kind: 'boss_stardestroyer', label: 'Tinh Khu Hủy Diệt', emoji: '🛸' },
-  { kind: 'boss_invader',       label: 'Tướng Xâm Lược',    emoji: '👾' },
-  { kind: 'boss_tinhvan',       label: 'Tinh Vân Độc Ác',   emoji: '🌀' },
-  { kind: 'boss_trumso',        label: 'Trùm Sổ',           emoji: '💀' },
+  { kind: 'boss_stardestroyer', label: 'Anox - Kẻ ăn sao', emoji: '🛸' },
+  { kind: 'boss_invader',       label: 'Anox - Kẻ xâm lăng', emoji: '👾' },
+  { kind: 'boss_tinhvan',       label: 'Bnox - Tinh vân hắc ám', emoji: '🌀' },
+  { kind: 'boss_trumso',        label: 'Bnox - Trùm sò', emoji: '💀' },
+  { kind: 'boss_cnox_sun',      label: 'Cnox - Mặt trời tối thượng', emoji: '☀️' },
 ]
 
 // ── Game phase ─────────────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ onUnmounted(() => {
             >
               <span class="faction-card__emoji">🚀</span>
               <span class="faction-card__name">ANOX</span>
-              <span class="faction-card__sub">Pioneer · Sniper · Kamikaze</span>
+              <span class="faction-card__sub">Tiên phong · Thiện xạ · Cảm tử</span>
             </button>
             <button
               class="faction-card"
@@ -131,7 +132,16 @@ onUnmounted(() => {
             >
               <span class="faction-card__emoji">🛡</span>
               <span class="faction-card__name">BNOX</span>
-              <span class="faction-card__sub">Đại Liên · Thủ Hộ · Thuật Sĩ</span>
+              <span class="faction-card__sub">Đại liên · Thủ hộ · Thuật sĩ</span>
+            </button>
+            <button
+              class="faction-card"
+              :class="{ active: selectedFaction === 'cnox' }"
+              @click="selectedFaction = 'cnox'"
+            >
+              <span class="faction-card__emoji">⚡</span>
+              <span class="faction-card__name">CNOX</span>
+              <span class="faction-card__sub">Tham lam · Lá chắn · Tia lửa</span>
             </button>
           </div>
         </div>

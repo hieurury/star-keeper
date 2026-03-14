@@ -1,0 +1,28 @@
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="24" y1="20" x2="168" y2="176" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10355B"/>
+      <stop offset="0.55" stop-color="#0B2038"/>
+      <stop offset="1" stop-color="#071426"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="44" y1="36" x2="156" y2="150" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7EE7FF"/>
+      <stop offset="1" stop-color="#21BDE5"/>
+    </linearGradient>
+    <linearGradient id="plane" x1="90" y1="58" x2="113" y2="132" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E6F8FF"/>
+      <stop offset="1" stop-color="#B5E6FF"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="12" y="12" width="168" height="168" rx="36" fill="url(#bg)"/>
+  <rect x="12" y="12" width="168" height="168" rx="36" stroke="#2E5F86" stroke-width="4"/>
+
+  <circle cx="96" cy="96" r="60" stroke="url(#glow)" stroke-width="6" stroke-dasharray="9 8"/>
+  <circle cx="96" cy="96" r="38" fill="#0B2A46" stroke="#4CCCEC" stroke-width="3"/>
+
+  <path d="M95 50L108 88L150 95L108 103L95 142L82 103L40 95L82 88L95 50Z" fill="url(#glow)" fill-opacity="0.35"/>
+  <path d="M96 60L111 100L96 134L81 100L96 60Z" fill="url(#plane)"/>
+  <path d="M96 60L104 98H88L96 60Z" fill="#FFFFFF"/>
+  <circle cx="96" cy="97" r="5" fill="#21BDE5"/>
+</svg>

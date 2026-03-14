@@ -65,7 +65,7 @@ export function spawnBossInvader(ctx: GameContext, game: GameStore): void {
   const laserLine = new Graphics()
   laserLine.visible = false
   const labelStyle = new TextStyle({ fill: 0x88bbff, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000022, width: 3 } })
-  const bossLabel = new Text({ text: 'ANOX - KẺ XÂM LĂNG', style: labelStyle })
+  const bossLabel = new Text({ text: 'Anox - Kẻ xâm lăng', style: labelStyle })
   bossLabel.anchor.set(0.5, 1); bossLabel.y = -size - 24
   const container = new Container()
   container.addChild(body, hpBarBg, hpBar, laserLine, bossLabel)
@@ -96,8 +96,8 @@ export function spawnBossInvader(ctx: GameContext, game: GameStore): void {
   })
 
   // Alert text
-  const alertStyle = new TextStyle({ fill: 0x4499ff, fontSize: 22, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000022, width: 4 } })
-  const alertText = new Text({ text: '⚠ BOSS XUẤT HIỆN ⚠', style: alertStyle })
+  const alertStyle = new TextStyle({ fill: 0x4499ff, fontSize: 22, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', align: 'center', lineHeight: 28, stroke: { color: 0x000022, width: 4 } })
+  const alertText = new Text({ text: 'ANOX\nKẻ xâm lăng', style: alertStyle })
   alertText.anchor.set(0.5, 0.5); alertText.x = GAME_W / 2; alertText.y = GAME_H * 0.45; alertText.alpha = 0
   ctx.uiLayer.addChild(alertText)
   let alertFrame = 0
@@ -144,7 +144,7 @@ export function updateBossInvader(ctx: GameContext, game: GameStore, e: Enemy, _
     screenFlash(ctx, 0x2255ff, 0.5, 600)
     spawnExplosion(ctx, e.container.x, e.container.y, 28, 0x2255ff, 0x88bbff)
     if (e.bossLabel) {
-      e.bossLabel.text = 'ANOX - KẺ XÂM LĂNG [PHASE 2]'
+      e.bossLabel.text = 'Anox - Kẻ xâm lăng [PHASE 2]'
       e.bossLabel.style = new TextStyle({ fill: 0xff88cc, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000022, width: 3 } })
     }
     if (e.bossTurrets) {

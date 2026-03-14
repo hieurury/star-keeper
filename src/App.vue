@@ -1,9 +1,11 @@
 <template>
   <RouterView />
+  <LoadingOverlay />
 </template>
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import LoadingOverlay from './components/ui/LoadingOverlay.vue'
 
 function isMobile(): boolean {
   return 'ontouchstart' in window || navigator.maxTouchPoints > 0

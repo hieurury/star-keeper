@@ -136,10 +136,10 @@ export function spawnHeatWave(ctx: GameContext, px: number, py: number): void {
 
 /** Flashing AOE warning ring at a position (used for boss missile target indicator). */
 export function spawnMissileWarning(ctx: GameContext, x: number, y: number): void {
-  if (!ctx.app || !ctx.uiLayer) return
+  if (!ctx.app || !ctx.gameLayer) return
   const g = new Graphics()
   g.x = x; g.y = y
-  ctx.uiLayer.addChild(g)
+  ctx.gameLayer.addChild(g)
   let frame = 0
   const maxFrames = 90
   const tick = () => {
@@ -153,7 +153,7 @@ export function spawnMissileWarning(ctx: GameContext, x: number, y: number): voi
       g.circle(0, 0, 5).fill({ color: 0xff44ff, alpha: alpha * 0.9 })
     }
     if (frame >= maxFrames) {
-      if (!g.destroyed) ctx.uiLayer.removeChild(g)
+      if (!g.destroyed) ctx.gameLayer.removeChild(g)
       ctx.app?.ticker.remove(tick)
     }
   }

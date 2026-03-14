@@ -118,7 +118,7 @@ export function spawnBossTrumSo(ctx: GameContext, game: GameStore): void {
     fontWeight: 'bold',
     stroke: { color: 0x000011, width: 3 },
   })
-  const bossLabel = new Text({ text: 'BNOX - TRÙM SÒ', style: labelStyle })
+  const bossLabel = new Text({ text: 'Bnox - Trùm sò', style: labelStyle })
   bossLabel.anchor.set(0.5, 1); bossLabel.y = -size - 27
 
   const container = new Container()
@@ -195,9 +195,11 @@ export function spawnBossTrumSo(ctx: GameContext, game: GameStore): void {
     fill: 0xbb44ff, fontSize: 22,
     fontFamily: "'Chakra Petch', sans-serif",
     fontWeight: 'bold',
+    align: 'center',
+    lineHeight: 28,
     stroke: { color: 0x110022, width: 4 },
   })
-  const alertText = new Text({ text: '⚠ BOSS XUẤT HIỆN ⚠', style: alertStyle })
+  const alertText = new Text({ text: 'BNOX\nTrùm sò', style: alertStyle })
   alertText.anchor.set(0.5, 0.5)
   alertText.x = GAME_W / 2; alertText.y = GAME_H * 0.45; alertText.alpha = 0
   ctx.uiLayer.addChild(alertText)

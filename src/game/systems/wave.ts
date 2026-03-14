@@ -8,14 +8,18 @@ import { spawnStarDestroyer } from '../entities/BossStarDestroyer'
 import { spawnBossInvader } from '../entities/BossInvader'
 import { spawnBossTinhVan } from '../entities/BossTinhVan'
 import { spawnBossTrumSo } from '../entities/BossTrumSo'
+import { spawnBossCnoxSun } from '../entities/BossCnoxSun'
 import { spawnDaiLienPair } from '../entities/DaiLien'
 import { spawnThuHoSwarm } from '../entities/ThuHo'
 import { spawnThuatSi } from '../entities/ThuatSi'
+import { spawnCnoxGreedy } from '../entities/CnoxGreedy'
+import { spawnCnoxShieldWall } from '../entities/CnoxShield'
+import { spawnCnoxSparkGroup } from '../entities/CnoxSpark'
 
 type GameStore = ReturnType<typeof useGameStore>
 
 // ─── Faction helpers ──────────────────────────────────────────────────────────
-const ALL_FACTIONS: Array<'anox' | 'bnox'> = ['anox', 'bnox']
+const ALL_FACTIONS: Array<'anox' | 'bnox' | 'cnox'> = ['anox', 'bnox', 'cnox']
 
 /** Rotate to a new faction that is different from the current one. */
 function rotateFaction(ctx: GameContext): void {
@@ -74,6 +78,23 @@ function buildBnoxWave(ctx: GameContext, game: GameStore, wave: WaveSpawner[]): 
   }
 }
 
+function buildCnoxWave(ctx: GameContext, game: GameStore, wave: WaveSpawner[]): void {
+  const stage = game.currentStage
+
+  const shieldGroups = 1 + (stage >= 6 ? 1 : 0)
+  for (let i = 0; i < shieldGroups; i++) wave.push(() => spawnCnoxShieldWall(ctx, game))
+
+  if (stage >= 2) {
+    const greedyCount = (Math.random() < 0.45 ? 1 : 0) + (stage >= 7 && Math.random() < 0.22 ? 1 : 0)
+    for (let i = 0; i < greedyCount; i++) wave.push(() => spawnCnoxGreedy(ctx, game))
+  }
+
+  if (stage >= 3) {
+    const sparkGroups = 1 + (stage >= 8 && Math.random() < 0.45 ? 1 : 0)
+    for (let i = 0; i < sparkGroups; i++) wave.push(() => spawnCnoxSparkGroup(ctx, game))
+  }
+}
+
 // ─── Main buildWave ───────────────────────────────────────────────────────────
 export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
   const stage = game.currentStage
@@ -87,10 +108,12 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
       else if (k === 'boss_invader')  { wave.push(() => { spawnBossInvader(ctx, game);   ctx.gamePhase = 'bossIntro' }) }
       else if (k === 'boss_tinhvan')  { wave.push(() => { spawnBossTinhVan(ctx, game);   ctx.gamePhase = 'bossIntro' }) }
       else if (k === 'boss_trumso')   { wave.push(() => { spawnBossTrumSo(ctx, game);    ctx.gamePhase = 'bossIntro' }) }
+      else if (k === 'boss_cnox_sun') { wave.push(() => { spawnBossCnoxSun(ctx, game);   ctx.gamePhase = 'bossIntro' }) }
       return wave
     } else if (game.testMode.type === 'faction') {
       ctx.activeFaction = game.testMode.faction
       if (game.testMode.faction === 'bnox') buildBnoxWave(ctx, game, wave)
+      else if (game.testMode.faction === 'cnox') buildCnoxWave(ctx, game, wave)
       else buildAnoxWave(ctx, game, wave)
       for (let i = wave.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -114,9 +137,11 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
     if (ctx.activeFaction === 'anox') {
       if (bossIdx % 2 === 1) { wave.push(() => { spawnBossInvader(ctx, game); ctx.gamePhase = 'bossIntro' }) }
       else { wave.push(() => { spawnStarDestroyer(ctx, game); ctx.gamePhase = 'bossIntro' }) }
-    } else {
+    } else if (ctx.activeFaction === 'bnox') {
       if (bossIdx % 2 === 1) { wave.push(() => { spawnBossTinhVan(ctx, game); ctx.gamePhase = 'bossIntro' }) }
       else { wave.push(() => { spawnBossTrumSo(ctx, game); ctx.gamePhase = 'bossIntro' }) }
+    } else {
+      wave.push(() => { spawnBossCnoxSun(ctx, game); ctx.gamePhase = 'bossIntro' })
     }
     return wave
   }
@@ -124,6 +149,8 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
   // ── Regular stage: spawn only active faction ─────────────────────────────────
   if (ctx.activeFaction === 'bnox') {
     buildBnoxWave(ctx, game, wave)
+  } else if (ctx.activeFaction === 'cnox') {
+    buildCnoxWave(ctx, game, wave)
   } else {
     buildAnoxWave(ctx, game, wave)
   }

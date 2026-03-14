@@ -52,6 +52,18 @@ export function spawnEnemyOrbs(ctx: GameContext, x: number, y: number, kind: Ene
       const r = Math.random()
       spawnExpOrb(ctx, x, y, r < 0.25 ? 'purple' : r < 0.55 ? 'blue' : 'white')
     }
+  } else if (kind === 'cnox_greedy') {
+    const count = 2 + Math.floor(Math.random() * 2)
+    for (let i = 0; i < count; i++) spawnExpOrb(ctx, x, y, Math.random() < 0.35 ? 'blue' : 'white')
+  } else if (kind === 'cnox_shield') {
+    const count = 2 + Math.floor(Math.random() * 2)
+    for (let i = 0; i < count; i++) spawnExpOrb(ctx, x, y, Math.random() < 0.2 ? 'blue' : 'white')
+  } else if (kind === 'cnox_spark') {
+    const count = 2 + Math.floor(Math.random() * 3)
+    for (let i = 0; i < count; i++) {
+      const r = Math.random()
+      spawnExpOrb(ctx, x, y, r < 0.24 ? 'purple' : r < 0.62 ? 'blue' : 'white')
+    }
   } else if (kind === 'boss_invader') {
     for (let i = 0; i < 12; i++) spawnExpOrb(ctx, x + (Math.random()-0.5)*50, y + (Math.random()-0.5)*25, 'gold')
     for (let i = 0; i < 8; i++) spawnExpOrb(ctx, x + (Math.random()-0.5)*35, y + (Math.random()-0.5)*20, 'purple')
@@ -64,5 +76,9 @@ export function spawnEnemyOrbs(ctx: GameContext, x: number, y: number, kind: Ene
     for (let i = 0; i < 8; i++) spawnExpOrb(ctx, x + (Math.random()-0.5)*55, y + (Math.random()-0.5)*28, 'gold')
     for (let i = 0; i < 5; i++) spawnExpOrb(ctx, x + (Math.random()-0.5)*40, y + (Math.random()-0.5)*22, 'purple')
     for (let i = 0; i < 3; i++) spawnExpOrb(ctx, x + (Math.random()-0.5)*22, y, 'blue')
+  } else if (kind === 'boss_cnox_sun') {
+    for (let i = 0; i < 14; i++) spawnExpOrb(ctx, x + (Math.random() - 0.5) * 72, y + (Math.random() - 0.5) * 36, 'gold')
+    for (let i = 0; i < 8; i++) spawnExpOrb(ctx, x + (Math.random() - 0.5) * 56, y + (Math.random() - 0.5) * 26, 'purple')
+    for (let i = 0; i < 6; i++) spawnExpOrb(ctx, x + (Math.random() - 0.5) * 42, y + (Math.random() - 0.5) * 22, 'blue')
   }
 }

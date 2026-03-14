@@ -40,7 +40,7 @@ export function spawnStarDestroyer(ctx: GameContext, game: GameStore): void {
   const laserLine = new Graphics()
   laserLine.visible = false
   const labelStyle = new TextStyle({ fill: 0xaaccff, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000022, width: 3 } })
-  const bossLabel = new Text({ text: 'ANOX - KẾ DIỆT SAO', style: labelStyle })
+  const bossLabel = new Text({ text: 'Anox - Kẻ ăn sao', style: labelStyle })
   bossLabel.anchor.set(0.5, 1)
   bossLabel.y = -size - 18
   const container = new Container()
@@ -50,8 +50,8 @@ export function spawnStarDestroyer(ctx: GameContext, game: GameStore): void {
   ctx.gameLayer.addChild(container)
 
   // Alert text
-  const alertStyle = new TextStyle({ fill: 0xff4444, fontSize: 22, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x220000, width: 4 } })
-  const alertText = new Text({ text: '⚠ BOSS XUẤT HIỆN ⚠', style: alertStyle })
+  const alertStyle = new TextStyle({ fill: 0xff4444, fontSize: 22, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', align: 'center', lineHeight: 28, stroke: { color: 0x220000, width: 4 } })
+  const alertText = new Text({ text: 'ANOX\nKẻ ăn sao', style: alertStyle })
   alertText.anchor.set(0.5, 0.5)
   alertText.x = GAME_W / 2; alertText.y = GAME_H * 0.45; alertText.alpha = 0
   ctx.uiLayer.addChild(alertText)
@@ -105,7 +105,7 @@ export function updateBossStarDestroyer(ctx: GameContext, _game: GameStore, e: E
     screenFlash(ctx, 0x4466ff, 0.5, 600)
     spawnExplosion(ctx, e.container.x, e.container.y, 28, 0x4466ff, 0xaaccff)
     if (e.bossLabel) {
-      e.bossLabel.text = 'ANOX - DIỆT SAO [PHASE 2]'
+      e.bossLabel.text = 'Anox - Kẻ ăn sao [PHASE 2]'
       e.bossLabel.style = new TextStyle({ fill: 0xff88cc, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000022, width: 3 } })
     }
     if (e.laserLine) { e.laserLine.clear(); e.laserLine.visible = false }

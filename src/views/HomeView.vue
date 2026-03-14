@@ -142,6 +142,60 @@ function onAdminKeyDown(e: KeyboardEvent) {
 const attackCards = ALL_CARD_DEFS.filter(c => c.type === 'attack')
 const supportCards = ALL_CARD_DEFS.filter(c => c.type === 'support')
 const ultimateCards = ALL_CARD_DEFS.filter(c => c.type === 'ultimate')
+
+function getCardById(id?: string) {
+  if (!id) return null
+  return ALL_CARD_DEFS.find(card => card.id === id) ?? null
+}
+
+function openCardDetails(card: CardDef) {
+  selectedCard.value = card
+}
+
+interface StarCoreRow {
+  attack: CardDef | null
+  support: CardDef | null
+  ultimate: CardDef | null
+  opLeft: string
+  opRight: string
+}
+
+const comboCoreRows = computed<StarCoreRow[]>(() =>
+  ultimateCards.map((ultimate) => {
+    const attack = getCardById(ultimate.requiresAttackId)
+    const support = getCardById(ultimate.requiresSupportId)
+    const useImplication = !support
+    return {
+      attack,
+      support,
+      ultimate,
+      opLeft: useImplication ? '⇒' : '+',
+      opRight: useImplication ? '⇒' : '=',
+    }
+  }),
+)
+
+const pairedAttackIds = computed(() => new Set(comboCoreRows.value.map(row => row.attack?.id).filter(Boolean)))
+const pairedSupportIds = computed(() => new Set(comboCoreRows.value.map(row => row.support?.id).filter(Boolean)))
+const pairedUltimateIds = computed(() => new Set(comboCoreRows.value.map(row => row.ultimate?.id).filter(Boolean)))
+
+const columnRows = computed<StarCoreRow[]>(() => {
+  const restAttack = attackCards.filter(card => !pairedAttackIds.value.has(card.id))
+  const restSupport = supportCards.filter(card => !pairedSupportIds.value.has(card.id))
+  const restUltimate = ultimateCards.filter(card => !pairedUltimateIds.value.has(card.id))
+  const rowCount = Math.max(restAttack.length, restSupport.length, restUltimate.length)
+
+  return Array.from({ length: rowCount }, (_, idx) => ({
+    attack: restAttack[idx] ?? null,
+    support: restSupport[idx] ?? null,
+    ultimate: restUltimate[idx] ?? null,
+    opLeft: '',
+    opRight: '',
+  }))
+})
+
+const starCoreRows = computed<StarCoreRow[]>(() => [...comboCoreRows.value, ...columnRows.value])
+
 const editingUsername = ref(false)
 const editingShipName = ref(false)
 const usernameInput = ref('')
@@ -166,9 +220,9 @@ const starHolderStats = [
 
 const starShooterStats = [
   { label: 'SÁT THƯƠNG',  display: '40 / 200',  pct: 20, color: '#ff4444' },
-  { label: 'TỐC ĐỘ BẮN', display: '0.75 / 1.5', pct: 50, color: '#ff9900' },
+  { label: 'TỐC ĐỘ BẮN', display: '0.38 / 1.25', pct: 30, color: '#ff9900' },
   { label: 'ĐẠN / LỚT',   display: '1 / 4',    pct: 25, color: '#ffcc00' },
-  { label: 'TỐC BAY',     display: '1.0 / 1.6', pct: 63, color: '#44aaff' },
+  { label: 'TỐC BAY',     display: '0.7 / 1.1', pct: 64, color: '#44aaff' },
   { label: 'HP',          display: '220 / 400', pct: 55, color: '#44ff88' },
 ]
 
@@ -277,6 +331,7 @@ function onShipNameKey(e: KeyboardEvent) {
         <div class="topbar-lv__bar">
           <div class="topbar-lv__fill" :style="{ width: game.accountExpPercent + '%' }" />
         </div>
+        <div class="topbar-lv__exp">{{ game.accountExp }}/{{ game.accountExpToNextLevel }}</div>
       </div>
       <div class="topbar-right" data-tour="currency">
         <button class="topbar-missions" @click="showMissionsPanel = true">
@@ -542,9 +597,9 @@ function onShipNameKey(e: KeyboardEvent) {
                     </div>
                   </div>
                   <div class="ship-skill">
-                    <div class="ship-skill__name"><PhCrown weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>SÓNG TẦM NHIỀT HUỶ DIỆT</div>
+                    <div class="ship-skill__name"><PhCrown weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>SÓNG TẦM NHIỆT HỦY DIỆT</div>
                     <div class="ship-skill__cd"><PhTimer :size="11" style="vertical-align:middle;margin-right:4px"/>Hồi chiêu: 30 giây</div>
-                    <div class="ship-skill__desc">Toả ra sóng nhiệt tốc độ cao, gây sát thương lên tất cả kẻ địch trên màn hình và huỷ toàn bộ đường đạn của đối phương.</div>
+                    <div class="ship-skill__desc">Tỏa ra sóng nhiệt tốc độ cao, gây sát thương lên tất cả kẻ địch trên màn hình và hủy toàn bộ đường đạn của đối phương.</div>
                   </div>
                   <div class="ship-card__actions">
                     <button v-if="game.selectedShip !== 'star_keeper'" class="ship-btn ship-btn--select" @click="selectShip('star_keeper')"><PhCheck :size="11" style="vertical-align:middle;margin-right:4px"/>Chọn phi cơ này</button>
@@ -572,7 +627,7 @@ function onShipNameKey(e: KeyboardEvent) {
                       <div class="ship-card__tag" :class="game.ownedShips.includes('star_holder') ? 'tag--owned' : 'tag--locked'">
                         {{ game.ownedShips.includes('star_holder') ? '✅ Đã sở hữu' : '🔒 Cần mở khoá · 5,000 🪙' }}
                       </div>
-                      <div class="ship-card__desc">Chiến cơ tấn công cao, thân tàu thoi mạnh mẽ. Linh hồn kẻ địch trở thành vũ khí huỷ diệt.</div>
+                      <div class="ship-card__desc">Chiến cơ tấn công cao, thân tàu mạnh mẽ. Linh hồn kẻ địch trở thành vũ khí hủy diệt.</div>
                     </div>
                   </div>
                   <div class="ship-stats">
@@ -778,50 +833,56 @@ function onShipNameKey(e: KeyboardEvent) {
 
           <!-- Card list view -->
           <div v-else class="ships-scroll">
-            <div class="core-section-label"><PhSword weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>TẤN CÔNG</div>
-            <button
-              v-for="card in attackCards"
-              :key="card.id"
-              class="core-card-item"
-              @click="selectedCard = card"
-            >
-              <div class="core-card-icon"><CardIcon :name="card.icon" :size="26" /></div>
-              <div class="core-card-body">
-                <div class="core-card-name">{{ card.name }}</div>
-                <div class="core-card-desc">{{ card.levels[0].desc }}</div>
-              </div>
-              <div class="core-card-arrow"><PhCaretRight :size="18" /></div>
-            </button>
+            <div class="core-section-label">LÕI TẤN CÔNG + LÕI HỖ TRỢ = LÕI TỐI THƯỢNG</div>
+            <div class="core-relation-head">
+              <div class="core-relation-head__cell core-relation-head__cell--attack"><PhSword weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>TẤN CÔNG</div>
+              <div class="core-relation-head__op">+</div>
+              <div class="core-relation-head__cell core-relation-head__cell--support"><PhShield weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>HỖ TRỢ</div>
+              <div class="core-relation-head__op">=</div>
+              <div class="core-relation-head__cell core-relation-head__cell--ultimate"><PhCrown weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>TỐI THƯỢNG</div>
+            </div>
 
-            <div class="core-section-label" style="margin-top: 14px;"><PhShield weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>HỖ TRỢ</div>
-            <button
-              v-for="card in supportCards"
-              :key="card.id"
-              class="core-card-item"
-              @click="selectedCard = card"
-            >
-              <div class="core-card-icon"><CardIcon :name="card.icon" :size="26" /></div>
-              <div class="core-card-body">
-                <div class="core-card-name">{{ card.name }}</div>
-                <div class="core-card-desc">{{ card.levels[0].desc }}</div>
-              </div>
-              <div class="core-card-arrow"><PhCaretRight :size="18" /></div>
-            </button>
+            <div class="core-relation-list">
+              <div
+                v-for="(row, rowIdx) in starCoreRows"
+                :key="(row.ultimate?.id ?? 'empty-ult') + '-' + rowIdx"
+                class="core-relation-row"
+              >
+                <button
+                  v-if="row.attack"
+                  class="core-icon-card core-icon-card--attack"
+                  @click="openCardDetails(row.attack)"
+                >
+                  <CardIcon :name="row.attack.icon" :size="22" />
+                  <span class="core-icon-card__name">{{ row.attack.name }}</span>
+                </button>
+                <div v-else class="core-icon-card core-icon-card--empty" />
 
-            <div class="core-section-label" style="margin-top: 14px;"><PhCrown weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>TỐI THƯỢNG</div>
-            <button
-              v-for="card in ultimateCards"
-              :key="card.id"
-              class="core-card-item core-card-item--ultimate"
-              @click="selectedCard = card"
-            >
-              <div class="core-card-icon"><CardIcon :name="card.icon" :size="26" /></div>
-              <div class="core-card-body">
-                <div class="core-card-name">{{ card.name }}</div>
-                <div class="core-card-desc">{{ card.levels[0].desc }}</div>
+                <div class="core-relation-op">{{ row.opLeft }}</div>
+
+                <button
+                  v-if="row.support"
+                  class="core-icon-card core-icon-card--support"
+                  @click="openCardDetails(row.support)"
+                >
+                  <CardIcon :name="row.support.icon" :size="22" />
+                  <span class="core-icon-card__name">{{ row.support.name }}</span>
+                </button>
+                <div v-else class="core-icon-card core-icon-card--empty" />
+
+                <div class="core-relation-op">{{ row.opRight }}</div>
+
+                <button
+                  v-if="row.ultimate"
+                  class="core-icon-card core-icon-card--ultimate"
+                  @click="openCardDetails(row.ultimate)"
+                >
+                  <CardIcon :name="row.ultimate.icon" :size="22" />
+                  <span class="core-icon-card__name">{{ row.ultimate.name }}</span>
+                </button>
+                <div v-else class="core-icon-card core-icon-card--empty" />
               </div>
-              <div class="core-card-arrow"><PhCaretRight :size="18" /></div>
-            </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1489,14 +1550,13 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .ship-carousel__arrow {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: 44px;
   background: rgba(5, 12, 35, 0.85);
   border: 2px solid var(--color-border);
   color: var(--color-accent);
   font-family: var(--font-pixel);
-  width: 32px;
-  height: 48px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1506,8 +1566,8 @@ function onShipNameKey(e: KeyboardEvent) {
   transition: opacity 0.2s;
 }
 .ship-carousel__arrow:disabled { opacity: 0.2; cursor: default; }
-.ship-carousel__arrow--prev { left: 4px; }
-.ship-carousel__arrow--next { right: 4px; }
+.ship-carousel__arrow--prev { left: 12px; }
+.ship-carousel__arrow--next { right: 12px; }
 .ship-carousel__dots {
   position: absolute;
   bottom: 10px;
@@ -1722,41 +1782,80 @@ function onShipNameKey(e: KeyboardEvent) {
   margin-bottom: 8px;
 }
 
-.core-card-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.core-icon-card {
   width: 100%;
+  min-height: 62px;
   background: var(--color-panel-dark);
   border: 2px solid var(--color-border-dark);
-  padding: 10px 12px;
-  cursor: pointer;
-  text-align: left;
-  margin-bottom: 6px;
-  transition: border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px;
+  transition: border-color 0.15s, transform 0.1s;
 }
-.core-card-item:hover { border-color: var(--color-border); }
-.core-card-item--ultimate { border-color: rgba(255, 200, 0, 0.3); }
-.core-card-item--ultimate:hover { border-color: #ffd700; }
-
-.core-card-icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.core-card-body { flex: 1; min-width: 0; }
-.core-card-name {
+.core-icon-card--attack { border-color: rgba(255, 106, 64, 0.4); }
+.core-icon-card--support { border-color: rgba(68, 170, 255, 0.4); }
+.core-icon-card--ultimate { border-color: rgba(255, 200, 0, 0.45); background: linear-gradient(180deg, rgba(255, 220, 120, 0.16), rgba(20, 14, 8, 0.96)); }
+.core-icon-card--empty { border-style: dashed; border-color: #2f3850; background: rgba(12, 14, 22, 0.88); }
+button.core-icon-card { cursor: pointer; }
+button.core-icon-card:hover { border-color: var(--color-border); transform: translateY(-1px); }
+.core-icon-card__name {
   font-family: var(--font-pixel);
-  font-size: 10px;
-  color: var(--color-text);
-  margin-bottom: 3px;
-}
-.core-card-desc {
-  font-family: var(--font-pixel);
-  font-size: 9px;
+  font-size: 7px;
+  line-height: 1.3;
+  letter-spacing: 0.2px;
   color: var(--color-text-dim);
-  line-height: 1.5;
+  text-align: center;
   white-space: nowrap;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.core-card-arrow { display: flex; align-items: center; color: var(--color-text-dim); flex-shrink: 0; }
+
+.core-relation-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr) 24px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.core-relation-head__cell {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  letter-spacing: 1px;
+  text-align: center;
+  padding: 6px 4px;
+  border: 1px solid var(--color-border-dark);
+  background: rgba(255, 255, 255, 0.03);
+}
+.core-relation-head__cell--attack { color: #ff8a66; }
+.core-relation-head__cell--support { color: #7dbfff; }
+.core-relation-head__cell--ultimate { color: #ffd25a; }
+.core-relation-head__op,
+.core-relation-op {
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  color: #8da5c7;
+  text-align: center;
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.core-relation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.core-relation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr) 24px minmax(0, 1fr);
+  gap: 6px;
+  align-items: stretch;
+}
 
 /* Card detail */
 .core-detail-card { display: flex; flex-direction: column; gap: 16px; }
@@ -1893,6 +1992,26 @@ function onShipNameKey(e: KeyboardEvent) {
   background: linear-gradient(90deg, #27ae60, #2ecc71);
   transition: width 0.5s ease;
   box-shadow: 0 0 4px #2ecc71;
+}
+.topbar-lv__exp {
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #66b8ff;
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 380px) {
+  .core-relation-head,
+  .core-relation-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .core-relation-head__op,
+  .core-relation-op {
+    display: none;
+  }
 }
 
 /* ─── Equipment Panel (Trang Bị) ─────────────────────────────────────────── */

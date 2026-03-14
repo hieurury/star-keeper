@@ -53,13 +53,14 @@ export interface GameContext {
   thuHoReflectGlow: number
 
   // Faction system (rotates every 5 stages, no same faction twice in a row)
-  activeFaction: 'anox' | 'bnox'
-  lastFaction: 'anox' | 'bnox'
+  activeFaction: 'anox' | 'bnox' | 'cnox'
+  lastFaction: 'anox' | 'bnox' | 'cnox'
   factionBlock: number
 
   // Boss zoom (smooth scale-out when Tinh Vân boss is active)
   bossZoom: number
   bossZoomTarget: number
+  bossAttackLockTimer: number
 
   // Wave / stage state
   waveQueue: WaveSpawner[]
@@ -128,11 +129,14 @@ export function createGameContext(): GameContext {
     thuHoReflecting: false,
     thuHoReflectGlow: 0,
     ...(() => {
-      const f: 'anox' | 'bnox' = Math.random() < 0.5 ? 'anox' : 'bnox'
-      return { activeFaction: f, lastFaction: f === 'anox' ? 'bnox' : 'anox' as const, factionBlock: 0 }
+      const factions: Array<'anox' | 'bnox' | 'cnox'> = ['anox', 'bnox', 'cnox']
+      const f = factions[Math.floor(Math.random() * factions.length)]!
+      const last = factions.find(x => x !== f) ?? 'anox'
+      return { activeFaction: f, lastFaction: last, factionBlock: 0 }
     })(),
     bossZoom: 1.0,
     bossZoomTarget: 1.0,
+    bossAttackLockTimer: 0,
     waveQueue: [],
     waveDispatchTimer: 0,
     waveIsClearing: false,

@@ -2,10 +2,11 @@ import type { GameContext } from '../context'
 import type { useGameStore } from '../../stores/gameStore'
 import type { Enemy } from '../types'
 import { spawnExplosion, screenFlash } from '../systems/effects'
-import { spawnEnemyOrbs, spawnFragmentOrb } from '../systems/orbs'
+import { spawnEnemyOrbs, spawnExpOrb, spawnFragmentOrb } from '../systems/orbs'
 import { cleanupBossInvaderTurrets } from './BossInvader'
 import { cleanupBossTinhVan } from './BossTinhVan'
 import { cleanupBossTrumSo } from './BossTrumSo'
+import { cleanupBossCnoxSun } from './BossCnoxSun'
 import { drawThuatSiMeteor } from './ThuatSi'
 
 type GameStore = ReturnType<typeof useGameStore>
@@ -57,10 +58,26 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
     cleanupBossTrumSo(ctx, e)
     game.addScore(500 + game.currentStage * 70)
     game.addBossKill()
+  } else if (e.kind === 'boss_cnox_sun') {
+    spawnExplosion(ctx, e.container.x, e.container.y, 82, 0xff8b2c, 0xffe2aa)
+    spawnExplosion(ctx, e.container.x - 70, e.container.y + 18, 34, 0xffd050, 0xfff2c7)
+    spawnExplosion(ctx, e.container.x + 72, e.container.y - 20, 34, 0x67bcff, 0xdff2ff)
+    spawnExplosion(ctx, e.container.x, e.container.y - 30, 42, 0xc576ff, 0xefd9ff)
+    screenFlash(ctx, 0xff9d33, 0.82, 1000)
+    spawnEnemyOrbs(ctx, e.container.x, e.container.y, 'boss_cnox_sun')
+    cleanupBossCnoxSun(ctx, e)
+    game.addScore(980 + game.currentStage * 100)
+    game.addBossKill()
   } else {
     // Thủ Hộ (guardian) dies with a gold flash
     if (e.kind === 'thu_ho') {
       spawnExplosion(ctx, e.container.x, e.container.y, 16, 0xffd700, 0xffffff)
+    } else if (e.kind === 'cnox_greedy') {
+      spawnExplosion(ctx, e.container.x, e.container.y, 18, 0xff8844, 0xffe0aa)
+    } else if (e.kind === 'cnox_shield') {
+      spawnExplosion(ctx, e.container.x, e.container.y, 18, 0x55aaff, 0xe8fbff)
+    } else if (e.kind === 'cnox_spark') {
+      spawnExplosion(ctx, e.container.x, e.container.y, 16, 0xaa66ff, 0xffffff)
     }
     // Thuật Sĩ (healer) transforms into a meteorite instead of instantly dying
     if (e.kind === 'thuat_si' && !e.isDyingMeteor) {
@@ -100,10 +117,32 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
     const explR = e.kind === 'kamikaze' ? 18 : 14
     spawnExplosion(ctx, e.container.x, e.container.y, explR)
     spawnEnemyOrbs(ctx, e.container.x, e.container.y, e.kind)
+    if (e.kind === 'cnox_greedy') {
+      let remaining = Math.max(0, Math.round(e.cnoxStolenExp ?? 0))
+      while (remaining >= 50) {
+        spawnExpOrb(ctx, e.container.x, e.container.y, 'gold')
+        remaining -= 50
+      }
+      while (remaining >= 30) {
+        spawnExpOrb(ctx, e.container.x, e.container.y, 'purple')
+        remaining -= 30
+      }
+      while (remaining >= 20) {
+        spawnExpOrb(ctx, e.container.x, e.container.y, 'blue')
+        remaining -= 20
+      }
+      while (remaining >= 10) {
+        spawnExpOrb(ctx, e.container.x, e.container.y, 'white')
+        remaining -= 10
+      }
+    }
     const pts = e.kind === 'sniper'    ? 20 + game.currentStage * 7
              : e.kind === 'kamikaze'  ? 15 + game.currentStage * 6
              : e.kind === 'dai_lien'  ? 12 + game.currentStage * 5
              : e.kind === 'thu_ho'    ? 18 + game.currentStage * 8
+             : e.kind === 'cnox_greedy' ? 24 + game.currentStage * 8 + Math.round((e.cnoxStolenExp ?? 0) * 0.35)
+             : e.kind === 'cnox_shield' ? 20 + game.currentStage * 7
+             : e.kind === 'cnox_spark' ? 22 + game.currentStage * 8
              :                         10 + game.currentStage * 5
     game.addScore(pts)
     // Star Holder: soul fragment drop

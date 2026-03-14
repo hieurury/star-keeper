@@ -44,6 +44,27 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
   const cs = game.cardStats
   const count = cs.missileLaunchers
 
+  const findNearestMissileTarget = (x: number, y: number): { x: number, y: number, enemy?: (typeof ctx.enemies)[number] } | null => {
+    const enemyTarget = findNearestEnemy(ctx.enemies, x, y)
+    let bestX = enemyTarget?.container.x ?? 0
+    let bestY = enemyTarget?.container.y ?? 0
+    let bestEnemy = enemyTarget ?? undefined
+    let bestD2 = enemyTarget ? dist2(x, y, bestX, bestY) : Infinity
+    for (const e of ctx.enemies) {
+      if (e.kind !== 'boss_cnox_sun') continue
+      for (const c of e.sunEnergyCrystals ?? []) {
+        const d2 = dist2(x, y, c.x, c.y)
+        if (d2 < bestD2) {
+          bestD2 = d2
+          bestX = c.x
+          bestY = c.y
+          bestEnemy = undefined
+        }
+      }
+    }
+    return Number.isFinite(bestD2) ? { x: bestX, y: bestY, enemy: bestEnemy } : null
+  }
+
   while (ctx.missileLaunchers.length < count) {
     const g = new Graphics()
     drawMissileLauncher(g)
@@ -63,10 +84,10 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
     const py = ctx.playerShip.y + 8
     launcher.gfx.x = px
     launcher.gfx.y = py
-    const aimEnemy = findNearestEnemy(ctx.enemies, px, py)
-    if (aimEnemy) {
-      const adx = aimEnemy.container.x - px
-      const ady = aimEnemy.container.y - py
+    const aimTarget = findNearestMissileTarget(px, py)
+    if (aimTarget) {
+      const adx = aimTarget.x - px
+      const ady = aimTarget.y - py
       launcher.gfx.rotation = Math.atan2(ady, adx) + Math.PI / 2
     } else {
       launcher.gfx.rotation = 0
@@ -75,15 +96,15 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
     launcher.timer -= dt
     if (launcher.timer <= 0) {
       launcher.timer = cs.missileIntervalFrames
-      const target = findNearestEnemy(ctx.enemies, px, py)
+      const target = findNearestMissileTarget(px, py)
       if (target) {
         const isSmall = cs.interstellarMissile
         const mg = new Graphics()
         drawPlayerMissile(mg, isSmall)
         mg.x = px; mg.y = py
         ctx.gameLayer.addChild(mg)
-        const dx = target.container.x - px
-        const dy = target.container.y - py
+        const dx = target.x - px
+        const dy = target.y - py
         const mag = Math.sqrt(dx * dx + dy * dy) || 1
         const spd = 5.5 * cs.missileSpeedMult
         ctx.playerMissiles.push({
@@ -92,6 +113,9 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
           vy: (dy / mag) * spd,
           damage: Math.round(65 * cs.missileDamageMult),
           aoe: cs.missileAOE,
+          targetEnemy: target.enemy,
+          targetX: target.x,
+          targetY: target.y,
         })
       }
     }
@@ -102,13 +126,28 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
   const turnRate = cs.interstellarMissile ? 0.18 : 0.10
   for (let i = ctx.playerMissiles.length - 1; i >= 0; i--) {
     const m = ctx.playerMissiles[i]
-    const target = findNearestEnemy(ctx.enemies, m.gfx.x, m.gfx.y)
+    const target = m.targetEnemy && ctx.enemies.includes(m.targetEnemy)
+      ? m.targetEnemy
+      : findNearestEnemy(ctx.enemies, m.gfx.x, m.gfx.y)
     if (target) {
+      m.targetEnemy = target
       const dx = target.container.x - m.gfx.x
       const dy = target.container.y - m.gfx.y
       const mag = Math.sqrt(dx * dx + dy * dy) || 1
       m.vx += (dx / mag * spd - m.vx) * turnRate
       m.vy += (dy / mag * spd - m.vy) * turnRate
+    } else if (m.targetX !== undefined && m.targetY !== undefined) {
+      const dx = m.targetX - m.gfx.x
+      const dy = m.targetY - m.gfx.y
+      const mag = Math.sqrt(dx * dx + dy * dy) || 1
+      m.vx += (dx / mag * spd - m.vx) * turnRate
+      m.vy += (dy / mag * spd - m.vy) * turnRate
+    }
+    // Prevent freeze: sharp turns can drain speed to near-zero; always keep minimum velocity
+    const curSpd2 = m.vx * m.vx + m.vy * m.vy
+    if (curSpd2 < (spd * 0.5) * (spd * 0.5)) {
+      if (curSpd2 > 0) { const inv = spd / Math.sqrt(curSpd2); m.vx *= inv; m.vy *= inv }
+      else { m.vx = 0; m.vy = -spd }
     }
     m.gfx.x += m.vx * dt
     m.gfx.y += m.vy * dt
@@ -121,9 +160,65 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
     }
 
     let hit = false
+
+    for (const boss of ctx.enemies) {
+      if (boss.kind !== 'boss_cnox_sun') continue
+      const crystals = boss.sunEnergyCrystals ?? []
+      for (let ci = crystals.length - 1; ci >= 0; ci--) {
+        const c = crystals[ci]!
+        if (dist2(m.gfx.x, m.gfx.y, c.x, c.y) < 17 * 17) {
+          if (m.aoe) {
+            spawnExplosion(ctx, m.gfx.x, m.gfx.y, 30, 0xff6600, 0xffee44)
+            const AOE_R2 = 65 * 65
+            for (let k = ctx.enemies.length - 1; k >= 0; k--) {
+              const ae = ctx.enemies[k]
+              if (dist2(m.gfx.x, m.gfx.y, ae.container.x, ae.container.y) < AOE_R2) {
+                ae.hp = Math.max(0, ae.hp - m.damage)
+                hitFlash(ae.body)
+                spawnDamageText(ctx, ae.container.x, ae.container.y - (ae.kind === 'boss_stardestroyer' ? 60 : 16), m.damage)
+                redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
+                if (ae.hp <= 0) killEnemy(ctx, game, ae, k)
+              }
+            }
+            for (const sunBoss of ctx.enemies) {
+              if (sunBoss.kind !== 'boss_cnox_sun') continue
+              const bossCrystals = sunBoss.sunEnergyCrystals ?? []
+              for (let cci = bossCrystals.length - 1; cci >= 0; cci--) {
+                const cc = bossCrystals[cci]!
+                if (dist2(m.gfx.x, m.gfx.y, cc.x, cc.y) < AOE_R2) {
+                  cc.hp = Math.max(0, cc.hp - m.damage)
+                  spawnDamageText(ctx, cc.x, cc.y - 14, m.damage)
+                  if (cc.hp <= 0) {
+                    spawnExplosion(ctx, cc.x, cc.y, 20, 0x66c7ff, 0xe9f8ff)
+                    if (!cc.gfx.destroyed) ctx.gameLayer.removeChild(cc.gfx)
+                    bossCrystals.splice(cci, 1)
+                  }
+                }
+              }
+            }
+          } else {
+            c.hp = Math.max(0, c.hp - m.damage)
+            spawnDamageText(ctx, c.x, c.y - 14, m.damage)
+            spawnExplosion(ctx, m.gfx.x, m.gfx.y, 8, 0x00ccff, 0x44eeff)
+            if (c.hp <= 0) {
+              spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+              if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+              crystals.splice(ci, 1)
+            }
+          }
+          if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+          ctx.playerMissiles.splice(i, 1)
+          hit = true
+          break
+        }
+      }
+      if (hit) break
+    }
+    if (hit) continue
+
     for (let j = ctx.enemies.length - 1; j >= 0; j--) {
       const e = ctx.enemies[j]
-      const hitR = e.kind === 'boss_stardestroyer' ? 50 : 14
+      const hitR = e.kind === 'boss_tinhvan' ? 66 : (e.kind === 'boss_cnox_sun' ? 72 : (e.kind.startsWith('boss_') ? 54 : 14))
       if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < hitR * hitR) {
         if (m.aoe) {
           spawnExplosion(ctx, m.gfx.x, m.gfx.y, 30, 0xff6600, 0xffee44)
@@ -178,6 +273,22 @@ export function spawnPlasmaBeam(ctx: GameContext, game: GameStore, x: number, da
         spawnDamageText(ctx, e.container.x, e.container.y - (isBoss ? 60 : 16), damage)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
         if (e.hp <= 0) killEnemy(ctx, game, e, i)
+      }
+    }
+  }
+  for (const boss of ctx.enemies) {
+    if (boss.kind !== 'boss_cnox_sun') continue
+    const crystals = boss.sunEnergyCrystals ?? []
+    for (let ci = crystals.length - 1; ci >= 0; ci--) {
+      const c = crystals[ci]!
+      if (Math.abs(c.x - x) < beamW + 10) {
+        c.hp = Math.max(0, c.hp - damage)
+        spawnDamageText(ctx, c.x, c.y - 14, damage)
+        if (c.hp <= 0) {
+          spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+          if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+          crystals.splice(ci, 1)
+        }
       }
     }
   }
@@ -238,6 +349,22 @@ export function dropClusterBomb(ctx: GameContext, game: GameStore, fromX: number
           if (e.hp <= 0) killEnemy(ctx, game, e, i)
         }
       }
+      for (const boss of ctx.enemies) {
+        if (boss.kind !== 'boss_cnox_sun') continue
+        const crystals = boss.sunEnergyCrystals ?? []
+        for (let ci = crystals.length - 1; ci >= 0; ci--) {
+          const c = crystals[ci]!
+          if (dist2(bomb.x, bomb.y, c.x, c.y) < AOE_R2) {
+            c.hp = Math.max(0, c.hp - damage)
+            spawnDamageText(ctx, c.x, c.y - 14, damage)
+            if (c.hp <= 0) {
+              spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+              if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+              crystals.splice(ci, 1)
+            }
+          }
+        }
+      }
       if (!bomb.destroyed) ctx.gameLayer.removeChild(bomb)
       ctx.app?.ticker.remove(tick)
     }
@@ -258,6 +385,22 @@ export function fireLaserSweep(ctx: GameContext, game: GameStore, damage: number
       spawnDamageText(ctx, e.container.x, e.container.y - 16, damage)
       redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
       if (e.hp <= 0) killEnemy(ctx, game, e, i)
+    }
+  }
+  for (const boss of ctx.enemies) {
+    if (boss.kind !== 'boss_cnox_sun') continue
+    const crystals = boss.sunEnergyCrystals ?? []
+    for (let ci = crystals.length - 1; ci >= 0; ci--) {
+      const c = crystals[ci]!
+      if (Math.abs(c.y - sweepY) < 22) {
+        c.hp = Math.max(0, c.hp - damage)
+        spawnDamageText(ctx, c.x, c.y - 14, damage)
+        if (c.hp <= 0) {
+          spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+          if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+          crystals.splice(ci, 1)
+        }
+      }
     }
   }
   const laser = new Graphics()
@@ -308,6 +451,22 @@ export function updateStaticField(ctx: GameContext, game: GameStore, dt: number)
         spawnDamageText(ctx, e.container.x, e.container.y - 14, cs.staticFieldDmgPerTick)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
         if (e.hp <= 0) killEnemy(ctx, game, e, i)
+      }
+    }
+    for (const boss of ctx.enemies) {
+      if (boss.kind !== 'boss_cnox_sun') continue
+      const crystals = boss.sunEnergyCrystals ?? []
+      for (let ci = crystals.length - 1; ci >= 0; ci--) {
+        const c = crystals[ci]!
+        if (dist2(ctx.playerShip.x, ctx.playerShip.y, c.x, c.y) < r2) {
+          c.hp = Math.max(0, c.hp - cs.staticFieldDmgPerTick)
+          spawnDamageText(ctx, c.x, c.y - 14, cs.staticFieldDmgPerTick)
+          if (c.hp <= 0) {
+            spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+            if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+            crystals.splice(ci, 1)
+          }
+        }
       }
     }
   }
@@ -414,5 +573,20 @@ export function activateHeatWave(ctx: GameContext, game: GameStore): void {
     spawnDamageText(ctx, e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 60 : 16), waveDamage)
     redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
     if (e.hp <= 0) killEnemy(ctx, game, e, i)
+  }
+
+  for (const boss of ctx.enemies) {
+    if (boss.kind !== 'boss_cnox_sun') continue
+    const crystals = boss.sunEnergyCrystals ?? []
+    for (let ci = crystals.length - 1; ci >= 0; ci--) {
+      const c = crystals[ci]!
+      c.hp = Math.max(0, c.hp - waveDamage)
+      spawnDamageText(ctx, c.x, c.y - 14, waveDamage)
+      if (c.hp <= 0) {
+        spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+        if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+        crystals.splice(ci, 1)
+      }
+    }
   }
 }

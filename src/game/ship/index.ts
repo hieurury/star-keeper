@@ -108,7 +108,7 @@ export function spawnHolderLaser(
     const ey = e.container.y - fromY
     const perpDist = Math.abs(ex * cosA + ey * sinA)
     const along = ex * sinA - ey * cosA
-    const hitR = e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 45 : 15
+    const hitR = e.kind === 'boss_cnox_sun' ? 66 : (e.kind.startsWith('boss_') ? 52 : 15)
     if (perpDist < beamW / 2 + hitR && along > -hitR && along < beamLen + hitR) {
       e.hp = Math.max(0, e.hp - damage)
       hitFlash(e.body)
@@ -116,6 +116,27 @@ export function spawnHolderLaser(
       redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
       if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
       if (e.hp <= 0) killEnemy(ctx, game, e, i, true)
+    }
+  }
+
+  for (const boss of ctx.enemies) {
+    if (boss.kind !== 'boss_cnox_sun') continue
+    const crystals = boss.sunEnergyCrystals ?? []
+    for (let ci = crystals.length - 1; ci >= 0; ci--) {
+      const c = crystals[ci]!
+      const ex = c.x - fromX
+      const ey = c.y - fromY
+      const perpDist = Math.abs(ex * cosA + ey * sinA)
+      const along = ex * sinA - ey * cosA
+      const hitR = 12
+      if (perpDist < beamW / 2 + hitR && along > -hitR && along < beamLen + hitR) {
+        c.hp = Math.max(0, c.hp - damage)
+        spawnDamageText(ctx, c.x, c.y - 14, damage)
+        if (c.hp <= 0) {
+          if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+          crystals.splice(ci, 1)
+        }
+      }
     }
   }
 

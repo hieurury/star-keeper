@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { Application, Graphics, Container, Text, TextStyle, Ticker } from 'pixi.js'
 import { useGameStore } from '../../stores/gameStore'
@@ -13,7 +13,6 @@ import { drawFragmentMissile } from '../../game/projectiles/index'
 import { drawEnemyBullet, drawBossBullet, drawBossMissile, drawTrumSoMissile } from '../../game/projectiles/index'
 
 import { spawnExplosion, screenFlash, spawnDamageText, hitFlash, showStageClearBanner, spawnMissileWarning } from '../../game/systems/effects'
-import { spawnEnemyOrbs } from '../../game/systems/orbs'
 import { createStar } from '../../game/systems/background'
 import { updateMissileLaunchers, updatePeriodicAbilities, activateHeatWave, activateBlackHole } from '../../game/systems/abilities'
 import { drawArtifactGfx, initArtifactGfx, activateNeutronVacuum, activateManaCoreOverload, activateSoulHarvest } from '../../game/systems/artifacts'
@@ -23,7 +22,8 @@ import { spawnKamikazeAt } from '../../game/entities/Kamikaze'
 import { drawDaiLienBullet, spawnDaiLienPair } from '../../game/entities/DaiLien'
 import { drawThuHo, spawnThuHoSwarm } from '../../game/entities/ThuHo'
 import { drawHealBeam, spawnThuatSi } from '../../game/entities/ThuatSi'
-import type { Enemy } from '../../game/types'
+import { drawCnoxGreedy } from '../../game/entities/CnoxGreedy'
+import type { Enemy, SunWeaponStar } from '../../game/types'
 
 const canvasWrapper = ref<HTMLDivElement>()
 const game = useGameStore()
@@ -45,7 +45,7 @@ function handleVisibilityChange() {
       autoPaused = true
     }
   } else if (autoPaused) {
-    // Game stays paused � player must press "Ti?p T?c" manually
+    // Game stays paused ï¿½ player must press "Ti?p T?c" manually
     autoPaused = false
   }
 }
@@ -56,7 +56,7 @@ function handleWindowBlur() {
   }
 }
 function handleWindowFocus() {
-  // Game stays paused � player must press "Ti?p T?c" manually
+  // Game stays paused ï¿½ player must press "Ti?p T?c" manually
   if (autoPaused) autoPaused = false
 }
 
@@ -69,7 +69,162 @@ function shoot(offsetX = 0, vxDrift = 0) {
   g.y = ctx.playerShip.y - 22
   ctx.gameLayer.addChild(g)
   const pierceLeft = game.cardStats.bulletPierceOnKill ? 2 : undefined
-  ctx.bullets.push({ gfx: g, vy: 8 * game.upgrades.bulletSpeed, vx: vxDrift, pierceLeft })
+  const pierceDmgMult = game.cardStats.bulletPierceOnKill ? 1.0 : undefined
+  ctx.bullets.push({ gfx: g, vy: 8 * game.upgrades.bulletSpeed, vx: vxDrift, pierceLeft, pierceDmgMult })
+}
+
+function pointDistanceToRay(px: number, py: number, ox: number, oy: number, angle: number): { perp: number, dot: number } {
+  const lx = Math.cos(angle)
+  const ly = Math.sin(angle)
+  const dx = px - ox
+  const dy = py - oy
+  const dot = dx * lx + dy * ly
+  const perpX = dx - dot * lx
+  const perpY = dy - dot * ly
+  return { perp: Math.sqrt(perpX * perpX + perpY * perpY), dot }
+}
+
+function pointDistanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const abx = bx - ax
+  const aby = by - ay
+  const apx = px - ax
+  const apy = py - ay
+  const ab2 = abx * abx + aby * aby || 1
+  const t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / ab2))
+  const cx = ax + abx * t
+  const cy = ay + aby * t
+  return Math.sqrt(dist2(px, py, cx, cy))
+}
+
+function getEnemyCollisionRadius(e: Enemy): number {
+  if (e.kind === 'boss_cnox_sun') return 52
+  if (e.kind === 'boss_tinhvan') return 60
+  if (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso') return 45
+  if (e.kind === 'cnox_shield') return 18
+  return 15
+}
+
+function getCollisionDamageToPlayer(e: Enemy, stage: number): number {
+  if (e.kind.startsWith('boss_')) return 24 + stage * 2
+  if (e.kind === 'cnox_spark') return 20 + stage
+  if (e.kind === 'cnox_shield') return 18 + stage
+  return 14 + stage
+}
+
+function getCollisionDamageToEnemy(gameDamage: number, e: Enemy): number {
+  const base = Math.max(10, Math.round(gameDamage * 0.6))
+  if (e.kind.startsWith('boss_')) return Math.max(6, Math.round(base * 0.35))
+  if (e.kind === 'cnox_shield') return Math.max(8, Math.round(base * 0.75))
+  return base
+}
+
+function removeDisplayObject(obj?: Graphics | Text | null) {
+  if (!obj || obj.destroyed) return
+  if ('clear' in obj && typeof obj.clear === 'function') obj.clear()
+  if (obj.parent) obj.parent.removeChild(obj)
+}
+
+function removeEnemyDetachedGraphics(e: Enemy) {
+  removeDisplayObject(e.aimLine)
+  removeDisplayObject(e.warnSign)
+  removeDisplayObject(e.healBeamGfx)
+  removeDisplayObject(e.cnoxLaserGfx)
+  removeDisplayObject(e.cnoxWarnGfx)
+  removeDisplayObject(e.sunLinkGfx)
+  removeDisplayObject(e.sunCoreLaserGfx)
+  removeDisplayObject(e.trumSoPhase2LaserGfx)
+  removeDisplayObject(e.trumSoChargeLineGfx)
+  removeDisplayObject(e.summonPortalGfx)
+
+  if (e.bossTurrets) {
+    for (const t of e.bossTurrets) removeDisplayObject(t.laserGfx)
+  }
+  if (e.trumSoLasers) {
+    for (const laser of e.trumSoLasers) removeDisplayObject(laser.gfx)
+  }
+  if (e.blackHoles) {
+    for (const bh of e.blackHoles) removeDisplayObject(bh.gfx)
+    e.blackHoles = []
+  }
+  if (e.sunStars) {
+    for (const s of e.sunStars) {
+      removeDisplayObject(s.warningGfx)
+      removeDisplayObject(s.beamGfx)
+    }
+  }
+  if (e.sunEnergyCrystals) {
+    for (const c of e.sunEnergyCrystals) removeDisplayObject(c.gfx)
+    e.sunEnergyCrystals = []
+  }
+}
+
+function clearTransientCombatGraphics() {
+  for (const b of ctx.bullets) if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
+  for (const b of ctx.enemyBullets) if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
+  for (const m of ctx.playerMissiles) if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+  for (const m of ctx.shooterMissiles) if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+  for (const m of ctx.fragmentMissiles) if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+
+  ctx.bullets = []
+  ctx.enemyBullets = []
+  ctx.playerMissiles = []
+  ctx.shooterMissiles = []
+  ctx.fragmentMissiles = []
+
+  if (ctx.shooterBlackHoleGfx && !ctx.shooterBlackHoleGfx.destroyed) ctx.gameLayer.removeChild(ctx.shooterBlackHoleGfx)
+  ctx.shooterBlackHoleGfx = null
+  if (ctx.shooterBlackHoleProjGfx && !ctx.shooterBlackHoleProjGfx.destroyed) ctx.gameLayer.removeChild(ctx.shooterBlackHoleProjGfx)
+  ctx.shooterBlackHoleProjGfx = null
+
+  if (ctx.sfGfx) { ctx.sfGfx.clear(); ctx.sfGfx.visible = false }
+  if (ctx.shieldGfx) { ctx.shieldGfx.clear(); ctx.shieldGfx.visible = false }
+
+  for (const e of ctx.enemies) {
+    removeEnemyDetachedGraphics(e)
+
+    if (e.aimLine) e.aimLine.visible = false
+    if (e.warnSign) e.warnSign.visible = false
+    if (e.laserLine) e.laserLine.clear()
+
+    if (e.bossTurrets) {
+      for (const t of e.bossTurrets) {
+        t.laserGfx.clear()
+      }
+    }
+  }
+}
+
+function updateCnoxGreedyEvolution(e: Enemy): void {
+  const stolen = Math.min(200, e.cnoxStolenExp ?? 0)
+  const powerMult = 1 + Math.min(4, stolen / 50)
+  const sizeMult = 1 + Math.min(2, stolen / 100)
+  const baseMaxHp = e.cnoxBaseMaxHp ?? e.maxHp
+  const nextMaxHp = Math.round(baseMaxHp * powerMult)
+  const hpDelta = nextMaxHp - e.maxHp
+  e.maxHp = nextMaxHp
+  e.hp = Math.min(e.maxHp, e.hp + Math.max(0, hpDelta))
+  e.cnoxPowerMult = powerMult
+  e.barW = (e.cnoxBaseBarW ?? e.barW) * sizeMult
+  drawCnoxGreedy(e.body, (e.cnoxBaseSize ?? 11) * sizeMult, stolen)
+  redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+  e.hpBarBg.y = -(e.cnoxBaseSize ?? 11) * sizeMult - 8
+  e.hpBar.y = e.hpBarBg.y
+}
+
+function drawCnoxRay(g: Graphics, ox: number, oy: number, angle: number, width: number, color: number, alpha: number, clearFirst = true): void {
+  const len = (GAME_W + GAME_H) * 2
+  if (clearFirst) g.clear()
+  g.moveTo(ox, oy).lineTo(ox + Math.cos(angle) * len, oy + Math.sin(angle) * len).stroke({ color, width, alpha })
+}
+
+function drawCnoxCone(g: Graphics, ox: number, oy: number, angle: number, spread: number, len: number, alpha: number, clearFirst = true): void {
+  if (clearFirst) g.clear()
+  g.moveTo(ox, oy)
+  g.lineTo(ox + Math.cos(angle - spread) * len, oy + Math.sin(angle - spread) * len)
+  g.lineTo(ox + Math.cos(angle + spread) * len, oy + Math.sin(angle + spread) * len)
+  g.closePath().fill({ color: 0xffc8ff, alpha: alpha * 0.15 })
+  g.moveTo(ox, oy).lineTo(ox + Math.cos(angle - spread) * len, oy + Math.sin(angle - spread) * len).stroke({ color: 0xffb0ff, width: 2, alpha })
+  g.moveTo(ox, oy).lineTo(ox + Math.cos(angle + spread) * len, oy + Math.sin(angle + spread) * len).stroke({ color: 0xffb0ff, width: 2, alpha })
 }
 
 // --- Game loop ----------------------------------------------------------------
@@ -103,7 +258,7 @@ function gameLoop(ticker: Ticker) {
         stroke: { color: 0x000000, width: 4 },
         dropShadow: { color: 0xff8800, blur: 12, distance: 0, angle: 0, alpha: 0.9 },
       })
-      ctx.stageTitleText = new Text({ text: 'CH? �? V� T?N', style })
+      ctx.stageTitleText = new Text({ text: 'CHẾ ĐỘ VÔ TẬN', style })
       ctx.stageTitleText.anchor.set(0.5, 0.5)
       ctx.stageTitleText.x = GAME_W / 2
       ctx.stageTitleText.y = GAME_H * 0.38
@@ -144,8 +299,12 @@ function gameLoop(ticker: Ticker) {
       const spd = 5.5 * game.upgrades.shipSpeed * hpPenalty
       ctx.playerShip.x += dx * 0.055 * spd * dt * 0.5
       ctx.playerShip.y += dy * 0.055 * spd * dt * 0.5
-      ctx.playerShip.x = Math.max(20, Math.min(GAME_W - 20, ctx.playerShip.x))
-      ctx.playerShip.y = Math.max(60, Math.min(GAME_H - 60, ctx.playerShip.y))
+      const _xmin = GAME_W * (1 - 1 / _bz) / 2 + 20
+      const _xmax = GAME_W * (1 + 1 / _bz) / 2 - 20
+      const _ymin = GAME_H * (1 - 1 / _bz) / 2 + 60
+      const _ymax = GAME_H * (1 + 1 / _bz) / 2 - 60
+      ctx.playerShip.x = Math.max(_xmin, Math.min(_xmax, ctx.playerShip.x))
+      ctx.playerShip.y = Math.max(_ymin, Math.min(_ymax, ctx.playerShip.y))
     }
     return
   }
@@ -172,11 +331,11 @@ function gameLoop(ticker: Ticker) {
           const targetY = e.bossTargetY ?? GAME_H * 0.20
           if (e.container.y >= targetY) {
             e.container.y = targetY; e.bossEntered = true
-            e.bossBattleTimer = 60  // th�m 1s delay sau khi v�o v? tr�
+            e.bossBattleTimer = 60  // thï¿½m 1s delay sau khi vï¿½o v? trï¿½
           }
         }
       } else {
-        // �� v�o v? tr�, ch? timer tru?c khi b?t d?u chi?n d?u
+        // ï¿½ï¿½ vï¿½o v? trï¿½, ch? timer tru?c khi b?t d?u chi?n d?u
         if (e.kind === 'boss_tinhvan') {
           if (e.body) e.body.rotation += 0.003 * dt
           e.bossBattleTimer = (e.bossBattleTimer ?? 180) - dt
@@ -193,17 +352,41 @@ function gameLoop(ticker: Ticker) {
     }
     // Boss zoom update
     const _tinhVanAlive = ctx.enemies.some(e => e.kind === 'boss_tinhvan' && e.bossEntered)
-    ctx.bossZoomTarget = _tinhVanAlive ? 0.75 : 1.0
+    const _sunAlive = ctx.enemies.some(e => e.kind === 'boss_cnox_sun' && e.bossEntered)
+    ctx.bossZoomTarget = _sunAlive ? 0.68 : (_tinhVanAlive ? 0.75 : 1.0)
     if (Math.abs(ctx.bossZoom - ctx.bossZoomTarget) > 0.001) {
       const zSpeed = 0.006 * dt
       ctx.bossZoom += Math.sign(ctx.bossZoomTarget - ctx.bossZoom) * Math.min(zSpeed, Math.abs(ctx.bossZoomTarget - ctx.bossZoom))
     }
     ctx.gameLayer.scale.set(ctx.bossZoom)
     ctx.gameLayer.position.set(GAME_W * (1 - ctx.bossZoom) / 2, GAME_H * (1 - ctx.bossZoom) / 2)
-    // Chuy?n sang 'playing' sau khi h?t delay � reset shootTimer d? kh�ng b?n ngay l?p t?c
+    // Chuy?n sang 'playing' sau khi h?t delay ï¿½ reset shootTimer d? khï¿½ng b?n ngay l?p t?c
     if (battleReady) {
       ctx.gamePhase = 'playing'
       ctx.shootTimer = 0
+      ctx.bossAttackLockTimer = 60
+    }
+
+    // Auto-return ship to home position; player has no control during boss intro
+    if (ctx.playerShip) {
+      const prevX = ctx.playerShip.x
+      const prevY = ctx.playerShip.y
+      const homeX = GAME_W / 2
+      const homeY = GAME_H * 0.67
+      ctx.playerShip.x += (homeX - ctx.playerShip.x) * 0.04 * dt
+      ctx.playerShip.y += (homeY - ctx.playerShip.y) * 0.04 * dt
+      const ddx = ctx.playerShip.x - prevX
+      const ddy = ctx.playerShip.y - prevY
+      if (Math.abs(ddx) > 0.001 || Math.abs(ddy) > 0.001) {
+        for (const launcher of ctx.missileLaunchers) {
+          launcher.gfx.x += ddx
+          launcher.gfx.y += ddy
+        }
+        if (ctx.sfGfx) {
+          ctx.sfGfx.x += ddx
+          ctx.sfGfx.y += ddy
+        }
+      }
     }
   }
 
@@ -212,6 +395,7 @@ function gameLoop(ticker: Ticker) {
 
   game.tickSkillCooldown(dt / 60)
   game.tickShield(dt / 60)
+  if (ctx.bossAttackLockTimer > 0) ctx.bossAttackLockTimer = Math.max(0, ctx.bossAttackLockTimer - dt)
 
   // Neutron Star vacuum timer
   if (game.artifactStats.neutronVacuumActive) {
@@ -294,8 +478,8 @@ function gameLoop(ticker: Ticker) {
     }
   }
 
-  // Player movement
-  if (ctx.isDragging && ctx.playerShip) {
+  // Player movement (disabled during boss intro â€” ship auto-returns to home)
+  if (!isBossIntro && ctx.isDragging && ctx.playerShip) {
     const _bz2 = ctx.bossZoom
     const _blx2 = GAME_W * (1 - _bz2) / 2; const _bly2 = GAME_H * (1 - _bz2) / 2
     const dx = (ctx.touchX - _blx2) / _bz2 - ctx.playerShip.x
@@ -304,8 +488,12 @@ function gameLoop(ticker: Ticker) {
     const spd = 5.5 * game.upgrades.shipSpeed * (1 + game.cardStats.speedCardPct / 100) * hpPenalty
     ctx.playerShip.x += dx * 0.055 * spd * dt * 0.5
     ctx.playerShip.y += dy * 0.055 * spd * dt * 0.5
-    ctx.playerShip.x = Math.max(20, Math.min(GAME_W - 20, ctx.playerShip.x))
-    ctx.playerShip.y = Math.max(60, Math.min(GAME_H - 60, ctx.playerShip.y))
+    const _xmin2 = GAME_W * (1 - 1 / _bz2) / 2 + 20
+    const _xmax2 = GAME_W * (1 + 1 / _bz2) / 2 - 20
+    const _ymin2 = GAME_H * (1 - 1 / _bz2) / 2 + 60
+    const _ymax2 = GAME_H * (1 + 1 / _bz2) / 2 - 60
+    ctx.playerShip.x = Math.max(_xmin2, Math.min(_xmax2, ctx.playerShip.x))
+    ctx.playerShip.y = Math.max(_ymin2, Math.min(_ymax2, ctx.playerShip.y))
   }
 
   // Shooting
@@ -314,7 +502,7 @@ function gameLoop(ticker: Ticker) {
   const effectiveBulletCount = isShooter ? 1 : (game.upgrades.bulletCount + game.cardStats.arsenalBulletBonus)
   const effectiveMissileCount = isShooter ? (game.upgrades.bulletCount + game.cardStats.shooterMissileBonus) : 1
   ctx.shootTimer += dt
-  const baseShootInterval = isHolder ? 60 : (isShooter ? 80 : 18)
+  const baseShootInterval = isHolder ? 60 : (isShooter ? 160 : 18)
   const shootCount = isShooter ? effectiveMissileCount : effectiveBulletCount
   const shootInterval = (baseShootInterval / Math.sqrt(shootCount)) / (1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100)
   if (!isBossIntro && ctx.shootTimer >= shootInterval) {
@@ -322,7 +510,7 @@ function gameLoop(ticker: Ticker) {
     const cnt = isShooter ? effectiveMissileCount : effectiveBulletCount
     if (isHolder && ctx.playerShip) {
       const laserDmg = Math.round(
-        game.upgrades.damage * Math.pow(0.8, cnt - 1)
+        game.upgrades.damage
         * (1 + game.cardStats.arsenalDamagePct / 100)
         * (1 + game.cardStats.damageBonusPct / 100)
       )
@@ -336,18 +524,34 @@ function gameLoop(ticker: Ticker) {
       const cs = game.cardStats
       const mSpd = 6 * cs.shooterMissileSpdMult
       const missileDmg = Math.round(game.upgrades.damage * cs.shooterMissileDmgMult * (1 + cs.damageBonusPct / 100))
-      if (findNearestEnemy(ctx.enemies, ctx.playerShip.x, ctx.playerShip.y)) {
+      const crystalTargets = ctx.enemies
+        .filter(e => e.kind === 'boss_cnox_sun')
+        .flatMap(e => (e.sunEnergyCrystals ?? []).map(c => ({ x: c.x, y: c.y })))
+      const sortedTargets = [
+        ...ctx.enemies.map(e => ({ x: e.container.x, y: e.container.y, enemy: e as Enemy | undefined })),
+        ...crystalTargets.map(c => ({ x: c.x, y: c.y, enemy: undefined as Enemy | undefined })),
+      ].sort((a, b) => dist2(ctx.playerShip!.x, ctx.playerShip!.y, a.x, a.y) - dist2(ctx.playerShip!.x, ctx.playerShip!.y, b.x, b.y))
+      if (sortedTargets.length > 0) {
         for (let i = 0; i < cnt; i++) {
           const offX = (i - (cnt - 1) / 2) * 14
           const mg = new Graphics()
           drawShooterMissile(mg)
           mg.x = ctx.playerShip.x + offX; mg.y = ctx.playerShip.y - 22
           ctx.gameLayer.addChild(mg)
-          const target = findNearestEnemy(ctx.enemies, mg.x, mg.y)
-          const dx = target ? target.container.x - mg.x : 0
-          const dy = target ? target.container.y - mg.y : -1
+          const target = sortedTargets[i % sortedTargets.length]
+          const dx = target ? target.x - mg.x : 0
+          const dy = target ? target.y - mg.y : -1
           const d = Math.sqrt(dx * dx + dy * dy) || 1
-          ctx.shooterMissiles.push({ gfx: mg, vx: (dx / d) * mSpd, vy: (dy / d) * mSpd, damage: missileDmg, aoe: cs.shooterMissileAoe })
+          ctx.shooterMissiles.push({
+            gfx: mg,
+            vx: (dx / d) * mSpd,
+            vy: (dy / d) * mSpd,
+            damage: missileDmg,
+            aoe: cs.shooterMissileAoe,
+            targetEnemy: target?.enemy,
+            targetX: target?.x,
+            targetY: target?.y,
+          })
         }
       }
     } else {
@@ -369,7 +573,7 @@ function gameLoop(ticker: Ticker) {
     const pdist = Math.sqrt(pdx * pdx + pdy * pdy) || 1
     const projSpd = 11 * dt
     if (pdist <= projSpd + 2) {
-      // Arrived � spawn black hole at target position
+      // Arrived ï¿½ spawn black hole at target position
       if (!proj.destroyed) ctx.gameLayer.removeChild(proj)
       ctx.shooterBlackHoleProjGfx = null
       const g = new Graphics()
@@ -416,6 +620,29 @@ function gameLoop(ticker: Ticker) {
         if (e.hp <= 0) { killEnemy(ctx, game, e, i); continue }
       }
     }
+    for (const e of ctx.enemies) {
+      if (e.kind !== 'boss_cnox_sun') continue
+      const crystals = e.sunEnergyCrystals ?? []
+      for (let ci = crystals.length - 1; ci >= 0; ci--) {
+        const c = crystals[ci]!
+        const bdx = bhg.x - c.x; const bdy = bhg.y - c.y
+        const bd = Math.sqrt(bdx * bdx + bdy * bdy) || 1
+        if (bd < 185) {
+          const pull = (1 - bd / 185) * 4 * dt
+          c.x += (bdx / bd) * pull
+          c.y += (bdy / bd) * pull
+          c.gfx.x = c.x
+          c.gfx.y = c.y
+        }
+        const bhDmg = Math.max(1, Math.round(c.maxHp * 0.10 * dt / 60))
+        c.hp = Math.max(0, c.hp - bhDmg)
+        if (c.hp <= 0) {
+          spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+          if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+          crystals.splice(ci, 1)
+        }
+      }
+    }
     for (let i = ctx.enemyBullets.length - 1; i >= 0; i--) {
       const b = ctx.enemyBullets[i]
       if (dist2(b.gfx.x, b.gfx.y, bhg.x, bhg.y) < 80 * 80) {
@@ -435,7 +662,7 @@ function gameLoop(ticker: Ticker) {
     const b = ctx.bullets[i]
     b.gfx.y -= b.vy * dt
     if (b.vx) b.gfx.x += b.vx * dt
-    if (b.gfx.y < -20 || b.gfx.x < -10 || b.gfx.x > GAME_W + 10) {
+    if (b.gfx.y < (GAME_H * (1 - 1 / ctx.bossZoom) / 2) - 20 || b.gfx.x < (GAME_W * (1 - 1 / ctx.bossZoom) / 2) - 10 || b.gfx.x > (GAME_W * (1 + 1 / ctx.bossZoom) / 2) + 10) {
       if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
       ctx.bullets.splice(i, 1)
     }
@@ -445,21 +672,43 @@ function gameLoop(ticker: Ticker) {
   for (let i = ctx.enemyBullets.length - 1; i >= 0; i--) {
     const b = ctx.enemyBullets[i]
     if (b.homing && (b.homingLife ?? 0) > 0 && ctx.playerShip) {
-      b.homingLife! -= dt
-      const spd = b.homingSpeed ?? 3.5
-      const dx = ctx.playerShip.x - b.gfx.x
-      const dy = ctx.playerShip.y - b.gfx.y
-      const mag = Math.sqrt(dx * dx + dy * dy) || 1
-      b.vx += (dx / mag * spd - b.vx) * 0.07
-      b.vy += (dy / mag * spd - b.vy) * 0.07
-      const vmag = Math.sqrt(b.vx * b.vx + b.vy * b.vy) || 1
-      b.vx = (b.vx / vmag) * spd
-      b.vy = (b.vy / vmag) * spd
-      b.gfx.rotation = Math.atan2(b.vy, b.vx) + Math.PI / 2
+      const homingRange = b.homingRange
+      const inHomingRange = homingRange === undefined
+        || dist2(b.gfx.x, b.gfx.y, ctx.playerShip.x, ctx.playerShip.y) <= homingRange * homingRange
+      if (inHomingRange) {
+        b.homingLife! -= dt
+        const spd = b.homingSpeed ?? 3.5
+        const dx = ctx.playerShip.x - b.gfx.x
+        const dy = ctx.playerShip.y - b.gfx.y
+        const mag = Math.sqrt(dx * dx + dy * dy) || 1
+        const steer = Math.min(0.2, 0.045 * dt)
+        b.vx += (dx / mag * spd - b.vx) * steer
+        b.vy += (dy / mag * spd - b.vy) * steer
+        const vmag = Math.sqrt(b.vx * b.vx + b.vy * b.vy) || 1
+        b.vx = (b.vx / vmag) * spd
+        b.vy = (b.vy / vmag) * spd
+        const targetRot = Math.atan2(b.vy, b.vx) + Math.PI / 2
+        let diff = targetRot - b.gfx.rotation
+        while (diff > Math.PI) diff -= Math.PI * 2
+        while (diff < -Math.PI) diff += Math.PI * 2
+        b.gfx.rotation += diff * Math.min(1, 0.22 * dt)
+      }
+    } else if (b.missileTrail) {
+      const targetRot = Math.atan2(b.vy, b.vx) + Math.PI / 2
+      let diff = targetRot - b.gfx.rotation
+      while (diff > Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      b.gfx.rotation += diff * Math.min(1, 0.2 * dt)
+    }
+    if (b.missileTrail && b.gfx.children.length > 0) {
+      const flame = b.gfx.children[0] as Graphics
+      const pulse = 0.72 + Math.abs(Math.sin(Date.now() * 0.018 + (b.trailPulse ?? 0))) * 0.45
+      flame.clear()
+      flame.poly([0, 2, 3.2, 10.5, 0, 24 + pulse * 4, -3.2, 10.5]).fill({ color: b.missileTrailColor ?? 0xffa3ff, alpha: 0.64 + pulse * 0.16 })
     }
     b.gfx.x += b.vx * dt
     b.gfx.y += b.vy * dt
-    if (b.gfx.y > GAME_H + 40 || b.gfx.y < -40 || b.gfx.x < -40 || b.gfx.x > GAME_W + 40) {
+    if (b.gfx.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 40 || b.gfx.y < (GAME_H * (1 - 1 / ctx.bossZoom) / 2) - 40 || b.gfx.x < (GAME_W * (1 - 1 / ctx.bossZoom) / 2) - 40 || b.gfx.x > (GAME_W * (1 + 1 / ctx.bossZoom) / 2) + 40) {
       if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
       ctx.enemyBullets.splice(i, 1)
       continue
@@ -467,15 +716,39 @@ function gameLoop(ticker: Ticker) {
     const bHitR = b.homing ? 14 : 12
     // AOE missile: explode when reaching target position
     if (b.aoe && b.targetX !== undefined && b.targetY !== undefined) {
-      if (dist2(b.gfx.x, b.gfx.y, b.targetX, b.targetY) < 28 * 28) {
-        spawnExplosion(ctx, b.gfx.x, b.gfx.y, 22, 0xcc44ff, 0xffffff)
+      if (dist2(b.gfx.x, b.gfx.y, b.targetX, b.targetY) < 18 * 18) {
+        // Snap to target so warning ring and actual explosion center are pixel-perfect aligned.
+        b.gfx.x = b.targetX
+        b.gfx.y = b.targetY
+        const ex = b.targetX
+        const ey = b.targetY
+        spawnExplosion(ctx, ex, ey, 22, 0xcc44ff, 0xffffff)
         screenFlash(ctx, 0x8800ff, 0.12, 200)
-        if (ctx.playerShip && dist2(b.gfx.x, b.gfx.y, ctx.playerShip.x, ctx.playerShip.y) < 55 * 55) {
+        if (b.sunShardBurst) {
+          const shardCount = b.sunShardCount ?? 12
+          const base = Math.random() * Math.PI * 2
+          for (let si = 0; si < shardCount; si++) {
+            const sg = new Graphics()
+            drawEnemyBullet(sg)
+            sg.tint = 0xffa84a
+            sg.x = ex
+            sg.y = ey
+            ctx.gameLayer.addChild(sg)
+            const ang = base + (si / shardCount) * Math.PI * 2
+            ctx.enemyBullets.push({
+              gfx: sg,
+              vx: Math.cos(ang) * 3.8,
+              vy: Math.sin(ang) * 3.8,
+              damage: 12 + game.currentStage * 2,
+            })
+          }
+        }
+        if (ctx.playerShip && dist2(ex, ey, ctx.playerShip.x, ctx.playerShip.y) < 55 * 55) {
           if (game.absorbShieldHit()) {
             spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 10, 0x44aaff, 0x88ddff)
             screenFlash(ctx, 0x4488ff, 0.28, 200)
           } else {
-            const dmg = 20 + game.currentStage * 3
+            const dmg = b.damage ?? (20 + game.currentStage * 3)
             game.takeDamage(dmg); screenFlash(ctx)
             spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
           }
@@ -565,11 +838,12 @@ function gameLoop(ticker: Ticker) {
   // Pioneer, Kamikaze, Sniper, BossStarDestroyer, BossInvader are updated inline here
   // since they reach into ctx directly for PixiJS ops and shared state.
 
-  // -- Boss zoom: smooth scale-out when Tinh V�n boss is alive ------------------
+  // -- Boss zoom: smooth scale-out when Tinh Vân boss is alive ------------------
   const tinhVanAlive = ctx.enemies.some(e => e.kind === 'boss_tinhvan' && e.bossEntered)
-  ctx.bossZoomTarget = tinhVanAlive ? 0.75 : 1.0
+  const sunBossAlive = ctx.enemies.some(e => e.kind === 'boss_cnox_sun' && e.bossEntered)
+  ctx.bossZoomTarget = sunBossAlive ? 0.68 : (tinhVanAlive ? 0.75 : 1.0)
   if (Math.abs(ctx.bossZoom - ctx.bossZoomTarget) > 0.001) {
-    const zSpeed = 0.006 * dt  // ch?m hon � zoom mu?t hon
+    const zSpeed = 0.006 * dt  // ch?m hon ï¿½ zoom mu?t hon
     ctx.bossZoom += Math.sign(ctx.bossZoomTarget - ctx.bossZoom) * Math.min(zSpeed, Math.abs(ctx.bossZoomTarget - ctx.bossZoom))
   }
   const bz = ctx.bossZoom
@@ -580,7 +854,7 @@ function gameLoop(ticker: Ticker) {
   if (zoomIndicatorText) {
     if (Math.abs(bz - zoomIndicatorLastZoom) > 0.002) {
       zoomIndicatorLastZoom = bz
-      zoomIndicatorText.text = `T?M NH�N: ${Math.round(bz * 100)}%`
+      zoomIndicatorText.text = `T?M NHï¿½N: ${Math.round(bz * 100)}%`
       zoomIndicatorText.alpha = 1
       zoomIndicatorTimer = 150
     } else if (zoomIndicatorTimer > 0) {
@@ -598,7 +872,7 @@ function gameLoop(ticker: Ticker) {
     if (!ctx.thuHoReflecting && ctx.thuHoReflectTimer <= 0) {
       ctx.thuHoReflecting = true
       ctx.thuHoReflectGlow = 30             // 0.5 s at 60 fps
-      ctx.thuHoReflectTimer = 300 + Math.random() * 120  // 5�7 s
+      ctx.thuHoReflectTimer = 300 + Math.random() * 120  // 5ï¿½7 s
       for (const _e of ctx.enemies) {
         if (_e.kind === 'thu_ho') drawThuHo(_e.body, 13, true)
       }
@@ -616,10 +890,109 @@ function gameLoop(ticker: Ticker) {
     ctx.thuHoReflecting = false
   }
 
+  const shieldPack = ctx.enemies.filter(e => e.kind === 'cnox_shield')
+  const shieldSlotTargets = new Map<Enemy, { x: number, y: number }>()
+  if (shieldPack.length > 0) {
+    const laneYs = [GAME_H * 0.34, GAME_H * 0.48, GAME_H * 0.62]
+    const rowCenters: number[] = []
+    const rowThreshold = 24
+    const byY = [...shieldPack].sort((a, b) => (a.formTargetY ?? a.container.y) - (b.formTargetY ?? b.container.y))
+    for (const s of byY) {
+      const y = s.formTargetY ?? s.container.y
+      const existing = rowCenters.find(rc => Math.abs(rc - y) <= rowThreshold)
+      if (existing === undefined) rowCenters.push(y)
+    }
+    const rows = rowCenters.map(y => {
+      let lane = laneYs[0]!
+      let best = Number.POSITIVE_INFINITY
+      for (const ly of laneYs) {
+        const d = Math.abs(ly - y)
+        if (d < best) { best = d; lane = ly }
+      }
+      return { y: lane, members: [] as Enemy[] }
+    })
+    for (const s of shieldPack) {
+      const y = s.formTargetY ?? s.container.y
+      let best = 0
+      let bestD = Number.POSITIVE_INFINITY
+      for (let ri = 0; ri < rows.length; ri++) {
+        const d = Math.abs(rows[ri]!.y - y)
+        if (d < bestD) { bestD = d; best = ri }
+      }
+      rows[best]!.members.push(s)
+    }
+
+    // Hard cap: each formation row can contain at most 6 shields.
+    const maxRowCount = 6
+    for (const row of rows) {
+      while (row.members.length > maxRowCount) {
+        const moved = row.members.pop()
+        if (!moved) break
+        let target = rows.find(r => r !== row && r.members.length < maxRowCount)
+        if (!target) {
+          const laneUsage = laneYs.map(ly => ({ ly, rows: rows.filter(r => Math.abs(r.y - ly) < 1).length }))
+          laneUsage.sort((a, b) => a.rows - b.rows)
+          target = { y: laneUsage[0]!.ly, members: [] as Enemy[] }
+          rows.push(target)
+        }
+        moved.formTargetY = target.y
+        target.members.push(moved)
+      }
+    }
+
+    // Keep rows at 4+ when possible by borrowing units from rows with surplus.
+    const minRowCount = 4
+    for (let loop = 0; loop < 12; loop++) {
+      let changed = false
+      for (const row of rows) {
+        while (row.members.length < minRowCount) {
+          let donor: typeof rows[number] | null = null
+          for (const cand of rows) {
+            if (cand === row || cand.members.length <= minRowCount) continue
+            if (!donor || Math.abs(cand.y - row.y) < Math.abs(donor.y - row.y)) donor = cand
+          }
+          if (!donor) break
+          donor.members.sort((a, b) => a.container.x - b.container.x)
+          const moved = donor.members.pop()
+          if (!moved) break
+          moved.formTargetY = row.y
+          row.members.push(moved)
+          changed = true
+        }
+      }
+      if (!changed) break
+    }
+
+    for (const row of rows) {
+      row.members.sort((a, b) => a.container.x - b.container.x)
+      const count = Math.max(1, row.members.length)
+      const centerX = GAME_W * 0.5
+      const minSpacing = 26
+      const maxSpacing = count >= 4 ? 44 : Math.max(28, 44 - (4 - count) * 5)
+      const usableWidth = GAME_W - 48
+      const fitSpacing = count > 1 ? usableWidth / (count - 1) : maxSpacing
+      const spacing = Math.max(minSpacing, Math.min(maxSpacing, fitSpacing))
+      const leftBound = 24
+      const rightBound = GAME_W - 24
+      for (let idx = 0; idx < row.members.length; idx++) {
+        const m = row.members[idx]!
+        const rawX = centerX - ((count - 1) * spacing) / 2 + idx * spacing
+        const tx = Math.max(leftBound, Math.min(rightBound, rawX))
+        const ty = Math.max(GAME_H * 0.30, Math.min(GAME_H * 0.68, row.y + (idx % 2 === 0 ? -3 : 3)))
+        shieldSlotTargets.set(m, { x: tx, y: ty })
+      }
+    }
+  }
+  const sparkPack = ctx.enemies.filter(e => e.kind === 'cnox_spark').sort((a, b) => a.container.x - b.container.x).slice(0, 4)
+
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
     const e = ctx.enemies[i]
+    if ((e.contactDamageCd ?? 0) > 0) e.contactDamageCd = Math.max(0, (e.contactDamageCd ?? 0) - dt)
 
     if (isBossIntro && e.kind.startsWith('boss')) {
+      continue
+    }
+    if (!isBossIntro && ctx.bossAttackLockTimer > 0 && e.kind.startsWith('boss')) {
       continue
     }
 
@@ -661,7 +1034,7 @@ function gameLoop(ticker: Ticker) {
           }
         }
       }
-      if (e.container.y > GAME_H + 60 || e.container.x < -60 || e.container.x > GAME_W + 60) {
+      if (e.container.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 60 || e.container.x < (GAME_W * (1 - 1 / ctx.bossZoom) / 2) - 60 || e.container.x > (GAME_W * (1 + 1 / ctx.bossZoom) / 2) + 60) {
         if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
         ctx.enemies.splice(i, 1)
         game.stageEnemiesKilled++
@@ -681,7 +1054,7 @@ function gameLoop(ticker: Ticker) {
           if (e.warnSign) e.warnSign.visible = true
           if (e.aimLine) e.aimLine.visible = true
         }
-        if (e.container.y > GAME_H + 40) {
+        if (e.container.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 40) {
           if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
           ctx.enemies.splice(i, 1); continue
         }
@@ -713,7 +1086,7 @@ function gameLoop(ticker: Ticker) {
           e.kamiState = 'dead'
         } else if (
           dist2(e.container.x, e.container.y, e.targetX ?? 0, e.targetY ?? 0) < 20 * 20 ||
-          e.kamiTimer >= 90 || e.container.y > GAME_H + 60 || e.container.y < -60
+          e.kamiTimer >= 90 || e.container.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 60 || e.container.y < (GAME_H * (1 - 1 / ctx.bossZoom) / 2) - 60
         ) {
           e.kamiState = 'prexplode'; e.kamiTimer = 0; e.vx = 0; e.vy = 0
         }
@@ -792,7 +1165,7 @@ function gameLoop(ticker: Ticker) {
           }
         }
       }
-      if (e.container.y > GAME_H + 40) {
+      if (e.container.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 40) {
         if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
         ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
       }
@@ -885,7 +1258,7 @@ function gameLoop(ticker: Ticker) {
           if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
           ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
         }
-        if (e.container.y > GAME_H + 60 || e.container.x < -60 || e.container.x > GAME_W + 60) {
+        if (e.container.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 60 || e.container.x < (GAME_W * (1 - 1 / ctx.bossZoom) / 2) - 60 || e.container.x > (GAME_W * (1 + 1 / ctx.bossZoom) / 2) + 60) {
           if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
           ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
         }
@@ -924,7 +1297,7 @@ function gameLoop(ticker: Ticker) {
           e.container.x = Math.max(15, Math.min(GAME_W - 15, e.container.x))
           e.container.y = Math.max(15, Math.min(GAME_H - 60, e.container.y))
         } else {
-          // No shield available � gentle oscillation while looking for one
+          // No shield available ï¿½ gentle oscillation while looking for one
           const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.008
           e.container.x += Math.sin(t * 0.9) * 0.4 * dt
           e.container.x = Math.max(20, Math.min(GAME_W - 20, e.container.x))
@@ -976,6 +1349,756 @@ function gameLoop(ticker: Ticker) {
       }
     }
 
+    else if (e.kind === 'cnox_greedy') {
+      if (e.pioneerPhase === 'enter') {
+        const dx = (e.enterTargetX ?? e.container.x) - e.container.x
+        const dy = (e.enterTargetY ?? e.container.y) - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const speed = 1.8
+        if (dist < speed * dt * 2) {
+          e.container.x = e.enterTargetX ?? e.container.x
+          e.container.y = e.enterTargetY ?? e.container.y
+          e.pioneerPhase = 'patrol'
+        } else {
+          e.container.x += (dx / dist) * speed * dt
+          e.container.y += (dy / dist) * speed * dt
+        }
+      } else {
+        let targetOrb = null as typeof ctx.expOrbs[number] | null
+        let bestOrbD2 = 220 * 220
+        const stealPower = Math.max(1, e.cnoxPowerMult ?? 1)
+        const orbPullSpeed = 2.4 + (stealPower - 1) * 1.8
+        for (const orb of ctx.expOrbs) {
+          const d2 = dist2(orb.x, orb.y, e.container.x, e.container.y)
+          if (d2 < bestOrbD2) {
+            bestOrbD2 = d2
+            targetOrb = orb
+          }
+        }
+        if (targetOrb) {
+          const odx = e.container.x - targetOrb.x
+          const ody = e.container.y - targetOrb.y
+          const od = Math.sqrt(odx * odx + ody * ody) || 1
+          targetOrb.x += (odx / od) * orbPullSpeed * dt
+          targetOrb.y += (ody / od) * orbPullSpeed * dt
+          targetOrb.gfx.x = targetOrb.x
+          targetOrb.gfx.y = targetOrb.y
+          if (od < 16) {
+            const gained = Math.min(200 - (e.cnoxStolenExp ?? 0), targetOrb.amount)
+            e.cnoxStolenExp = Math.min(200, (e.cnoxStolenExp ?? 0) + gained)
+            if (!targetOrb.gfx.destroyed) ctx.gameLayer.removeChild(targetOrb.gfx)
+            const orbIdx = ctx.expOrbs.indexOf(targetOrb)
+            if (orbIdx >= 0) ctx.expOrbs.splice(orbIdx, 1)
+            updateCnoxGreedyEvolution(e)
+          }
+        } else if (ctx.playerShip) {
+          const shields = ctx.enemies.filter(other => other.kind === 'cnox_shield')
+          const nearestShield = shields.sort((a, b) => dist2(a.container.x, a.container.y, e.container.x, e.container.y) - dist2(b.container.x, b.container.y, e.container.x, e.container.y))[0] ?? null
+          let tx = e.formTargetX ?? e.container.x
+          let ty = e.formTargetY ?? e.container.y
+          if (nearestShield) {
+            const hx = nearestShield.container.x - ctx.playerShip.x
+            const hy = nearestShield.container.y - ctx.playerShip.y
+            const hm = Math.sqrt(hx * hx + hy * hy) || 1
+            tx = nearestShield.container.x + (hx / hm) * 52
+            ty = nearestShield.container.y + (hy / hm) * 52
+          }
+          const mdx = tx - e.container.x
+          const mdy = ty - e.container.y
+          const md = Math.sqrt(mdx * mdx + mdy * mdy) || 1
+          e.container.x += (mdx / md) * 1.35 * dt
+          e.container.y += (mdy / md) * 1.35 * dt
+        }
+        e.container.x = Math.max(20, Math.min(GAME_W - 20, e.container.x))
+        e.container.y = Math.max(20, Math.min(GAME_H - 90, e.container.y))
+      }
+      e.shootTimer = (e.shootTimer ?? 220) - dt
+      if ((e.shootTimer ?? 0) <= 0 && ctx.playerShip) {
+        const greedPower = Math.max(1, e.cnoxPowerMult ?? 1)
+        const greedStep = greedPower - 1
+        const fireScale = 1 + greedStep * 0.45 + greedStep * greedStep * 0.12
+        e.shootTimer = Math.max(46, (180 + Math.random() * 90) / fireScale)
+        const bg = new Graphics()
+        drawEnemyBullet(bg)
+        bg.tint = 0xff5533
+        bg.x = e.container.x
+        bg.y = e.container.y + 10
+        ctx.gameLayer.addChild(bg)
+        const tx = ctx.playerShip.x - e.container.x
+        const ty = ctx.playerShip.y - e.container.y
+        const mag = Math.sqrt(tx * tx + ty * ty) || 1
+        const bulletSpeed = Math.min(8.6, 2.6 * (1 + greedStep * 0.55 + greedStep * greedStep * 0.10))
+        const greedDamage = Math.round((12 + game.currentStage * 2) * (e.cnoxPowerMult ?? 1))
+        ctx.enemyBullets.push({ gfx: bg, vx: (tx / mag) * bulletSpeed, vy: (ty / mag) * bulletSpeed, damage: greedDamage })
+      }
+      if (e.container.y > GAME_H + 50) {
+        if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
+        ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
+      }
+    }
+
+    else if (e.kind === 'cnox_shield') {
+      if (e.pioneerPhase === 'enter') {
+        const dx = (e.enterTargetX ?? e.container.x) - e.container.x
+        const dy = (e.enterTargetY ?? e.container.y) - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const speed = 2.4
+        if (dist < speed * dt * 2) {
+          e.container.x = e.enterTargetX ?? e.container.x
+          e.container.y = e.enterTargetY ?? e.container.y
+          e.pioneerPhase = 'patrol'
+        } else {
+          e.container.x += (dx / dist) * speed * dt
+          e.container.y += (dy / dist) * speed * dt
+        }
+      } else {
+        const slot = shieldSlotTargets.get(e)
+        const targetX = slot?.x ?? e.container.x
+        const targetY = slot?.y ?? e.container.y
+        const dx = targetX - e.container.x
+        const dy = targetY - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const speed = 1.8
+        const step = Math.min(speed * dt, dist)
+        e.container.x += (dx / dist) * step
+        e.container.y += (dy / dist) * step
+        e.formTargetX = targetX
+        e.formTargetY = targetY
+      }
+      e.cnoxShieldAngle = (e.cnoxShieldAngle ?? 0) + 0.05 * dt
+      if (e.cnoxShields?.length) {
+        const radius = 22
+        e.cnoxShields[0].x = Math.cos(e.cnoxShieldAngle) * radius
+        e.cnoxShields[0].y = Math.sin(e.cnoxShieldAngle) * radius
+        e.cnoxShields[0].rotation = e.cnoxShieldAngle
+        e.cnoxShields[1].x = Math.cos((e.cnoxShieldAngle ?? 0) + Math.PI) * radius
+        e.cnoxShields[1].y = Math.sin((e.cnoxShieldAngle ?? 0) + Math.PI) * radius
+        e.cnoxShields[1].rotation = (e.cnoxShieldAngle ?? 0) + Math.PI
+      }
+      if (e.container.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 60) {
+        if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
+        ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
+      }
+    }
+
+    else if (e.kind === 'cnox_spark') {
+      if (e.pioneerPhase === 'enter') {
+        const dx = (e.enterTargetX ?? e.container.x) - e.container.x
+        const dy = (e.enterTargetY ?? e.container.y) - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const speed = 2.2
+        if (dist < speed * dt * 2) {
+          e.container.x = e.enterTargetX ?? e.container.x
+          e.container.y = e.enterTargetY ?? e.container.y
+          e.pioneerPhase = 'patrol'
+        } else {
+          e.container.x += (dx / dist) * speed * dt
+          e.container.y += (dy / dist) * speed * dt
+        }
+      } else {
+        const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.01
+        e.container.x += Math.sin(t * 1.25) * 0.42 * dt
+        e.container.y += Math.cos(t * 0.95) * 0.22 * dt
+      }
+
+      const sparkIdx = sparkPack.indexOf(e)
+      const nextSpark = sparkIdx >= 0 ? sparkPack[sparkIdx + 1] : undefined
+      const isLastSpark = sparkIdx === sparkPack.length - 1
+      e.cnoxLaserTimer = (e.cnoxLaserTimer ?? 150) - dt
+
+      if ((e.cnoxLaserState === 'idle' || e.cnoxLaserState === undefined) && (e.cnoxLaserTimer ?? 0) <= 0 && ctx.playerShip) {
+        if (sparkPack.length >= 2 && sparkIdx === 0 && Math.random() < 0.38) {
+          const sweepSpan = 0.22
+          const playerAngle = Math.atan2(ctx.playerShip.y - sparkPack[sparkPack.length - 1].container.y, ctx.playerShip.x - sparkPack[sparkPack.length - 1].container.x)
+          sparkPack.forEach((spark, idx) => {
+            spark.cnoxLinkOrder = idx
+            spark.cnoxLaserState = 'link_warning'
+            spark.cnoxLaserTimer = 120
+            spark.cnoxLaserAngle = idx === sparkPack.length - 1 ? playerAngle - sweepSpan * 0.5 : undefined
+          })
+        } else {
+          e.cnoxLaserState = 'warning'
+          e.cnoxLaserTimer = 120
+          e.cnoxLaserAngle = Math.atan2(ctx.playerShip.y - e.container.y, ctx.playerShip.x - e.container.x)
+        }
+      }
+
+      if (e.cnoxLaserState === 'warning' && e.cnoxWarnGfx) {
+        e.cnoxLaserTimer = (e.cnoxLaserTimer ?? 120) - dt
+        const angle = e.cnoxLaserAngle ?? 0
+        const al = 0.22 + Math.abs(Math.sin((e.cnoxLaserTimer ?? 0) * 0.15)) * 0.38
+        drawCnoxRay(e.cnoxWarnGfx, 0, 0, angle, 2, 0xff66aa, al)
+        e.cnoxWarnGfx.circle(0, 0, 14).stroke({ color: 0xff99ff, width: 2, alpha: 0.45 + al * 0.25 })
+        if (e.cnoxLaserTimer <= 0) {
+          e.cnoxWarnGfx.clear()
+          e.cnoxLaserState = 'firing'
+          e.cnoxLaserTimer = 18
+        }
+      } else if (e.cnoxLaserState === 'firing' && e.cnoxLaserGfx) {
+        e.cnoxLaserTimer = (e.cnoxLaserTimer ?? 18) - dt
+        const angle = e.cnoxLaserAngle ?? 0
+        const al = Math.max(0, (e.cnoxLaserTimer ?? 0) / 18)
+        e.cnoxLaserGfx.clear()
+        drawCnoxRay(e.cnoxLaserGfx, 0, 0, angle, 10, 0xff88ff, al * 0.85, false)
+        drawCnoxRay(e.cnoxLaserGfx, 0, 0, angle, 3, 0xffffff, al * 0.95, false)
+        if ((e.cnoxLaserTimer ?? 0) >= 17 && ctx.playerShip) {
+          const hit = pointDistanceToRay(ctx.playerShip.x, ctx.playerShip.y, e.container.x, e.container.y, angle)
+          if (hit.perp < 18 && hit.dot > 0) {
+            if (!game.absorbShieldHit()) {
+              const dmg = 15 + game.currentStage * 2
+              game.takeDamage(dmg)
+              screenFlash(ctx, 0xff88ff, 0.3, 160)
+              spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+            } else {
+              spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 9, 0xff88ff, 0xffffff)
+            }
+          }
+        }
+        if (e.cnoxLaserTimer <= 0) {
+          e.cnoxLaserGfx.clear()
+          e.cnoxLaserState = 'idle'
+          e.cnoxLaserTimer = 150 + Math.random() * 110
+        }
+      } else if (e.cnoxLaserState === 'link_warning' && e.cnoxWarnGfx) {
+        const sweepSpan = 0.22
+        e.cnoxLaserTimer = (e.cnoxLaserTimer ?? 120) - dt
+        e.cnoxWarnGfx.clear()
+        if (!isLastSpark && nextSpark) {
+          const al = 0.18 + Math.abs(Math.sin((e.cnoxLaserTimer ?? 0) * 0.17)) * 0.34
+          const tx = nextSpark.container.x - e.container.x
+          const ty = nextSpark.container.y - e.container.y
+          e.cnoxWarnGfx.moveTo(0, 0).lineTo(tx, ty).stroke({ color: 0xff99ff, width: 2, alpha: al })
+          e.cnoxWarnGfx.moveTo(0, 0).lineTo(tx, ty).stroke({ color: 0xffffff, width: 1, alpha: al * 0.55 })
+        } else {
+          const start = e.cnoxLaserAngle ?? 0
+          const base = start + sweepSpan * 0.5
+          drawCnoxCone(e.cnoxWarnGfx, 0, 0, base, sweepSpan * 0.5, Math.max(GAME_H * 1.2, 520), 0.52)
+          drawCnoxRay(e.cnoxWarnGfx, 0, 0, start, 2, 0xffb9ff, 0.6, false)
+          drawCnoxRay(e.cnoxWarnGfx, 0, 0, start + sweepSpan, 2, 0xffb9ff, 0.6, false)
+        }
+        if (e.cnoxLaserTimer <= 0) {
+          e.cnoxWarnGfx.clear()
+          e.cnoxLaserState = 'link_firing'
+          e.cnoxLaserTimer = 32
+        }
+      } else if (e.cnoxLaserState === 'link_firing' && e.cnoxLaserGfx) {
+        const sweepSpan = 0.22
+        const firingDuration = 32
+        e.cnoxLaserTimer = (e.cnoxLaserTimer ?? 32) - dt
+        e.cnoxLaserGfx.clear()
+        if (!isLastSpark && nextSpark) {
+          const tx = nextSpark.container.x - e.container.x
+          const ty = nextSpark.container.y - e.container.y
+          e.cnoxLaserGfx.moveTo(0, 0).lineTo(tx, ty).stroke({ color: 0xff7aff, width: 6, alpha: 0.75 })
+          e.cnoxLaserGfx.moveTo(0, 0).lineTo(tx, ty).stroke({ color: 0xffffff, width: 2, alpha: 0.9 })
+          const pulseT = (Date.now() * 0.0011 + sparkIdx * 0.27) % 1
+          e.cnoxLaserGfx.circle(tx * pulseT, ty * pulseT, 3.2).fill({ color: 0xffd5ff, alpha: 0.9 })
+          if (ctx.playerShip && Math.floor(e.cnoxLaserTimer ?? 0) % 8 === 0) {
+            const d = pointDistanceToSegment(ctx.playerShip.x, ctx.playerShip.y, e.container.x, e.container.y, nextSpark.container.x, nextSpark.container.y)
+            if (d < 16) {
+              if (!game.absorbShieldHit()) {
+                const dmg = 8 + game.currentStage
+                game.takeDamage(dmg)
+                screenFlash(ctx, 0xff66ff, 0.2, 100)
+                spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+              } else {
+                spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 7, 0xff88ff, 0xffffff)
+              }
+            }
+          }
+        } else {
+          const p = 1 - Math.max(0, e.cnoxLaserTimer ?? 0) / firingDuration
+          const angle = (e.cnoxLaserAngle ?? 0) + sweepSpan * p
+          drawCnoxRay(e.cnoxLaserGfx, 0, 0, angle, 20, 0xff66ff, 0.28, false)
+          drawCnoxRay(e.cnoxLaserGfx, 0, 0, angle, 7, 0xffffff, 0.9, false)
+          if (ctx.playerShip && Math.floor(e.cnoxLaserTimer ?? 0) % 6 === 0) {
+            const hit = pointDistanceToRay(ctx.playerShip.x, ctx.playerShip.y, e.container.x, e.container.y, angle)
+            if (hit.perp < 16 && hit.dot > 0) {
+              if (!game.absorbShieldHit()) {
+                const dmg = 10 + game.currentStage * 2
+                game.takeDamage(dmg)
+                screenFlash(ctx, 0xff88ff, 0.26, 120)
+                spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+              } else {
+                spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 9, 0xff88ff, 0xffffff)
+              }
+            }
+          }
+        }
+        if (e.cnoxLaserTimer <= 0) {
+          e.cnoxLaserGfx.clear()
+          e.cnoxLaserState = 'idle'
+          e.cnoxLaserTimer = 180 + Math.random() * 110
+        }
+      }
+
+      if (e.container.y > GAME_H + 50) {
+        e.cnoxWarnGfx?.clear()
+        e.cnoxLaserGfx?.clear()
+        if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
+        ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
+      }
+    }
+
+    else if (e.kind === 'boss_cnox_sun') {
+      const worldW = GAME_W / ctx.bossZoom
+      const worldH = GAME_H / ctx.bossZoom
+      const worldMinX = GAME_W * (1 - 1 / ctx.bossZoom) / 2
+      const worldMinY = GAME_H * (1 - 1 / ctx.bossZoom) / 2
+      if (!e.bossEntered) {
+        e.container.y += 0.95 * dt
+        if (e.container.y >= (e.bossTargetY ?? GAME_H * 0.12)) {
+          e.container.y = e.bossTargetY ?? GAME_H * 0.12
+          e.bossEntered = true
+        }
+        continue
+      }
+
+      if ((e.bossPhase ?? 1) === 1 && e.hp <= e.maxHp * 0.5) {
+        e.bossPhase = 2
+        screenFlash(ctx, 0xff9a3a, 0.5, 600)
+        for (const st of e.sunStars ?? []) {
+          st.state = 'idle'
+          st.timer = 30
+          st.warningGfx.clear()
+          st.beamGfx.clear()
+        }
+        e.sunActiveStars = []
+        e.sunCoreLaserState = 'warning'
+        e.sunCoreLaserTimer = 100
+        const phase2Base = Math.atan2((ctx.playerShip?.y ?? (worldMinY + worldH * 0.7)) - e.container.y, (ctx.playerShip?.x ?? GAME_W / 2) - e.container.x)
+        e.sunCoreLaserStartAngle = phase2Base - Math.PI / 24
+        e.sunCoreLaserSweepSpan = Math.PI / 12
+        e.sunCoreLaserAngle = e.sunCoreLaserStartAngle
+      }
+
+      e.sunCoreSpin = (e.sunCoreSpin ?? 0) + 0.0014 * dt
+      e.body.rotation = Math.sin((e.sunCoreSpin ?? 0) * 1.7) * 0.05
+
+      e.bossDriftTimer = (e.bossDriftTimer ?? 0) - dt
+      if ((e.bossDriftTimer ?? 0) <= 0) {
+        e.bossDriftTarget = worldMinX + worldW * 0.17 + Math.random() * worldW * 0.66
+        e.bossDriftTimer = 180 + Math.random() * 130
+      }
+      if (e.bossDriftTarget !== undefined) {
+        const ddx = e.bossDriftTarget - e.container.x
+        e.container.x += Math.min(Math.abs(ddx), 1.9 * dt) * Math.sign(ddx)
+      }
+
+      const stars = e.sunStars ?? []
+      e.sunCrystalSpawnCd = (e.sunCrystalSpawnCd ?? 0) - dt
+      for (let si = 0; si < stars.length; si++) {
+        const st = stars[si]!
+        const spd = 0.010 + si * 0.002
+        st.orbitAngle += spd * dt
+        st.gfx.x = Math.cos(st.orbitAngle) * st.orbitRadius
+        st.gfx.y = Math.sin(st.orbitAngle) * st.orbitRadius
+        const activeNow = (e.sunActiveStars ?? []).includes(st.kind)
+        st.attackPush = (st.attackPush ?? 0) + ((activeNow ? 22 : 0) - (st.attackPush ?? 0)) * 0.14 * dt
+        st.gfx.y += st.attackPush ?? 0
+        const sc = 1 + (st.attackPush ?? 0) / 90
+        st.gfx.scale.set(sc)
+        st.gfx.rotation += 0.02 * dt
+      }
+
+      const crystals = e.sunEnergyCrystals ?? []
+      e.sunLinkGfx?.clear()
+      if (crystals.length > 0) {
+        const healPerCrystalPerFrame = e.maxHp * 0.01 / 60
+        e.hp = Math.min(e.maxHp, e.hp + healPerCrystalPerFrame * crystals.length * dt)
+        redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+        const healPulse = 0.55 + Math.abs(Math.sin(Date.now() * 0.008)) * 0.35
+        const tNow = Date.now() * 0.0015
+        for (let ci = 0; ci < crystals.length; ci++) {
+          const c = crystals[ci]!
+          const floatY = c.y + Math.sin(tNow * 1.2 + ci * 0.8) * 1.8
+          c.gfx.y = floatY
+          c.gfx.rotation = Math.sin(tNow + ci) * 0.06
+          e.sunLinkGfx?.circle(c.x, floatY, 16 + healPulse * 4).stroke({ color: 0x98ebff, width: 2, alpha: 0.45 })
+          e.sunLinkGfx?.circle(c.x, floatY, 7 + healPulse * 1.5).fill({ color: 0x9ce2ff, alpha: 0.14 })
+          e.sunLinkGfx?.moveTo(c.x, floatY).lineTo(e.container.x, e.container.y).stroke({ color: 0x7de2ff, width: 2, alpha: 0.55 * healPulse })
+          const linkT = (tNow * 0.55 + ci * 0.23) % 1
+          const bx = c.x + (e.container.x - c.x) * linkT
+          const by = floatY + (e.container.y - floatY) * linkT
+          e.sunLinkGfx?.circle(bx, by, 3).fill({ color: 0xcdf4ff, alpha: 0.88 })
+        }
+      }
+      if ((e.bossPhase ?? 1) >= 2 && crystals.length >= 2) {
+        for (let ci = 0; ci < crystals.length - 1; ci++) {
+          const a = crystals[ci]!
+          const b = crystals[ci + 1]!
+          e.sunLinkGfx?.moveTo(a.x, a.gfx.y).lineTo(b.x, b.gfx.y).stroke({ color: 0x88d7ff, width: 3, alpha: 0.72 })
+          const t = (Date.now() * 0.001 + ci * 0.31) % 1
+          const ex = a.x + (b.x - a.x) * t
+          const ey = a.gfx.y + (b.gfx.y - a.gfx.y) * t
+          e.sunLinkGfx?.circle(ex, ey, 2.6).fill({ color: 0xf0fbff, alpha: 0.86 })
+        }
+      }
+
+      e.sunActiveStars = e.sunActiveStars ?? []
+      e.sunAttackQueue = e.sunAttackQueue ?? []
+      e.sunDiamondCycleSkip = e.sunDiamondCycleSkip ?? false
+      const desiredActive = (e.bossPhase ?? 1) === 1 ? 1 : 2
+      if (e.sunAttackQueue.length === 0) {
+        const seq: SunWeaponStar['kind'][] = ['triangle', 'circle', 'pentagon']
+        if (!e.sunDiamondCycleSkip) seq.push('diamond')
+        e.sunDiamondCycleSkip = !e.sunDiamondCycleSkip
+        for (let qi = seq.length - 1; qi > 0; qi--) {
+          const qj = Math.floor(Math.random() * (qi + 1))
+          const tmp = seq[qi]!
+          seq[qi] = seq[qj]!
+          seq[qj] = tmp
+        }
+        e.sunAttackQueue.push(...seq)
+      }
+      while (e.sunActiveStars.length < desiredActive) {
+        let picked: SunWeaponStar['kind'] | undefined
+        for (let qi = 0; qi < e.sunAttackQueue.length; qi++) {
+          const cand = e.sunAttackQueue[qi]!
+          if (!e.sunActiveStars.includes(cand)) {
+            picked = cand
+            e.sunAttackQueue.splice(qi, 1)
+            break
+          }
+        }
+        if (!picked) break
+        e.sunActiveStars.push(picked)
+        const star = stars.find(s => s.kind === picked)
+        if (!star) continue
+        star.state = 'warning'
+        star.timer = picked === 'circle' ? ((e.bossPhase ?? 1) === 1 ? 60 : 120)
+          : picked === 'pentagon' ? 40
+          : picked === 'triangle' ? ((e.bossPhase ?? 1) === 1 ? 24 : 40)
+          : ((e.bossPhase ?? 1) === 1 ? 72 : 54)
+        star.burstLeft = picked === 'triangle' ? ((e.bossPhase ?? 1) === 1 ? 3 : 1)
+          : picked === 'pentagon' ? 4
+          : picked === 'diamond' ? Math.max(0, 4 - (e.sunEnergyCrystals ?? []).length)
+          : undefined
+        star.targetX = ctx.playerShip?.x ?? GAME_W / 2
+        star.targetY = ctx.playerShip?.y ?? (worldMinY + worldH * 0.72)
+        star.attackAngle = Math.atan2((ctx.playerShip?.y ?? (worldMinY + worldH * 0.7)) - (e.container.y + star.gfx.y), (ctx.playerShip?.x ?? GAME_W / 2) - (e.container.x + star.gfx.x))
+        if (picked === 'diamond') {
+          const count = star.burstLeft ?? 0
+          const targets: Array<{ x: number, y: number }> = []
+          for (let ni = 0; ni < count; ni++) {
+            const cx = worldMinX + worldW * 0.12 + Math.random() * worldW * 0.76
+            const minY = Math.max(worldMinY + worldH * 0.22, e.container.y + 24)
+            const maxY = worldMinY + worldH * 0.50
+            const cy = minY + Math.random() * Math.max(20, maxY - minY)
+            targets.push({ x: cx, y: cy })
+          }
+          star.missileTargets = targets
+          star.missileIndex = 0
+        } else {
+          star.missileTargets = undefined
+          star.missileIndex = undefined
+        }
+      }
+
+      const finishStar = (kind: SunWeaponStar['kind']) => {
+        e.sunActiveStars = (e.sunActiveStars ?? []).filter(k => k !== kind)
+        if (kind === 'diamond') return
+        e.sunAttackQueue = e.sunAttackQueue ?? []
+        if (!e.sunAttackQueue.includes(kind)) e.sunAttackQueue.push(kind)
+      }
+
+      for (const st of stars) {
+        const wx = e.container.x + st.gfx.x
+        const wy = e.container.y + st.gfx.y
+
+        if (!e.sunActiveStars.includes(st.kind)) {
+          st.warningGfx.clear()
+          st.beamGfx.clear()
+          st.state = 'idle'
+          continue
+        }
+
+        if (st.kind === 'diamond' && st.state === 'firing') {
+          st.warningGfx.clear()
+          const idx = st.missileIndex ?? 0
+          const nextPoint = st.missileTargets?.[idx]
+          if (nextPoint) {
+            const pulse = 0.45 + Math.abs(Math.sin(Date.now() * 0.012 + idx * 0.9)) * 0.35
+            const rings = Math.max(1, Math.ceil(Math.max(0, st.timer ?? 0) / 32))
+            for (let ri = 0; ri < rings; ri++) {
+              st.warningGfx.circle(nextPoint.x, nextPoint.y, 9 + ri * 6 + pulse * 2).stroke({ color: 0x7be4ff, width: 2, alpha: 0.25 + ri * 0.12 })
+            }
+          }
+          st.timer -= dt
+          if (st.timer <= 0) {
+            const left = st.burstLeft ?? 0
+            const cd = e.sunCrystalSpawnCd ?? 0
+            const nodes = e.sunEnergyCrystals ?? []
+            if (left <= 0 || cd > 0 || nodes.length >= 4) {
+              st.warningGfx.clear()
+              st.missileTargets = undefined
+              st.missileIndex = undefined
+              st.state = 'cooldown'
+              st.timer = (e.bossPhase ?? 1) === 1 ? 120 : 95
+              continue
+            }
+            const idx = st.missileIndex ?? 0
+            const p = st.missileTargets?.[idx]
+            if (p) {
+              const nodes = e.sunEnergyCrystals ?? []
+              const cg = new Graphics()
+              cg.poly([0, -15, 11, -4, 8, 11, 0, 16, -8, 11, -11, -4]).fill(0xd8f5ff)
+              cg.poly([0, -9, 5, -2, 4, 7, 0, 10, -4, 7, -5, -2]).fill(0x4fb6ff)
+              cg.x = p.x
+              cg.y = p.y
+              ctx.gameLayer.addChild(cg)
+              nodes.push({ gfx: cg, x: p.x, y: p.y, hp: 40 + game.currentStage * 6, maxHp: 40 + game.currentStage * 6 })
+              e.sunEnergyCrystals = nodes
+              st.missileIndex = idx + 1
+            }
+            st.burstLeft = Math.max(0, left - 1)
+            if ((st.burstLeft ?? 0) > 0) {
+              st.timer = 180
+            } else {
+              e.sunCrystalSpawnCd = (e.bossPhase ?? 1) === 1 ? 220 : 170
+              st.warningGfx.clear()
+              st.missileTargets = undefined
+              st.missileIndex = undefined
+              st.state = 'cooldown'
+              st.timer = (e.bossPhase ?? 1) === 1 ? 120 : 95
+            }
+          }
+        } else if (st.state === 'warning') {
+          st.timer -= dt
+          st.warningGfx.clear()
+          const pulse = 0.45 + Math.abs(Math.sin((Date.now() + wx * 2) * 0.01)) * 0.35
+          st.warningGfx.circle(wx, wy, 20 + pulse * 3).stroke({ color: 0xffc36a, width: 2, alpha: 0.72 })
+          st.warningGfx.circle(wx, wy, 12 + pulse * 2).fill({ color: 0xffaa44, alpha: 0.16 })
+          if (st.kind === 'circle') {
+            const ang = st.attackAngle ?? 0
+            if ((e.bossPhase ?? 1) === 1) {
+              drawCnoxRay(st.warningGfx, wx, wy, ang, 2, 0x99ddff, 0.55)
+            } else {
+              drawCnoxCone(st.warningGfx, wx, wy, ang, 0.14, Math.max(worldH * 1.5, 520), 0.62)
+            }
+          } else if (st.kind === 'triangle') {
+            const tx = st.targetX ?? wx
+            const ty = st.targetY ?? wy
+            st.warningGfx.circle(tx, ty, 14 + Math.sin((st.timer ?? 0) * 0.2) * 4).stroke({ color: 0xffc557, width: 2, alpha: 0.7 })
+          } else if (st.kind === 'diamond') {
+            const idx = st.missileIndex ?? 0
+            const p = st.missileTargets?.[idx]
+            const rings = Math.max(1, Math.ceil(Math.max(0, st.timer) / 18))
+            if (p) {
+              for (let ri = 0; ri < rings; ri++) {
+                st.warningGfx.circle(p.x, p.y, 8 + ri * 5).stroke({ color: 0x7be4ff, width: 2, alpha: 0.22 + ri * 0.12 })
+              }
+            }
+          } else if (st.kind === 'pentagon') {
+            const px = ctx.playerShip?.x ?? GAME_W / 2
+            const py = ctx.playerShip?.y ?? (worldMinY + worldH * 0.72)
+            st.warningGfx.circle(px, py, 14 + pulse * 2).stroke({ color: 0xff88ff, width: 2, alpha: 0.65 })
+          }
+          if (st.timer <= 0) {
+            st.warningGfx.clear()
+            st.state = 'firing'
+            st.timer = st.kind === 'circle' ? ((e.bossPhase ?? 1) === 1 ? 24 : 58)
+              : st.kind === 'diamond' ? 1
+              : st.kind === 'pentagon' ? 0
+              : 0
+          }
+        } else if (st.state === 'firing') {
+          st.warningGfx.clear()
+          const pulse = 0.55 + Math.abs(Math.sin((Date.now() + wy * 3) * 0.012)) * 0.4
+          st.warningGfx.circle(wx, wy, 22 + pulse * 3).stroke({ color: 0xffdd88, width: 2, alpha: 0.7 })
+          if (st.kind === 'triangle') {
+            st.timer -= dt
+            if ((st.timer ?? 0) <= 0) {
+              if ((st.burstLeft ?? 0) > 0) {
+                if ((e.bossPhase ?? 1) === 1) {
+                  const base = Math.atan2((ctx.playerShip?.y ?? (worldMinY + worldH * 0.75)) - wy, (ctx.playerShip?.x ?? GAME_W / 2) - wx)
+                  for (let bi = 0; bi < 5; bi++) {
+                    const bg = new Graphics()
+                    drawEnemyBullet(bg)
+                    bg.tint = 0xffd24f
+                    bg.x = wx
+                    bg.y = wy
+                    ctx.gameLayer.addChild(bg)
+                    const ang = base + (bi - 2) * 0.16
+                    ctx.enemyBullets.push({ gfx: bg, vx: Math.cos(ang) * 3.9, vy: Math.sin(ang) * 3.9, damage: 14 + game.currentStage * 2 })
+                  }
+                  st.burstLeft = (st.burstLeft ?? 0) - 1
+                  st.timer = 16
+                } else {
+                  const bg = new Graphics()
+                  drawBossMissile(bg, true)
+                  bg.tint = 0xffb247
+                  bg.scale.set(1.55)
+                  bg.x = wx
+                  bg.y = wy
+                  ctx.gameLayer.addChild(bg)
+                  const tx = ctx.playerShip?.x ?? GAME_W / 2
+                  const highLineY = worldMinY + worldH * 0.45
+                  const ty = Math.max(worldMinY + 30, Math.min(highLineY, (ctx.playerShip?.y ?? (worldMinY + worldH * 0.78)) - 120))
+                  const dx = tx - wx
+                  const dy = ty - wy
+                  const d = Math.sqrt(dx * dx + dy * dy) || 1
+                  ctx.enemyBullets.push({
+                    gfx: bg,
+                    vx: (dx / d) * 4.4,
+                    vy: (dy / d) * 4.4,
+                    aoe: true,
+                    targetX: tx,
+                    targetY: ty,
+                    damage: 46 + game.currentStage * 3,
+                    sunShardBurst: true,
+                    sunShardCount: 14,
+                  })
+                  st.burstLeft = 0
+                  st.timer = 80
+                }
+              } else {
+                st.state = 'cooldown'
+                st.timer = 90
+              }
+            }
+          } else if (st.kind === 'circle') {
+            st.timer -= dt
+            st.beamGfx.clear()
+            let ang = st.attackAngle ?? 0
+            if ((e.bossPhase ?? 1) === 2) {
+              const p = 1 - Math.max(0, st.timer) / 58
+              ang = (st.attackAngle ?? 0) - 0.14 + p * 0.28
+            }
+            drawCnoxRay(st.beamGfx, wx, wy, ang, (e.bossPhase ?? 1) === 1 ? 10 : 12, 0x8fd9ff, 0.35, false)
+            drawCnoxRay(st.beamGfx, wx, wy, ang, (e.bossPhase ?? 1) === 1 ? 4 : 5, 0xffffff, 0.9, false)
+            if (ctx.playerShip && Math.floor(st.timer ?? 0) % 6 === 0) {
+              const hit = pointDistanceToRay(ctx.playerShip.x, ctx.playerShip.y, wx, wy, ang)
+              const hitR = (e.bossPhase ?? 1) === 1 ? 12 : 14
+              if (hit.perp < hitR && hit.dot > 0) {
+                if (!game.absorbShieldHit()) {
+                  const dmg = 16 + game.currentStage * 2
+                  game.takeDamage(dmg)
+                  screenFlash(ctx, 0x88ddff, 0.24, 120)
+                  spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+                }
+              }
+            }
+            if (st.timer <= 0) {
+              st.beamGfx.clear()
+              st.state = 'cooldown'
+              st.timer = 95
+            }
+          } else if (st.kind === 'pentagon') {
+            st.timer -= dt
+            if ((st.timer ?? 0) <= 0) {
+              if ((st.burstLeft ?? 0) > 0) {
+                const tx = ctx.playerShip?.x ?? GAME_W / 2
+                const ty = ctx.playerShip?.y ?? (worldMinY + worldH * 0.72)
+                if ((e.bossPhase ?? 1) === 1) spawnMissileWarning(ctx, tx, ty)
+                const mg = new Graphics()
+                drawBossMissile(mg)
+                mg.tint = 0xcc79ff
+                mg.x = wx
+                mg.y = wy
+                ctx.gameLayer.addChild(mg)
+                const dx = tx - wx
+                const dy = ty - wy
+                const d = Math.sqrt(dx * dx + dy * dy) || 1
+                const phase2Homing = (e.bossPhase ?? 1) === 2
+                mg.rotation = Math.atan2(dy, dx) + Math.PI / 2
+                const tail = new Graphics()
+                tail.poly([0, 2, 3, 10, 0, 24, -3, 10]).fill({ color: 0xffa3ff, alpha: 0.75 })
+                tail.y = 10
+                mg.addChild(tail)
+                ctx.enemyBullets.push({
+                  gfx: mg,
+                  vx: (dx / d) * ((e.bossPhase ?? 1) === 1 ? 3.8 : 6.0),
+                  vy: (dy / d) * ((e.bossPhase ?? 1) === 1 ? 3.8 : 6.0),
+                  aoe: (e.bossPhase ?? 1) === 1,
+                  targetX: (e.bossPhase ?? 1) === 1 ? tx : undefined,
+                  targetY: (e.bossPhase ?? 1) === 1 ? ty : undefined,
+                  homing: phase2Homing,
+                  homingLife: phase2Homing ? 260 : undefined,
+                  homingSpeed: phase2Homing ? 6.4 : undefined,
+                  homingRange: phase2Homing ? 360 : undefined,
+                  damage: 18 + game.currentStage * 2,
+                  missileTrail: true,
+                  missileTrailColor: 0xffa3ff,
+                  trailPulse: Math.random() * Math.PI * 2,
+                })
+                st.burstLeft = (st.burstLeft ?? 0) - 1
+                st.timer = 12
+              } else {
+                st.missileTargets = undefined
+                st.missileIndex = undefined
+                st.state = 'cooldown'
+                st.timer = 100
+              }
+            }
+          }
+        } else if (st.state === 'cooldown') {
+          st.timer -= dt
+          st.warningGfx.clear()
+          st.beamGfx.clear()
+          if (st.timer <= 0) {
+            st.state = 'idle'
+            finishStar(st.kind)
+          }
+        }
+      }
+
+      if ((e.bossPhase ?? 1) >= 2 && e.sunCoreLaserGfx) {
+        e.sunCoreLaserTimer = (e.sunCoreLaserTimer ?? 0) - dt
+        if (e.sunCoreLaserState === 'idle' && (e.sunCoreLaserTimer ?? 0) <= 0) {
+          e.sunCoreLaserState = 'warning'
+          e.sunCoreLaserTimer = 100
+          const base = Math.atan2((ctx.playerShip?.y ?? (worldMinY + worldH * 0.7)) - e.container.y, (ctx.playerShip?.x ?? GAME_W / 2) - e.container.x)
+          e.sunCoreLaserStartAngle = base - Math.PI / 24
+          e.sunCoreLaserSweepSpan = Math.PI / 12
+          e.sunCoreLaserAngle = e.sunCoreLaserStartAngle
+        }
+        if (e.sunCoreLaserState === 'warning') {
+          const al = 0.2 + Math.abs(Math.sin((e.sunCoreLaserTimer ?? 0) * 0.14)) * 0.35
+          e.sunCoreLaserGfx.clear()
+          const sweep = e.sunCoreLaserSweepSpan ?? Math.PI / 12
+          for (let ri = 0; ri < 3; ri++) {
+            const a0 = (e.sunCoreLaserStartAngle ?? -Math.PI / 2) + ri * (Math.PI * 2 / 3)
+            const a1 = a0 + sweep
+            drawCnoxCone(e.sunCoreLaserGfx, e.container.x, e.container.y, (a0 + a1) * 0.5, sweep * 0.5, Math.max(worldH * 1.45, 520), 0.35, false)
+            drawCnoxRay(e.sunCoreLaserGfx, e.container.x, e.container.y, a0, 2, 0xffc058, al, false)
+            drawCnoxRay(e.sunCoreLaserGfx, e.container.x, e.container.y, a1, 2, 0xffc058, al * 0.95, false)
+          }
+          if ((e.sunCoreLaserTimer ?? 0) <= 0) {
+            e.sunCoreLaserState = 'firing'
+            e.sunCoreLaserTimer = 90
+          }
+        } else if (e.sunCoreLaserState === 'firing') {
+          const p = 1 - Math.max(0, e.sunCoreLaserTimer ?? 0) / 90
+          const base = (e.sunCoreLaserStartAngle ?? -Math.PI / 2) + (e.sunCoreLaserSweepSpan ?? Math.PI / 12) * p
+          e.sunCoreLaserGfx.clear()
+          for (let ri = 0; ri < 3; ri++) {
+            const a = base + ri * (Math.PI * 2 / 3)
+            drawCnoxRay(e.sunCoreLaserGfx, e.container.x, e.container.y, a, 11, 0xffb852, 0.28, false)
+            drawCnoxRay(e.sunCoreLaserGfx, e.container.x, e.container.y, a, 4, 0xffffff, 0.9, false)
+            if (ctx.playerShip && Math.floor(e.sunCoreLaserTimer ?? 0) % 6 === 0) {
+              const hit = pointDistanceToRay(ctx.playerShip.x, ctx.playerShip.y, e.container.x, e.container.y, a)
+              if (hit.perp < 13 && hit.dot > 0) {
+                if (!game.absorbShieldHit()) {
+                  const dmg = 12 + game.currentStage * 2
+                  game.takeDamage(dmg)
+                  screenFlash(ctx, 0xffbb55, 0.2, 90)
+                  spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+                }
+              }
+            }
+          }
+          if ((e.sunCoreLaserTimer ?? 0) <= 0) {
+            e.sunCoreLaserState = 'idle'
+            e.sunCoreLaserTimer = 160
+            e.sunCoreLaserGfx.clear()
+          }
+        }
+      }
+
+      redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+    }
+
     else if (e.kind === 'boss_stardestroyer') {
       if (!e.bossEntered) {
         e.container.y += 1.2 * dt
@@ -983,15 +2106,15 @@ function gameLoop(ticker: Ticker) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.18
           e.bossEntered = true
         }
-        continue  // chua v�o v? tr�, kh�ng t?n c�ng
+        continue  // chua vï¿½o v? trï¿½, khï¿½ng t?n cï¿½ng
       }
       if (e.bossEntered) {
-        if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
+        if ((e.bossPhase ?? 1) === 1 && e.hp <= e.maxHp * 0.5) {
           e.bossPhase = 2
           screenFlash(ctx, 0x4466ff, 0.5, 600)
           spawnExplosion(ctx, e.container.x, e.container.y, 28, 0x4466ff, 0xaaccff)
           if (e.bossLabel) {
-            e.bossLabel.text = 'ANOX - DI?T SAO [PHASE 2]'
+            e.bossLabel.text = 'Anox - Kẻ ăn sao [PHASE 2]'
             e.bossLabel.style = new TextStyle({ fill: 0xff88cc, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000022, width: 3 } })
           }
           if (e.laserLine) { e.laserLine.clear(); e.laserLine.visible = false }
@@ -1029,7 +2152,7 @@ function gameLoop(ticker: Ticker) {
             }
           }
         }
-        if (e.bossPhase === 1) {
+        if ((e.bossPhase ?? 1) === 1) {
           if (e.bossAttack2State === 'ready') {
             e.attack2Timer = (e.attack2Timer ?? 600) - dt
             if ((e.attack2Timer ?? 0) <= 0) {
@@ -1094,15 +2217,15 @@ function gameLoop(ticker: Ticker) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.22
           e.bossEntered = true
         }
-        continue  // chua v�o v? tr�, kh�ng t?n c�ng
+        continue  // chua vï¿½o v? trï¿½, khï¿½ng t?n cï¿½ng
       }
       if (e.bossEntered) {
-        if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
+        if ((e.bossPhase ?? 1) === 1 && e.hp <= e.maxHp * 0.5) {
           e.bossPhase = 2
           screenFlash(ctx, 0x2255ff, 0.5, 600)
           spawnExplosion(ctx, e.container.x, e.container.y, 28, 0x2255ff, 0x88bbff)
           if (e.bossLabel) {
-            e.bossLabel.text = 'ANOX - K? X�M LANG [PHASE 2]'
+            e.bossLabel.text = 'Anox - Kẻ xâm lăng [PHASE 2]'
             e.bossLabel.style = new TextStyle({ fill: 0xff88cc, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000022, width: 3 } })
           }
           if (e.bossTurrets) {
@@ -1229,9 +2352,9 @@ function gameLoop(ticker: Ticker) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.20
           e.bossEntered = true
           e.bossBattleReady = false
-          e.bossBattleTimer = 180  // 3s: ch? zoom xong + delay tru?c khi t?n c�ng
+          e.bossBattleTimer = 180  // 3s: ch? zoom xong + delay tru?c khi t?n cï¿½ng
         }
-        continue  // chua v�o v? tr�, kh�ng l�m g� c?
+        continue  // chua vï¿½o v? trï¿½, khï¿½ng lï¿½m gï¿½ c?
       }
 
       // Ch? timer d?m xu?ng 0 tru?c khi b?t d?u tr?n chi?n
@@ -1242,7 +2365,7 @@ function gameLoop(ticker: Ticker) {
           e.bossBattleReady = true
           screenFlash(ctx, 0x6600aa, 0.3, 400)
         }
-        continue  // chua s?n s�ng, b? qua to�n b? logic t?n c�ng
+        continue  // chua s?n sï¿½ng, b? qua toï¿½n b? logic t?n cï¿½ng
       }
 
       if (e.bossEntered && e.bossBattleReady) {
@@ -1250,12 +2373,12 @@ function gameLoop(ticker: Ticker) {
         e.body.rotation += 0.003 * dt
 
         // Phase 1 ? 2 transition at 50% HP
-        if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
+        if ((e.bossPhase ?? 1) === 1 && e.hp <= e.maxHp * 0.5) {
           e.bossPhase = 2
           screenFlash(ctx, 0x660099, 0.6, 700)
           spawnExplosion(ctx, e.container.x, e.container.y, 36, 0x6600aa, 0xcc44ff)
           if (e.bossLabel) {
-            e.bossLabel.text = 'BNOX - TINH V�N H?C �M [PHASE 2]'
+            e.bossLabel.text = 'Bnox - Tinh vân hắc ám [PHASE 2]'
             e.bossLabel.style = new TextStyle({ fill: 0xff44ff, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000011, width: 3 } })
           }
           // Remove lingering black holes
@@ -1280,12 +2403,12 @@ function gameLoop(ticker: Ticker) {
 
         // -- Gun burst fire (both phases) ------------------------------------
         if (e.tinhVanGuns) {
-          const phase2 = e.bossPhase === 2
+          const phase2 = (e.bossPhase ?? 1) === 2
           const spd = 3.5 + (phase2 ? 1.2 : 0) + game.currentStage * 0.1
           const spread = phase2 ? 0.20 : 0.13
           for (const gun of e.tinhVanGuns) {
             if (gun.burstLeft > 0) {
-              // �ang trong burst: d?m cooldown gi?a m?i lo?t
+              // ï¿½ang trong burst: d?m cooldown gi?a m?i lo?t
               gun.shootTimer -= dt
               if (gun.shootTimer <= 0 && ctx.playerShip) {
                 gun.shootTimer = phase2 ? 40 : 36  // 0.67s / 0.6s gi?a m?i lo?t
@@ -1301,7 +2424,7 @@ function gameLoop(ticker: Ticker) {
                   ctx.enemyBullets.push({ gfx: bg, vx: Math.cos(baseAngle + ao) * spd, vy: Math.sin(baseAngle + ao) * spd })
                 }
                 if (phase2) {
-                  // Vi�n gi?a b?n th?ng v�o ngu?i choi
+                  // Viï¿½n gi?a b?n th?ng vï¿½o ngu?i choi
                   const bgC = new Graphics()
                   drawEnemyBullet(bgC)
                   bgC.x = worldX; bgC.y = worldY + 10
@@ -1311,7 +2434,7 @@ function gameLoop(ticker: Ticker) {
                 if (gun.burstLeft === 0) gun.shootTimer = phase2 ? 240 : 240  // ngh? 4s sau burst
               }
             } else {
-              // Ngh?: d?m cooldown, khi xong k�ch ho?t burst
+              // Ngh?: d?m cooldown, khi xong kï¿½ch ho?t burst
               gun.shootTimer -= dt
               if (gun.shootTimer <= 0) {
                 gun.burstLeft = phase2 ? 3 : 2
@@ -1322,7 +2445,7 @@ function gameLoop(ticker: Ticker) {
         }
 
         // -- Phase 1: Black hole spawn ----------------------------------------
-        if (e.bossPhase === 1) {
+        if ((e.bossPhase ?? 1) === 1) {
           e.attack1Timer = (e.attack1Timer ?? 600) - dt
           if ((e.attack1Timer ?? 0) <= 0) {
             e.attack1Timer = 600
@@ -1380,11 +2503,11 @@ function gameLoop(ticker: Ticker) {
               const pdy = bh.y - ctx.playerShip.y
               const pd = Math.sqrt(pdx * pdx + pdy * pdy) || 1
               if (pd < pullR) {
-                // N?u ngu?i choi dang di chuy?n ra ngo�i, kh�ng l?i m?t ph?n
+                // N?u ngu?i choi dang di chuy?n ra ngoï¿½i, khï¿½ng l?i m?t ph?n
                 if (bh.lastPlayerX !== undefined && bh.lastPlayerY !== undefined) {
                   const moveDx = ctx.playerShip.x - bh.lastPlayerX
                   const moveDy = ctx.playerShip.y - bh.lastPlayerY
-                  // Th�nh ph?n hu?ng ra ngo�i: duong = dang tho�t kh?i h? den
+                  // Thï¿½nh ph?n hu?ng ra ngoï¿½i: duong = dang thoï¿½t kh?i h? den
                   const outwardDot = moveDx * (-pdx / pd) + moveDy * (-pdy / pd)
                   if (outwardDot > 0) {
                     const resistFactor = (1 - pd / pullR) * 0.6 * fadeA
@@ -1395,8 +2518,12 @@ function gameLoop(ticker: Ticker) {
                 const force = (1 - pd / pullR) * 4.0 * dt * fadeA
                 ctx.playerShip.x += (pdx / pd) * force
                 ctx.playerShip.y += (pdy / pd) * force
-                ctx.playerShip.x = Math.max(10, Math.min(GAME_W - 10, ctx.playerShip.x))
-                ctx.playerShip.y = Math.max(40, Math.min(GAME_H - 40, ctx.playerShip.y))
+                const _xminBh = GAME_W * (1 - 1 / ctx.bossZoom) / 2 + 10
+                const _xmaxBh = GAME_W * (1 + 1 / ctx.bossZoom) / 2 - 10
+                const _yminBh = GAME_H * (1 - 1 / ctx.bossZoom) / 2 + 40
+                const _ymaxBh = GAME_H * (1 + 1 / ctx.bossZoom) / 2 - 40
+                ctx.playerShip.x = Math.max(_xminBh, Math.min(_xmaxBh, ctx.playerShip.x))
+                ctx.playerShip.y = Math.max(_yminBh, Math.min(_ymaxBh, ctx.playerShip.y))
                 bh.lastPlayerX = ctx.playerShip.x
                 bh.lastPlayerY = ctx.playerShip.y
               } else {
@@ -1475,12 +2602,12 @@ function gameLoop(ticker: Ticker) {
                 ctx.playerMissiles.splice(mi, 1)
               }
             }
-            // Enemy bullets are NOT pulled by black holes � only player projectiles are affected
+            // Enemy bullets are NOT pulled by black holes ï¿½ only player projectiles are affected
           }
         }
 
         // -- Phase 2: Nebula portal summon (30s cooldown) ---------------------
-        if (e.bossPhase === 2) {
+        if ((e.bossPhase ?? 1) === 2) {
           if ((e.pendingMissiles ?? 0) === 0) {
             e.attack2Timer = (e.attack2Timer ?? 2100) - dt
             if ((e.attack2Timer ?? 0) <= 0) {
@@ -1490,7 +2617,7 @@ function gameLoop(ticker: Ticker) {
               e.blackHoles = e.blackHoles ?? []
               for (let pi = 0; pi < 2; pi++) {
                 const pX = GAME_W * 0.15 + Math.random() * GAME_W * 0.70
-                const pY = GAME_H * 0.02 + Math.random() * GAME_H * 0.10  // m? c?ng ? tr�n c�ng
+                const pY = GAME_H * 0.02 + Math.random() * GAME_H * 0.10  // m? c?ng ? trï¿½n cï¿½ng
                 const pGfx = new Graphics()
                 pGfx.x = pX; pGfx.y = pY
                 ctx.gameLayer.addChild(pGfx)
@@ -1514,13 +2641,13 @@ function gameLoop(ticker: Ticker) {
               if (r < 0.45) { spawnDaiLienPair(ctx, game); spawnType = 'dai_lien' }
               else if (r < 0.75) { spawnThuatSi(ctx, game); spawnType = 'thuat_si' }
               else { spawnThuHoSwarm(ctx, game); spawnType = 'thu_ho' }
-              // Teleport newly spawned enemies to portal, m?i lo?i gi? v? tr� chi?n thu?t c?a m�nh
+              // Teleport newly spawned enemies to portal, m?i lo?i gi? v? trï¿½ chi?n thu?t c?a mï¿½nh
               for (let ni = beforeCount; ni < ctx.enemies.length; ni++) {
                 const ne = ctx.enemies[ni]!
                 ne.container.x = spawnX + (Math.random() - 0.5) * 30
                 ne.container.y = spawnY
                 const atkX = GAME_W * 0.10 + Math.random() * GAME_W * 0.80
-                // Li�n x?: gi? t?m cao; Th? h?: t?m gi?a ch?n d?n; Thu?t si: t?m du?i d? h?i m�u
+                // Liï¿½n x?: gi? t?m cao; Th? h?: t?m gi?a ch?n d?n; Thu?t si: t?m du?i d? h?i mï¿½u
                 const atkY = spawnType === 'dai_lien'
                   ? GAME_H * 0.15 + Math.random() * GAME_H * 0.15
                   : spawnType === 'thu_ho'
@@ -1560,7 +2687,7 @@ function gameLoop(ticker: Ticker) {
           e.container.y = e.bossTargetY ?? GAME_H * 0.20
           e.bossEntered = true
         }
-        // B?t t? khi t�i xu?t: h?p th? d?n (kh�ng xuy�n qua) nhung kh�ng nh?n s�t thuong
+        // B?t t? khi tï¿½i xu?t: h?p th? d?n (khï¿½ng xuyï¿½n qua) nhung khï¿½ng nh?n sï¿½t thuong
         for (let j = ctx.bullets.length - 1; j >= 0; j--) {
           if (dist2(ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, e.container.x, e.container.y) < 45 * 45) {
             spawnExplosion(ctx, ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, 4, 0x8888bb, 0xaaaadd)
@@ -1568,16 +2695,16 @@ function gameLoop(ticker: Ticker) {
             ctx.bullets.splice(j, 1)
           }
         }
-        continue  // chua v�o v? tr�, kh�ng t?n c�ng
+        continue  // chua vï¿½o v? trï¿½, khï¿½ng t?n cï¿½ng
       }
       if (e.bossEntered) {
         // -- Phase 2 transition at 50% HP ----------------------------------
-        if (e.bossPhase === 1 && e.hp <= e.maxHp * 0.5) {
+        if ((e.bossPhase ?? 1) === 1 && e.hp <= e.maxHp * 0.5) {
           e.bossPhase = 2
           screenFlash(ctx, 0x6600cc, 0.55, 700)
           spawnExplosion(ctx, e.container.x, e.container.y, 34, 0x6600cc, 0xcc44ff)
           if (e.bossLabel) {
-            e.bossLabel.text = 'BNOX - TR�M S� [PHASE 2]'
+            e.bossLabel.text = 'Bnox - Trùm sò [PHASE 2]'
             e.bossLabel.style = new TextStyle({ fill: 0xff88ff, fontSize: 10, fontFamily: "'Chakra Petch', sans-serif", fontWeight: 'bold', stroke: { color: 0x000011, width: 3 } })
           }
           if (e.trumSoLasers) {
@@ -1608,10 +2735,10 @@ function gameLoop(ticker: Ticker) {
               const ady = ctx.playerShip.y - (e.container.y + gun.offsetY)
               gun.gfx.rotation = Math.atan2(ady, adx) - Math.PI / 2
             }
-            // C? 2 phase: b?n h�nh n�n 2 l?n (c�ch 0.5s), ngh? 3s
-            const coneCount = e.bossPhase === 2 ? 5 : 3  // s? vi�n m?i l?n b?n
-            const coneSpread = e.bossPhase === 2 ? 0.30 : 0.22  // g�c n�n t?ng (rad)
-            const spd = (e.bossPhase === 2 ? 5 : 4.5) + game.currentStage * 0.05
+            // C? 2 phase: b?n hï¿½nh nï¿½n 2 l?n (cï¿½ch 0.5s), ngh? 3s
+            const coneCount = (e.bossPhase ?? 1) === 2 ? 5 : 3  // s? viï¿½n m?i l?n b?n
+            const coneSpread = (e.bossPhase ?? 1) === 2 ? 0.30 : 0.22  // gï¿½c nï¿½n t?ng (rad)
+            const spd = ((e.bossPhase ?? 1) === 2 ? 5 : 4.5) + game.currentStage * 0.05
             if (gun.burstLeft > 0) {
               gun.rapidTimer -= dt
               if (gun.rapidTimer <= 0) {
@@ -1677,7 +2804,7 @@ function gameLoop(ticker: Ticker) {
           }
 
         // -- Phase 1: Simultaneous salvo lasers (all fire at once) ------------
-        if (e.bossPhase === 1 && e.trumSoLasers) {
+        if ((e.bossPhase ?? 1) === 1 && e.trumSoLasers) {
           const len = GAME_W + GAME_H
           // Tick idle timers independently
           for (const laser of e.trumSoLasers) {
@@ -1734,7 +2861,7 @@ function gameLoop(ticker: Ticker) {
         }
 
         // -- Phase 2: Core mega-laser (warning ? fire, instant-kill) ----------
-        if (e.bossPhase === 2 && e.trumSoPhase2LaserGfx) {
+        if ((e.bossPhase ?? 1) === 2 && e.trumSoPhase2LaserGfx) {
           const bx = e.container.x; const by = e.container.y
           const len = GAME_W + GAME_H
           if (e.trumSoPhase2LaserState === 'idle' || e.trumSoPhase2LaserState === undefined) {
@@ -1795,7 +2922,7 @@ function gameLoop(ticker: Ticker) {
         }
 
         // -- Phase 2: Charge dash ------------------------------------------
-        if (e.bossPhase === 2) {
+        if ((e.bossPhase ?? 1) === 2) {
           if (e.trumSoCharge === 'idle') {
             e.trumSoChargeTimer = (e.trumSoChargeTimer ?? 900) - dt
             if ((e.trumSoChargeTimer ?? 0) <= 0) {
@@ -1863,7 +2990,7 @@ function gameLoop(ticker: Ticker) {
           ctx.bullets.splice(j, 1)
         }
       }
-      // Reflect shooter missiles (Star Shooter) � loses homing
+      // Reflect shooter missiles (Star Shooter) ï¿½ loses homing
       for (let j = ctx.shooterMissiles.length - 1; j >= 0; j--) {
         const m = ctx.shooterMissiles[j]!
         if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < 20 * 20) {
@@ -1876,7 +3003,7 @@ function gameLoop(ticker: Ticker) {
           ctx.shooterMissiles.splice(j, 1)
         }
       }
-      // Reflect player card missiles � loses homing
+      // Reflect player card missiles ï¿½ loses homing
       for (let j = ctx.playerMissiles.length - 1; j >= 0; j--) {
         const m = ctx.playerMissiles[j]!
         if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < 20 * 20) {
@@ -1897,23 +3024,15 @@ function gameLoop(ticker: Ticker) {
           if (t.stunTimer > 0) continue
           const wx = e.container.x + t.offsetX; const wy = e.container.y + t.offsetY
           if (dist2(ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, wx, wy) < 12 * 12) {
-            t.hp = Math.max(0, t.hp - bulletDmg)
-            spawnDamageText(ctx, wx, wy - 16, bulletDmg)
+            const bullet = ctx.bullets[j]!
+            const effectiveDmg = Math.round(bulletDmg * (bullet.pierceDmgMult ?? 1))
+            t.hp = Math.max(0, t.hp - effectiveDmg)
+            spawnDamageText(ctx, wx, wy - 16, effectiveDmg)
             if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
             redrawHpBar(t.hpBarBg, t.hpBar, t.hp / t.maxHp, 24)
-            const bullet = ctx.bullets[j]!
-            if (game.cardStats.bulletPierceOnKill) {
-              bullet.pierceLeft = Math.max(0, (bullet.pierceLeft ?? 2) - 1)
-              if ((bullet.pierceLeft ?? 0) <= 0) {
-                if (!bullet.gfx.destroyed) ctx.gameLayer.removeChild(bullet.gfx)
-                ctx.bullets.splice(j, 1)
-              } else {
-                bullet.gfx.y = wy - 13  // snap above turret hitbox to prevent re-hit
-              }
-            } else {
-              if (!bullet.gfx.destroyed) ctx.gameLayer.removeChild(bullet.gfx)
-              ctx.bullets.splice(j, 1)
-            }
+            // Bosses cannot be pierced
+            if (!bullet.gfx.destroyed) ctx.gameLayer.removeChild(bullet.gfx)
+            ctx.bullets.splice(j, 1)
             if (t.hp <= 0) {
               t.stunTimer = 200; t.laserState = 'idle'; t.laserGfx.clear()
               t.gfx.clear()
@@ -1930,18 +3049,111 @@ function gameLoop(ticker: Ticker) {
         }
         if (tHit) break
       }
+    } else if (e.kind === 'boss_cnox_sun') {
+      const crystals = e.sunEnergyCrystals ?? []
+      if ((e.bossPhase ?? 1) === 2 && crystals.length >= 2) {
+        for (let j = ctx.bullets.length - 1; j >= 0; j--) {
+          const b = ctx.bullets[j]!
+          let blocked = false
+          for (let ci = 0; ci < crystals.length - 1; ci++) {
+            const a = crystals[ci]!
+            const c = crystals[ci + 1]!
+            const d = pointDistanceToSegment(b.gfx.x, b.gfx.y, a.x, a.y, c.x, c.y)
+            if (d < 8) {
+              spawnExplosion(ctx, b.gfx.x, b.gfx.y, 7, 0x66d0ff, 0xffffff)
+              if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
+              ctx.bullets.splice(j, 1)
+              blocked = true
+              break
+            }
+          }
+          if (blocked) continue
+        }
+      }
+
+      for (let j = ctx.bullets.length - 1; j >= 0; j--) {
+        const b = ctx.bullets[j]!
+        let hitCrystal = false
+        for (let ci = crystals.length - 1; ci >= 0; ci--) {
+          const c = crystals[ci]!
+          if (dist2(b.gfx.x, b.gfx.y, c.x, c.y) < 17 * 17) {
+            const effectiveDmg = Math.round(bulletDmg * (b.pierceDmgMult ?? 1))
+            c.hp = Math.max(0, c.hp - effectiveDmg)
+            spawnDamageText(ctx, c.x, c.y - 14, effectiveDmg)
+            if (c.hp <= 0) {
+              spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+              if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+              crystals.splice(ci, 1)
+            }
+            if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
+            ctx.bullets.splice(j, 1)
+            hitCrystal = true
+            break
+          }
+        }
+        if (hitCrystal) continue
+      }
+
+      if (!isBossIntro && ctx.playerShip) {
+        for (let ci = crystals.length - 1; ci >= 0; ci--) {
+          const c = crystals[ci]!
+          c.contactDamageCd = Math.max(0, (c.contactDamageCd ?? 0) - dt)
+          if ((c.contactDamageCd ?? 0) > 0) continue
+          if (dist2(ctx.playerShip.x, ctx.playerShip.y, c.x, c.y) < 30 * 30) {
+            c.contactDamageCd = 14
+            const crystalDmg = Math.max(8, Math.round(game.upgrades.damage * 0.55))
+            c.hp = Math.max(0, c.hp - crystalDmg)
+            spawnDamageText(ctx, c.x, c.y - 14, crystalDmg)
+            if (c.hp <= 0) {
+              spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+              if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+              crystals.splice(ci, 1)
+            }
+
+            if (game.absorbShieldHit()) {
+              spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 10, 0x44aaff, 0x88ddff)
+              screenFlash(ctx, 0x4488ff, 0.2, 140)
+            } else {
+              const pDmg = 12 + game.currentStage
+              game.takeDamage(pDmg)
+              screenFlash(ctx)
+              spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, pDmg)
+            }
+          }
+        }
+      }
+    } else if (e.kind === 'cnox_shield' && e.cnoxShields?.length) {
+      for (let j = ctx.bullets.length - 1; j >= 0; j--) {
+        const bullet = ctx.bullets[j]!
+        let blocked = false
+        for (const shield of e.cnoxShields) {
+          const sx = e.container.x + shield.x
+          const sy = e.container.y + shield.y
+          if (dist2(bullet.gfx.x, bullet.gfx.y, sx, sy) < 14 * 14) {
+            spawnExplosion(ctx, sx, sy, 7, 0x66bbff, 0xe8fbff)
+            if (!bullet.gfx.destroyed) ctx.gameLayer.removeChild(bullet.gfx)
+            ctx.bullets.splice(j, 1)
+            blocked = true
+            break
+          }
+        }
+        if (blocked) continue
+      }
     }
     for (let j = ctx.bullets.length - 1; j >= 0; j--) {
-      const bulletHitR = e.kind === 'boss_tinhvan' ? 60 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 45 : 15)
+      const bulletHitR = e.kind === 'boss_tinhvan' ? 68 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 54 : (e.kind === 'boss_cnox_sun' ? 72 : 15))
       if (dist2(ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, e.container.x, e.container.y) < bulletHitR * bulletHitR) {
-        e.hp = Math.max(0, e.hp - bulletDmg)
-        const dmgOffY = e.kind === 'boss_tinhvan' ? 75 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 60 : 14)
-        spawnDamageText(ctx, e.container.x, e.container.y - dmgOffY, bulletDmg)
+        const bullet = ctx.bullets[j]!
+        const effectiveDmg = Math.round(bulletDmg * (bullet.pierceDmgMult ?? 1))
+        e.hp = Math.max(0, e.hp - effectiveDmg)
+        const dmgOffY = e.kind === 'boss_tinhvan' ? 75 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 60 : (e.kind === 'boss_cnox_sun' ? 68 : 14))
+        spawnDamageText(ctx, e.container.x, e.container.y - dmgOffY, effectiveDmg)
         hitFlash(e.body)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
         if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
-        const bullet = ctx.bullets[j]!
-        if (game.cardStats.bulletPierceOnKill) {
+        const isBoss = e.kind.startsWith('boss_')
+        if (game.cardStats.bulletPierceOnKill && !isBoss) {
+          bullet.pierceDmgMult = (bullet.pierceDmgMult ?? 1) * 0.75
           bullet.pierceLeft = Math.max(0, (bullet.pierceLeft ?? 2) - 1)
           if ((bullet.pierceLeft ?? 0) <= 0) {
             if (!bullet.gfx.destroyed) ctx.gameLayer.removeChild(bullet.gfx)
@@ -1958,20 +3170,35 @@ function gameLoop(ticker: Ticker) {
     }
     if (killed) continue
 
-    // Pioneer collision with player
-    if (e.kind === 'pioneer' && ctx.playerShip &&
-      dist2(e.container.x, e.container.y, ctx.playerShip.x, ctx.playerShip.y) < 20 * 20) {
-      spawnExplosion(ctx, e.container.x, e.container.y, 14)
-      spawnEnemyOrbs(ctx, e.container.x, e.container.y, 'pioneer')
-      if (game.absorbShieldHit()) {
-        screenFlash(ctx, 0x4488ff, 0.28, 200)
-      } else {
-        game.takeDamage(25); screenFlash(ctx)
-        spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, 25)
+    // Contact damage: all hp enemies can damage and be damaged on collision with player
+    if (!isBossIntro && ctx.playerShip && (e.contactDamageCd ?? 0) <= 0) {
+      const playerCollisionR = 14
+      const enemyCollisionR = getEnemyCollisionRadius(e)
+      if (dist2(e.container.x, e.container.y, ctx.playerShip.x, ctx.playerShip.y) < (playerCollisionR + enemyCollisionR) * (playerCollisionR + enemyCollisionR)) {
+        e.contactDamageCd = 14
+
+        const dmgToEnemy = getCollisionDamageToEnemy(game.upgrades.damage, e)
+        e.hp = Math.max(0, e.hp - dmgToEnemy)
+        hitFlash(e.body)
+        redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+        const dmgOffY = e.kind === 'boss_tinhvan' ? 75 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 60 : (e.kind === 'boss_cnox_sun' ? 68 : 14))
+        spawnDamageText(ctx, e.container.x, e.container.y - dmgOffY, dmgToEnemy)
+
+        if (game.absorbShieldHit()) {
+          spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 10, 0x44aaff, 0x88ddff)
+          screenFlash(ctx, 0x4488ff, 0.2, 140)
+        } else {
+          const dmgToPlayer = getCollisionDamageToPlayer(e, game.currentStage)
+          game.takeDamage(dmgToPlayer)
+          screenFlash(ctx)
+          spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmgToPlayer)
+        }
+
+        if (e.hp <= 0) {
+          killEnemy(ctx, game, e, i)
+          continue
+        }
       }
-      game.stageEnemiesKilled++
-      if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
-      ctx.enemies.splice(i, 1)
     }
   }
 
@@ -1985,7 +3212,7 @@ function gameLoop(ticker: Ticker) {
     const t = Date.now() * 0.011 + i * 2.3
     o.gfx.scale.set(0.82 + 0.18 * Math.abs(Math.sin(t)))
     o.gfx.alpha = 0.65 + 0.35 * Math.abs(Math.sin(Date.now() * 0.007 + i * 1.5))
-    if (o.y > GAME_H + 20) { if (!o.gfx.destroyed) ctx.gameLayer.removeChild(o.gfx); ctx.expOrbs.splice(i, 1); continue }
+    if (o.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 20) { if (!o.gfx.destroyed) ctx.gameLayer.removeChild(o.gfx); ctx.expOrbs.splice(i, 1); continue }
     if (ctx.playerShip && dist2(o.gfx.x, o.y, ctx.playerShip.x, ctx.playerShip.y) < collectR2) {
       game.gainSessionExp(o.amount)
       if (!o.gfx.destroyed) ctx.gameLayer.removeChild(o.gfx)
@@ -2003,7 +3230,7 @@ function gameLoop(ticker: Ticker) {
         o.y += o.vy * dt; o.gfx.y = o.y
         o.gfx.alpha = 0.75 + Math.sin(Date.now() * 0.008 + i) * 0.25
         o.gfx.scale.set(0.88 + 0.12 * Math.abs(Math.sin(Date.now() * 0.013 + i * 1.9)))
-        if (o.y > GAME_H + 20) { if (!o.gfx.destroyed) ctx.gameLayer.removeChild(o.gfx); ctx.fragmentOrbs.splice(i, 1) }
+        if (o.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 20) { if (!o.gfx.destroyed) ctx.gameLayer.removeChild(o.gfx); ctx.fragmentOrbs.splice(i, 1) }
       } else {
         const dx = skillTargetX - o.gfx.x; const dy = skillTargetY - o.gfx.y
         const d = Math.sqrt(dx * dx + dy * dy) || 1
@@ -2021,9 +3248,23 @@ function gameLoop(ticker: Ticker) {
   // Fragment missiles
   for (let i = ctx.fragmentMissiles.length - 1; i >= 0; i--) {
     const m = ctx.fragmentMissiles[i]
-    const nearest = findNearestEnemy(ctx.enemies, m.gfx.x, m.gfx.y)
-    if (nearest) {
-      const dx = nearest.container.x - m.gfx.x; const dy = nearest.container.y - m.gfx.y
+    const nearestEnemy = findNearestEnemy(ctx.enemies, m.gfx.x, m.gfx.y)
+    let targetX = nearestEnemy?.container.x
+    let targetY = nearestEnemy?.container.y
+    let bestD2 = nearestEnemy ? dist2(m.gfx.x, m.gfx.y, nearestEnemy.container.x, nearestEnemy.container.y) : Infinity
+    for (const boss of ctx.enemies) {
+      if (boss.kind !== 'boss_cnox_sun') continue
+      for (const c of boss.sunEnergyCrystals ?? []) {
+        const d2 = dist2(m.gfx.x, m.gfx.y, c.x, c.y)
+        if (d2 < bestD2) {
+          bestD2 = d2
+          targetX = c.x
+          targetY = c.y
+        }
+      }
+    }
+    if (targetX !== undefined && targetY !== undefined) {
+      const dx = targetX - m.gfx.x; const dy = targetY - m.gfx.y
       const dist = Math.sqrt(dx * dx + dy * dy) || 1
       m.vx += (dx / dist) * 7 * 0.18; m.vy += (dy / dist) * 7 * 0.18
       const spd = Math.sqrt(m.vx * m.vx + m.vy * m.vy)
@@ -2031,14 +3272,38 @@ function gameLoop(ticker: Ticker) {
     }
     m.gfx.x += m.vx * dt; m.gfx.y += m.vy * dt
     m.gfx.rotation = Math.atan2(m.vy, m.vx) + Math.PI / 2
-    if (m.gfx.x < -20 || m.gfx.x > GAME_W + 20 || m.gfx.y < -40 || m.gfx.y > GAME_H + 20) {
+    if (m.gfx.x < (GAME_W * (1 - 1 / ctx.bossZoom) / 2) - 20 || m.gfx.x > (GAME_W * (1 + 1 / ctx.bossZoom) / 2) + 20 || m.gfx.y < (GAME_H * (1 - 1 / ctx.bossZoom) / 2) - 40 || m.gfx.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 20) {
       if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
       ctx.fragmentMissiles.splice(i, 1); continue
     }
+    let hitCrystal = false
+    for (const boss of ctx.enemies) {
+      if (boss.kind !== 'boss_cnox_sun') continue
+      const crystals = boss.sunEnergyCrystals ?? []
+      for (let ci = crystals.length - 1; ci >= 0; ci--) {
+        const c = crystals[ci]!
+        if (dist2(m.gfx.x, m.gfx.y, c.x, c.y) < 18 * 18) {
+          const dmg = Math.round(60 + game.upgrades.damage * 0.5)
+          c.hp = Math.max(0, c.hp - dmg)
+          spawnDamageText(ctx, c.x, c.y - 14, dmg)
+          spawnExplosion(ctx, m.gfx.x, m.gfx.y, 10, 0xff8800, 0xffdd44)
+          if (c.hp <= 0) {
+            spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+            if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+            crystals.splice(ci, 1)
+          }
+          hitCrystal = true
+          break
+        }
+      }
+      if (hitCrystal) break
+    }
+    if (hitCrystal) { if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx); ctx.fragmentMissiles.splice(i, 1); continue }
     let hit = false
     for (let j = ctx.enemies.length - 1; j >= 0; j--) {
       const e = ctx.enemies[j]
-      if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < 20 * 20) {
+      const fragHitR = e.kind === 'boss_cnox_sun' ? 42 : (e.kind.startsWith('boss_') ? 30 : 20)
+      if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < fragHitR * fragHitR) {
         const dmg = Math.round(60 + game.upgrades.damage * 0.5)
         e.hp = Math.max(0, e.hp - dmg); hitFlash(e.body)
         spawnDamageText(ctx, e.container.x, e.container.y - 14, dmg)
@@ -2054,27 +3319,94 @@ function gameLoop(ticker: Ticker) {
   // Shooter missiles (Star Shooter)
   for (let i = ctx.shooterMissiles.length - 1; i >= 0; i--) {
     const m = ctx.shooterMissiles[i]
-    const nearest = findNearestEnemy(ctx.enemies, m.gfx.x, m.gfx.y)
-    if (nearest) {
-      const dx = nearest.container.x - m.gfx.x; const dy = nearest.container.y - m.gfx.y
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1
-      const mSpd = Math.sqrt(m.vx * m.vx + m.vy * m.vy) || 6
-      m.vx += (dx / dist) * mSpd * 0.12; m.vy += (dy / dist) * mSpd * 0.12
-      const spd = Math.sqrt(m.vx * m.vx + m.vy * m.vy)
-      if (spd > mSpd) { m.vx = (m.vx / spd) * mSpd; m.vy = (m.vy / spd) * mSpd }
+    // Non-homing mode: keep initial heading and speed (no retarget/chase)
+    const smCurSpd2 = m.vx * m.vx + m.vy * m.vy
+    if (smCurSpd2 < 36) {
+      if (smCurSpd2 > 0) { const inv = 6 / Math.sqrt(smCurSpd2); m.vx *= inv; m.vy *= inv }
+      else { m.vx = 0; m.vy = -6 }
+    }
+
+    // Crystal collision: missiles should be blocked and explode on contact (no piercing through crystals)
+    let hitCrystal = false
+    for (const boss of ctx.enemies) {
+      if (boss.kind !== 'boss_cnox_sun') continue
+      const crystals = boss.sunEnergyCrystals ?? []
+      for (let ci = crystals.length - 1; ci >= 0; ci--) {
+        const c = crystals[ci]!
+        if (dist2(m.gfx.x, m.gfx.y, c.x, c.y) < 17 * 17) {
+          c.hp = Math.max(0, c.hp - m.damage)
+          spawnDamageText(ctx, c.x, c.y - 14, m.damage)
+          if (c.hp <= 0) {
+            spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+            if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+            crystals.splice(ci, 1)
+          }
+          spawnExplosion(ctx, m.gfx.x, m.gfx.y, m.aoe ? 28 : 14, 0xff4400, 0xffaa00)
+          if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+          ctx.shooterMissiles.splice(i, 1)
+          hitCrystal = true
+          break
+        }
+      }
+      if (hitCrystal) break
+    }
+    if (hitCrystal) continue
+
+    if (m.targetX !== undefined && m.targetY !== undefined && dist2(m.gfx.x, m.gfx.y, m.targetX, m.targetY) < 18 * 18) {
+      m.gfx.x = m.targetX
+      m.gfx.y = m.targetY
+      if (m.aoe) {
+        const aoeRadius = 45 * (1 + game.cardStats.shooterMissileAoeSizeBonus)
+        spawnExplosion(ctx, m.gfx.x, m.gfx.y, 28, 0xff4400, 0xffaa00)
+        screenFlash(ctx, 0xff3300, 0.18, 150)
+        for (let k = ctx.enemies.length - 1; k >= 0; k--) {
+          const ae = ctx.enemies[k]
+          if (dist2(m.gfx.x, m.gfx.y, ae.container.x, ae.container.y) < aoeRadius * aoeRadius) {
+            ae.hp = Math.max(0, ae.hp - m.damage); hitFlash(ae.body)
+            spawnDamageText(ctx, ae.container.x, ae.container.y - 14, m.damage)
+            redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
+            if (ae.hp <= 0) {
+              if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)
+              killEnemy(ctx, game, ae, k)
+            }
+          }
+        }
+      } else {
+        let nearestIdx = -1
+        let nearestD2 = Infinity
+        for (let k = 0; k < ctx.enemies.length; k++) {
+          const d2 = dist2(m.gfx.x, m.gfx.y, ctx.enemies[k]!.container.x, ctx.enemies[k]!.container.y)
+          if (d2 < nearestD2) { nearestD2 = d2; nearestIdx = k }
+        }
+        if (nearestIdx >= 0 && nearestD2 < 28 * 28) {
+          const e = ctx.enemies[nearestIdx]!
+          e.hp = Math.max(0, e.hp - m.damage); hitFlash(e.body)
+          spawnDamageText(ctx, e.container.x, e.container.y - 14, m.damage)
+          redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+          if (e.hp <= 0) {
+            if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)
+            killEnemy(ctx, game, e, nearestIdx)
+          }
+        }
+        spawnExplosion(ctx, m.gfx.x, m.gfx.y, 14, 0xff4400, 0xffaa00)
+      }
+      if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+      ctx.shooterMissiles.splice(i, 1)
+      continue
     }
     m.gfx.x += m.vx * dt; m.gfx.y += m.vy * dt
     m.gfx.rotation = Math.atan2(m.vy, m.vx) + Math.PI / 2
-    if (m.gfx.x < -40 || m.gfx.x > GAME_W + 40 || m.gfx.y < -60 || m.gfx.y > GAME_H + 40) {
+    if (m.gfx.x < (GAME_W * (1 - 1 / ctx.bossZoom) / 2) - 40 || m.gfx.x > (GAME_W * (1 + 1 / ctx.bossZoom) / 2) + 40 || m.gfx.y < (GAME_H * (1 - 1 / ctx.bossZoom) / 2) - 60 || m.gfx.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 40) {
       if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
       ctx.shooterMissiles.splice(i, 1); continue
     }
     let hit = false
     for (let j = ctx.enemies.length - 1; j >= 0; j--) {
       const e = ctx.enemies[j]
-      if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < 22 * 22) {
+      const shooterHitR = e.kind === 'boss_cnox_sun' ? 44 : (e.kind.startsWith('boss_') ? 32 : 22)
+      if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < shooterHitR * shooterHitR) {
         if (m.aoe) {
-          const aoeRadius = 65 * (1 + game.cardStats.shooterMissileAoeSizeBonus)
+          const aoeRadius = 45 * (1 + game.cardStats.shooterMissileAoeSizeBonus)
           spawnExplosion(ctx, m.gfx.x, m.gfx.y, 28, 0xff4400, 0xffaa00)
           screenFlash(ctx, 0xff3300, 0.18, 150)
           for (let k = ctx.enemies.length - 1; k >= 0; k--) {
@@ -2259,6 +3591,7 @@ onUnmounted(() => { destroyPixi() })
 
 watch(() => game.isGameOverSequence, (val) => {
   if (!val || !app || !ctx.playerShip) return
+  clearTransientCombatGraphics()
   const px = ctx.playerShip.x; const py = ctx.playerShip.y
   ctx.playerShip.visible = false
   spawnExplosion(ctx, px, py, 26, 0xff4400, 0xffaa00)
@@ -2271,17 +3604,20 @@ watch(() => game.isGameOverSequence, (val) => {
 watch(() => game.isPlaying, (val, old) => {
   if (val && !old && app) {
     for (const b of ctx.bullets) if (!b.gfx.destroyed) ctx.gameLayer?.removeChild(b.gfx)
+    for (const e of ctx.enemies) removeEnemyDetachedGraphics(e)
     for (const e of ctx.enemies) if (!e.container.destroyed) ctx.gameLayer?.removeChild(e.container)
     for (const b of ctx.enemyBullets) if (!b.gfx.destroyed) ctx.gameLayer?.removeChild(b.gfx)
     for (const d of ctx.damageTexts) if (!d.gfx.destroyed) ctx.uiLayer?.removeChild(d.gfx)
     for (const o of ctx.expOrbs) if (!o.gfx.destroyed) ctx.gameLayer?.removeChild(o.gfx)
+    for (const o of ctx.fragmentOrbs) if (!o.gfx.destroyed) ctx.gameLayer?.removeChild(o.gfx)
     if (ctx.stageTitleText) { ctx.uiLayer?.removeChild(ctx.stageTitleText); ctx.stageTitleText = null }
-    ctx.bullets = []; ctx.enemies = []; ctx.enemyBullets = []; ctx.damageTexts = []; ctx.expOrbs = []
+    ctx.bullets = []; ctx.enemies = []; ctx.enemyBullets = []; ctx.damageTexts = []; ctx.expOrbs = []; ctx.fragmentOrbs = []
     for (const ml of ctx.missileLaunchers) if (!ml.gfx.destroyed) ctx.gameLayer?.removeChild(ml.gfx)
     for (const pm of ctx.playerMissiles) if (!pm.gfx.destroyed) ctx.gameLayer?.removeChild(pm.gfx)
+    for (const fm of ctx.fragmentMissiles) if (!fm.gfx.destroyed) ctx.gameLayer?.removeChild(fm.gfx)
     ctx.missileLaunchers = []; ctx.playerMissiles = []
     for (const sm of ctx.shooterMissiles) if (!sm.gfx.destroyed) ctx.gameLayer?.removeChild(sm.gfx)
-    ctx.shooterMissiles = []; ctx.shooterBlackHoleTimer = 0
+    ctx.shooterMissiles = []; ctx.fragmentMissiles = []; ctx.shooterBlackHoleTimer = 0
     if (ctx.shooterBlackHoleGfx && !ctx.shooterBlackHoleGfx.destroyed) ctx.gameLayer?.removeChild(ctx.shooterBlackHoleGfx)
     ctx.shooterBlackHoleGfx = null
     if (ctx.shooterBlackHoleProjGfx && !ctx.shooterBlackHoleProjGfx.destroyed) ctx.gameLayer?.removeChild(ctx.shooterBlackHoleProjGfx)
@@ -2289,7 +3625,7 @@ watch(() => game.isPlaying, (val, old) => {
     ctx.pbTimer = 0; ctx.cbTimer = 0; ctx.lsTimer = 0; ctx.sfDmgTimer = 0
     if (ctx.shieldGfx) ctx.shieldGfx.visible = false
     if (ctx.sfGfx) ctx.sfGfx.visible = false
-    ctx.shootTimer = 0; ctx.waveQueue = []; ctx.waveDispatchTimer = 0
+    ctx.shootTimer = 0; ctx.bossAttackLockTimer = 0; ctx.waveQueue = []; ctx.waveDispatchTimer = 0
     ctx.waveIsClearing = false; ctx.stageClearTimer = 0; ctx.stageAnnouncePending = false
     ctx.gamePhase = 'intro'; ctx.introTimer = 0
     if (ctx.playerShip) {
@@ -2321,3 +3657,5 @@ watch(() => game.isPlaying, (val, old) => {
   image-rendering: pixelated;
 }
 </style>
+
+

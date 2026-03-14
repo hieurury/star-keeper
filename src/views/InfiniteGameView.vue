@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useGameStore } from '../stores/gameStore'
+import { useUiStore } from '../stores/uiStore'
 import GameCanvas from '../components/game/GameCanvas.vue'
 import GameHUD from '../components/game/GameHUD.vue'
 import PixelButton from '../components/ui/PixelButton.vue'
@@ -9,6 +10,7 @@ import TourOverlay, { type TourStep } from '../components/ui/TourOverlay.vue'
 
 const router = useRouter()
 const game = useGameStore()
+const ui = useUiStore()
 
 // Prevent gameover overlay from flashing before the canvas initialises and
 // calls startGame() (which sets isPlaying = true).
@@ -153,13 +155,22 @@ watch(() => game.isPlaying, (val) => {
     setTimeout(startGameTour, 1800)
   }
 }, { once: true })
+
+watch(() => game.currentStage, (nextStage, prevStage) => {
+  if (!game.isPlaying || nextStage <= 1 || nextStage <= prevStage) return
+  const token = ui.showLoading({
+    title: `Stage ${nextStage}`,
+    subtitle: 'Đang tải đội hình kẻ địch...',
+  })
+  setTimeout(() => ui.hideLoading(token), 900)
+})
 </script>
 
 <template>
   <div class="game-view">
     <!-- Top control bar -->
     <div class="game-view__bar" data-tour="game-bar">
-      <div class="game-view__bar-title">CHẾO VÔ TẪN</div>
+      <div class="game-view__bar-title">CHẾ ĐỘ VÔ TẬN</div>
       <PixelButton
         :label="game.isPaused ? '&#9654; Tiếp' : '&#9208; Dừng'"
         variant="secondary"

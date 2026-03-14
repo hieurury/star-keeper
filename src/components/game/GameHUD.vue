@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useGameStore, ALL_CARD_DEFS, ALL_ARTIFACT_DEFS } from '../../stores/gameStore'
-import type { CardType } from '../../stores/gameStore'
-import { PhLightning } from '@phosphor-icons/vue'
+import type { CardDef, CardType } from '../../stores/gameStore'
+import { PhHouse, PhLightning, PhPlay, PhQuestion } from '@phosphor-icons/vue'
 import ArtifactIcon from '../ui/ArtifactIcon.vue'
 import CardIcon from '../ui/CardIcon.vue'
 
@@ -20,6 +20,73 @@ function cardTypeLabel(type: CardType): string {
 function getCardDef(id: string) {
   return ALL_CARD_DEFS.find(c => c.id === id)
 }
+
+function getUltimateSourceDefs(card: { requiresAttackId?: string; requiresSupportId?: string }) {
+  const ids = [card.requiresAttackId, card.requiresSupportId].filter((id): id is string => !!id)
+  return ids.map(id => getCardDef(id)).filter((def): def is NonNullable<typeof def> => !!def)
+}
+
+function getRecommendedPairCard(card: { id: string; type: CardType }) {
+  if (card.type !== 'attack' && card.type !== 'support') return null
+  for (const ult of ALL_CARD_DEFS) {
+    if (ult.type !== 'ultimate') continue
+    if (card.type === 'attack' && ult.requiresAttackId === card.id && ult.requiresSupportId) {
+      if ((game.activeCards[ult.requiresSupportId] ?? 0) > 0) return getCardDef(ult.requiresSupportId) ?? null
+    }
+    if (card.type === 'support' && ult.requiresSupportId === card.id && ult.requiresAttackId) {
+      if ((game.activeCards[ult.requiresAttackId] ?? 0) > 0) return getCardDef(ult.requiresAttackId) ?? null
+    }
+  }
+  return null
+}
+
+interface PauseSlot {
+  def: CardDef | null
+  level: number
+  kind: CardType | 'empty'
+}
+
+const pauseAttackCatalog = computed(() =>
+  ALL_CARD_DEFS.filter(card => card.type === 'attack' && (!card.shipId || card.shipId === game.selectedShip)).slice(0, 5),
+)
+
+const pauseSupportCatalog = computed(() =>
+  ALL_CARD_DEFS.filter(card => card.type === 'support').slice(0, 5),
+)
+
+const pauseAttackSlots = computed<PauseSlot[]>(() =>
+  pauseAttackCatalog.value.map((attackDef) => {
+    const activeUltimate = Object.keys(game.activeCards).find((cardId) => {
+      const def = getCardDef(cardId)
+      return def?.type === 'ultimate' && def.requiresAttackId === attackDef.id && (game.activeCards[cardId] ?? 0) > 0
+    })
+
+    if (activeUltimate) {
+      return {
+        def: getCardDef(activeUltimate) ?? null,
+        level: game.activeCards[activeUltimate] ?? 0,
+        kind: 'ultimate',
+      }
+    }
+
+    const level = game.activeCards[attackDef.id] ?? 0
+    if (level > 0) return { def: attackDef, level, kind: 'attack' }
+    return { def: null, level: 0, kind: 'empty' }
+  }),
+)
+
+const pauseSupportSlots = computed<PauseSlot[]>(() =>
+  pauseSupportCatalog.value.map((supportDef) => {
+    const level = game.activeCards[supportDef.id] ?? 0
+    if (level > 0) return { def: supportDef, level, kind: 'support' }
+    return { def: null, level: 0, kind: 'empty' }
+  }),
+)
+
+const pauseRows = computed(() => [
+  { label: 'TẤN CÔNG', slots: pauseAttackSlots.value },
+  { label: 'HỖ TRỢ', slots: pauseSupportSlots.value },
+])
 
 // Flash kéo sự chú ý khi cooldown xong
 const skillJustReady = ref(false)
@@ -69,12 +136,14 @@ watch(() => game.isSkillReady, (ready) => {
     </div>
 
     <!-- EXP bar (below top bar) -->
-    <div class="hud__exp-row" data-tour="hud-exp">
-      <span class="hud__exp-label">LV{{ game.playerLevel }}</span>
-      <div class="hud__exp-track">
-        <div class="hud__exp-fill" :style="{ width: game.expPercent + '%' }" />
+    <div class="hud__exp-block" data-tour="hud-exp">
+      <div class="hud__exp-row">
+        <span class="hud__exp-label">LV{{ game.playerLevel }}</span>
+        <div class="hud__exp-track">
+          <div class="hud__exp-fill" :style="{ width: game.expPercent + '%' }" />
+        </div>
+        <span class="hud__exp-num">{{ game.playerExp }}/{{ game.expToNextLevel }}</span>
       </div>
-      <span class="hud__exp-num">{{ game.playerExp }}/{{ game.expToNextLevel }}</span>
     </div>
 
     <!-- Pause overlay -->
@@ -83,29 +152,50 @@ watch(() => game.isSkillReady, (ready) => {
         <div class="hud__pause-title">PAUSE</div>
         <div class="hud__pause-score">Score: {{ game.currentScore }}</div>
         <div class="hud__pause-actions">
-          <button class="hud__pause-btn hud__pause-btn--resume" @click="game.pauseGame()">&#9654; TIỌ TỤC</button>
-          <button class="hud__pause-btn hud__pause-btn--menu" @click="emit('requestGoHome')">&#9664; MENU</button>
+          <button class="hud__pause-btn hud__pause-btn--resume" @click="game.pauseGame()">
+            <PhPlay :size="12" weight="fill" />
+            <span>TIẾP TỤC</span>
+          </button>
+          <button class="hud__pause-btn hud__pause-btn--menu" @click="emit('requestGoHome')">
+            <PhHouse :size="12" weight="fill" />
+            <span>MENU</span>
+          </button>
         </div>
-        <button class="hud__pause-btn hud__pause-btn--help" @click="emit('requestTour')">? HƯỠNG DẪN</button>
+        <button class="hud__pause-btn hud__pause-btn--help" @click="emit('requestTour')">
+          <PhQuestion :size="11" weight="bold" />
+          <span>HƯỚNG DẪN</span>
+        </button>
         <!-- Active card collection -->
         <div v-if="Object.keys(game.activeCards).length > 0" class="hud__pause-cards">
-          <div class="hud__pause-cards-title">THẺ KỸ NĂNG</div>
-          <div class="hud__pause-card-list">
-            <div
-              v-for="(level, cardId) in game.activeCards"
-              :key="cardId"
-              class="hud__pause-card-item"
-              :class="'pause-card--' + (getCardDef(String(cardId))?.type ?? 'attack')"
-            >
-              <span class="hud__pause-card-icon"><CardIcon :name="getCardDef(String(cardId))?.icon ?? ''" :size="14" /></span>
-              <span class="hud__pause-card-name">{{ getCardDef(String(cardId))?.name }}</span>
-              <div class="hud__pause-card-dots">
-                <span
-                  v-for="d in 5"
-                  :key="d"
-                  class="hud__card-dot"
-                  :class="{ 'hud__card-dot--filled': d <= (level as number) }"
-                />
+          <div class="hud__pause-cards-title">LÕI ĐANG KÍCH HOẠT</div>
+          <div
+            v-for="row in pauseRows"
+            :key="row.label"
+            class="hud__pause-row"
+          >
+            <div class="hud__pause-row-label">{{ row.label }}</div>
+            <div class="hud__pause-card-list">
+              <div
+                v-for="(slot, index) in row.slots"
+                :key="row.label + index"
+                class="hud__pause-card-item"
+                :class="'pause-card--' + slot.kind"
+              >
+                <template v-if="slot.def">
+                  <span class="hud__pause-card-icon"><CardIcon :name="slot.def.icon" :size="16" /></span>
+                  <span class="hud__pause-card-name">{{ slot.def.name }}</span>
+                  <div class="hud__pause-card-dots">
+                    <span
+                      v-for="d in slot.def.maxLevel"
+                      :key="d"
+                      class="hud__card-dot"
+                      :class="{ 'hud__card-dot--filled': d <= slot.level }"
+                    />
+                  </div>
+                </template>
+                <template v-else>
+                  <div class="hud__pause-card-empty">Ô trống</div>
+                </template>
               </div>
             </div>
           </div>
@@ -126,6 +216,13 @@ watch(() => game.isSkillReady, (ready) => {
             :class="'card--' + card.type"
             @click="game.chooseCard(card.id)"
           >
+            <div
+              v-if="card.type !== 'ultimate' && getRecommendedPairCard(card)"
+              :class="['hud__card-reco', `hud__card-reco--${card.type}`]"
+            >
+              <CardIcon :name="getRecommendedPairCard(card)?.icon ?? ''" :size="11" />
+              <span>KHUYẾN NGHỊ</span>
+            </div>
             <!-- Thumbnail -->
             <div class="hud__card-thumb" :class="'card-thumb--' + card.type">
               <span class="hud__card-big-icon"><CardIcon :name="card.icon" :size="28" /></span>
@@ -136,6 +233,13 @@ watch(() => game.isSkillReady, (ready) => {
             </div>
             <!-- Name -->
             <div class="hud__card-name">{{ card.name }}</div>
+            <!-- Ultimate source pair -->
+            <div v-if="card.type === 'ultimate'" class="hud__card-ult-combo">
+              <template v-for="(src, idx) in getUltimateSourceDefs(card)" :key="src.id">
+                <span v-if="idx > 0" class="hud__card-ult-plus">+</span>
+                <span class="hud__card-ult-src"><CardIcon :name="src.icon" :size="13" /></span>
+              </template>
+            </div>
             <!-- Level dots -->
             <div class="hud__card-dots">
               <span
@@ -179,7 +283,7 @@ watch(() => game.isSkillReady, (ready) => {
           <span v-else class="hud__skill-cd">{{ Math.ceil(game.skillCooldown) }}</span>
         </template>
       </div>
-      <div class="hud__skill-label" v-html="game.selectedShip === 'star_holder' ? 'LINH<br/>HồN' : (game.selectedShip === 'star_shooter' ? 'HỐ<br/>ĐEN' : 'SÓNG<br/>NHIỬT')"></div>
+      <div class="hud__skill-label" v-html="game.selectedShip === 'star_holder' ? 'LINH<br/>HỒN' : (game.selectedShip === 'star_shooter' ? 'HỐ<br/>ĐEN' : 'SÓNG<br/>NHIỆT')"></div>
       <div class="hud__skill-hint">{{ isTouchDevice ? '2× TAP' : 'RMB' }}</div>
     </div>
     <!-- Artifact progress bars (active artifacts only) -->
@@ -341,7 +445,7 @@ watch(() => game.isSkillReady, (ready) => {
   background: var(--color-panel);
   border: 3px solid var(--color-border);
   box-shadow: 6px 6px 0 var(--color-border-dark);
-  max-width: 320px;
+  max-width: 420px;
   width: 90%;
 }
 .hud__pause-title {
@@ -362,6 +466,10 @@ watch(() => game.isSkillReady, (ready) => {
   justify-content: center;
 }
 .hud__pause-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font-family: var(--font-pixel);
   font-size: 9px;
   letter-spacing: 1px;
@@ -373,38 +481,61 @@ watch(() => game.isSkillReady, (ready) => {
 .hud__pause-btn:hover { opacity: 0.8; }
 .hud__pause-btn--resume { background: #0a1a0f; border-color: #44ff88; color: #44ff88; }
 .hud__pause-btn--menu   { background: #1a0a0a; border-color: #ff6644; color: #ff9977; }
-.hud__pause-btn--help   { background: none; border: none; color: #445566; font-size: 9px; margin-top: 2px; padding: 4px 0; width: 100%; box-shadow: none; }
+.hud__pause-btn--help   { background: none; border: none; color: #7799bb; font-size: 9px; margin-top: 2px; padding: 4px 0; width: 100%; box-shadow: none; }
 .hud__pause-btn--help:hover { color: #7799bb; }
 .hud__pause-cards {
   margin-top: 14px;
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .hud__pause-cards-title {
   font-size: 8px;
   color: #44ffaa;
   letter-spacing: 2px;
-  margin-bottom: 8px;
+  text-align: center;
+}
+.hud__pause-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hud__pause-row-label {
+  font-size: 7px;
+  color: var(--color-text-dim);
+  letter-spacing: 1px;
   text-align: center;
 }
 .hud__pause-card-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 5px;
 }
 .hud__pause-card-item {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
+  justify-content: center;
+  gap: 5px;
+  min-height: 80px;
+  padding: 7px 6px;
   background: var(--color-panel-dark);
   border: 1px solid #334;
+  text-align: center;
 }
-.pause-card--attack  { border-color: #884422; }
-.pause-card--support { border-color: #224488; }
-.pause-card--ultimate { border-color: #886622; }
+.pause-card--attack  { border-color: #884422; background: linear-gradient(180deg, rgba(120, 35, 18, 0.24), rgba(18, 9, 8, 0.96)); }
+.pause-card--support { border-color: #224488; background: linear-gradient(180deg, rgba(22, 66, 132, 0.24), rgba(8, 11, 28, 0.96)); }
+.pause-card--ultimate { border-color: #b58a19; background: linear-gradient(180deg, rgba(255, 214, 72, 0.3), rgba(48, 34, 6, 0.96)); box-shadow: inset 0 0 10px rgba(255, 220, 90, 0.12); }
+.pause-card--empty { border-style: dashed; border-color: #2e3447; background: rgba(9, 12, 20, 0.72); }
 .hud__pause-card-icon { display: inline-flex; align-items: center; }
-.hud__pause-card-name { font-size: 8px; color: var(--color-text); flex: 1; }
+.hud__pause-card-name { font-size: 7px; color: var(--color-text); line-height: 1.35; min-height: 30px; display: flex; align-items: center; }
 .hud__pause-card-dots { display: flex; gap: 3px; }
+.hud__pause-card-empty {
+  font-size: 7px;
+  color: #5e6b85;
+  letter-spacing: 0.5px;
+}
 
 /* Level-up card grid */
 .hud__levelup-overlay {
@@ -419,8 +550,8 @@ watch(() => game.isSkillReady, (ready) => {
   z-index: 30;
 }
 .hud__levelup-box {
-  width: min(370px, 96vw);
-  padding: 18px 12px 22px;
+  width: min(420px, 98vw);
+  padding: 20px 14px 24px;
   background: var(--color-panel);
   border: 3px solid #44ffaa;
   box-shadow: 6px 6px 0 #0a3018, 0 0 30px rgba(68,255,170,0.12);
@@ -430,13 +561,13 @@ watch(() => game.isSkillReady, (ready) => {
   gap: 10px;
 }
 .hud__levelup-title {
-  font-size: 16px;
+  font-size: 18px;
   color: #44ffaa;
   letter-spacing: 3px;
   text-shadow: 0 0 12px #44ffaa;
 }
 .hud__levelup-sub {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--color-text-dim);
   letter-spacing: 2px;
 }
@@ -445,25 +576,52 @@ watch(() => game.isSkillReady, (ready) => {
 .hud__card-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 10px;
   width: 100%;
 }
 
 .hud__card {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 0 0 8px;
+  gap: 6px;
+  padding: 0 0 10px;
   background: var(--color-panel-dark);
   border: 2px solid #334;
   cursor: pointer;
   font-family: var(--font-pixel);
   transition: transform 0.06s, box-shadow 0.06s, border-color 0.12s;
-  overflow: hidden;
+  overflow: visible;
 }
 .hud__card:hover  { transform: translateY(-3px); box-shadow: 0 4px 14px rgba(100,200,255,0.18); }
 .hud__card:active { transform: translateY(1px); }
+
+.hud__card-reco {
+  position: absolute;
+  top: -8px;
+  left: 4px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(14, 40, 62, 0.92);
+  border: 1px solid #3ea8ff;
+  color: #8fd0ff;
+  font-size: 7px;
+  letter-spacing: 0.4px;
+  padding: 2px 4px;
+}
+.hud__card-reco--attack {
+  background: rgba(14, 40, 62, 0.92);
+  border-color: #3ea8ff;
+  color: #8fd0ff;
+}
+.hud__card-reco--support {
+  background: rgba(72, 16, 16, 0.95);
+  border-color: #ff6666;
+  color: #ffb3b3;
+}
 
 .card--attack  { border-color: #aa3311; }
 .card--support { border-color: #1155aa; }
@@ -472,7 +630,7 @@ watch(() => game.isSkillReady, (ready) => {
 /* Thumbnail area */
 .hud__card-thumb {
   width: 100%;
-  height: 54px;
+  height: 62px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -485,7 +643,7 @@ watch(() => game.isSkillReady, (ready) => {
 
 /* Type badge */
 .hud__card-type-badge {
-  font-size: 6px;
+  font-size: 7px;
   letter-spacing: 1px;
   padding: 2px 5px;
   border-radius: 1px;
@@ -495,11 +653,32 @@ watch(() => game.isSkillReady, (ready) => {
 .badge--ultimate { background: #664400; color: #ffcc66; }
 
 .hud__card-name {
-  font-size: 8px;
+  font-size: 9px;
   color: var(--color-text);
   text-align: center;
   padding: 0 4px;
   line-height: 1.3;
+}
+
+.hud__card-ult-combo {
+  min-height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.hud__card-ult-src {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 214, 97, 0.45);
+  background: rgba(255, 214, 97, 0.08);
+}
+.hud__card-ult-plus {
+  font-size: 9px;
+  color: #ffd36d;
 }
 
 /* Level dots */
@@ -509,8 +688,8 @@ watch(() => game.isSkillReady, (ready) => {
   justify-content: center;
 }
 .hud__card-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #333;
   border: 1px solid #555;
@@ -522,21 +701,26 @@ watch(() => game.isSkillReady, (ready) => {
 }
 
 .hud__card-desc {
-  font-size: 7px;
+  font-size: 9px;
   color: var(--color-text-dim);
   text-align: center;
-  padding: 0 5px;
+  padding: 0 6px;
   line-height: 1.5;
 }
 
 /* EXP bar */
+.hud__exp-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 12px 6px;
+  background: rgba(0, 0, 0, 0.5);
+  border-bottom: 1px solid var(--color-border-dark);
+}
 .hud__exp-row {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 12px;
-  background: rgba(0, 0, 0, 0.5);
-  border-bottom: 1px solid var(--color-border-dark);
 }
 .hud__exp-label {
   font-size: 8px;
@@ -574,7 +758,7 @@ watch(() => game.isSkillReady, (ready) => {
   align-items: center;
   gap: 5px;
   pointer-events: none;
-  z-index: 20;
+  z-index: 12;
 }
 .hud__skill-btn {
   width: 54px;
