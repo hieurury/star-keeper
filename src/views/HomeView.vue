@@ -81,7 +81,7 @@ function onImportFile(e: Event) {
 const completedMissions = computed(() => game.dailyMissions.filter(m => m.completed).length)
 const unclaimedMissions = computed(() => game.dailyMissions.filter(m => m.completed && !m.claimed).length)
 
-const notices = computed(() => [...UPDATE_NOTICES])
+const notices = computed(() => [...UPDATE_NOTICES].slice(0, 3))
 const unreadNoticeIds = computed(() => notices.value.map(n => n.id).filter(id => !game.isUpdateNoticeSeen(id)))
 const unreadNoticeCount = computed(() => unreadNoticeIds.value.length)
 const selectedNotice = computed<UpdateNotice | null>(() => notices.value.find(n => n.id === selectedNoticeId.value) ?? null)
@@ -118,17 +118,17 @@ const TOUR_STEPS: TourStep[] = [
   {
     target: 'ships-btn',
     title: 'Phi Cơ',
-    desc: 'Xem thông số và kỹ năng đặc biệt của phi cơ. Các chiến cơ mới sẽ được mở khoá trong tương lai.',
+    desc: 'Xem thông số, kỹ năng phi cơ và mở panel nâng cấp chiến cơ trực tiếp từ ảnh tàu.',
   },
   {
     target: 'core-btn',
     title: 'Lõi Sao — Thẻ Kỹ Năng',
-    desc: 'Khi lên cấp trong game, bạn chọn 1 trong 3 thẻ ngẫu nhiên. Có 3 loại: Tấn Công, Hỗ Trợ và Tối Thượng cực mạnh.',
+    desc: 'Khi lên cấp trong trận, bạn chọn 1 trong 3 lõi ngẫu nhiên. Kết hợp đúng lõi sẽ mở lõi Tối thượng.',
   },
   {
     target: 'play-btn',
     title: 'Sẵn Sàng Chiến Đấu!',
-    desc: 'Di chuyển: kéo chuột (PC) hoặc chạm và trượt (Mobile).\nKỹ năng: chuột phải (PC) hoặc chạm đôi (Mobile).\n\nTiêu diệt kẻ địch, lên cấp và trở thành huyền thoại!',
+    desc: 'Di chuyển: kéo chuột (PC) hoặc chạm và trượt (Mobile).\nKỹ năng: chuột phải (PC) hoặc chạm đôi (Mobile).\n\nNhớ bấm chuông thông báo để xem patch notes mới nhất trước khi vào trận.',
   },
 ]
 

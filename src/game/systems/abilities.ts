@@ -42,6 +42,8 @@ function drawPlayerMissile(g: Graphics, small = false): void {
 export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: number): void {
   if (!ctx.playerShip) return
   const cs = game.cardStats
+  const cooldownFactor = Math.max(0.35, 1 - cs.cdReductionPct)
+  const missileInterval = Math.max(8, cs.missileIntervalFrames * cooldownFactor)
   const count = cs.missileLaunchers
 
   const findNearestMissileTarget = (x: number, y: number): { x: number, y: number, enemy?: (typeof ctx.enemies)[number] } | null => {
@@ -70,7 +72,7 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
     drawMissileLauncher(g)
     ctx.gameLayer.addChild(g)
     const angle = (ctx.missileLaunchers.length * Math.PI * 2 / Math.max(1, count)) + Math.PI / 4
-    const stagger = cs.missileIntervalFrames * (ctx.missileLaunchers.length / Math.max(1, count))
+    const stagger = missileInterval * (ctx.missileLaunchers.length / Math.max(1, count))
     ctx.missileLaunchers.push({ gfx: g, angle, timer: stagger })
   }
   while (ctx.missileLaunchers.length > count) {
@@ -95,7 +97,7 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
 
     launcher.timer -= dt
     if (launcher.timer <= 0) {
-      launcher.timer = cs.missileIntervalFrames
+      launcher.timer = missileInterval
       const target = findNearestMissileTarget(px, py)
       if (target) {
         const isSmall = cs.interstellarMissile
@@ -423,6 +425,7 @@ export function fireLaserSweep(ctx: GameContext, game: GameStore, damage: number
 export function updateStaticField(ctx: GameContext, game: GameStore, dt: number): void {
   if (!ctx.playerShip || !ctx.gameLayer) return
   const cs = game.cardStats
+  const cooldownFactor = Math.max(0.35, 1 - cs.cdReductionPct)
   if (!cs.staticField) {
     if (ctx.sfGfx) ctx.sfGfx.visible = false
     return
@@ -441,7 +444,7 @@ export function updateStaticField(ctx: GameContext, game: GameStore, dt: number)
 
   ctx.sfDmgTimer -= dt
   if (ctx.sfDmgTimer <= 0) {
-    ctx.sfDmgTimer = 30
+    ctx.sfDmgTimer = Math.max(8, 30 * cooldownFactor)
     const r2 = cs.staticFieldRadius * cs.staticFieldRadius
     for (let i = ctx.enemies.length - 1; i >= 0; i--) {
       const e = ctx.enemies[i]
@@ -476,11 +479,12 @@ export function updateStaticField(ctx: GameContext, game: GameStore, dt: number)
 export function updatePeriodicAbilities(ctx: GameContext, game: GameStore, dt: number): void {
   if (!ctx.playerShip) return
   const cs = game.cardStats
+  const cooldownFactor = Math.max(0.35, 1 - cs.cdReductionPct)
 
   if (cs.plasmaBolt) {
     ctx.pbTimer -= dt
     if (ctx.pbTimer <= 0) {
-      ctx.pbTimer = cs.plasmaBoltIntervalFrames
+      ctx.pbTimer = Math.max(8, cs.plasmaBoltIntervalFrames * cooldownFactor)
       const dmg = Math.round(80 * cs.plasmaBoltDmgMult)
       for (let b = 0; b < cs.plasmaBoltCount; b++) {
         const offX = cs.plasmaBoltCount > 1 ? (b - 0.5) * 30 : 0
@@ -492,7 +496,7 @@ export function updatePeriodicAbilities(ctx: GameContext, game: GameStore, dt: n
   if (cs.clusterBomb) {
     ctx.cbTimer -= dt
     if (ctx.cbTimer <= 0) {
-      ctx.cbTimer = cs.clusterBombIntervalFrames
+      ctx.cbTimer = Math.max(8, cs.clusterBombIntervalFrames * cooldownFactor)
       const dmg = Math.round(70 * cs.clusterBombDmgMult)
       const bombCount = cs.clusterBombDouble ? 2 : 1
       const bombTargets = pickDistinctTargets(ctx, ctx.playerShip.x, ctx.playerShip.y, bombCount)
@@ -501,7 +505,7 @@ export function updatePeriodicAbilities(ctx: GameContext, game: GameStore, dt: n
       dropClusterBomb(ctx, game, capX, capY - 20, dmg, bombTargets[0])
       if (cs.clusterBombDouble) {
         const secondTarget = bombTargets[1]
-        setTimeout(() => { if (ctx.app && ctx.playerShip) dropClusterBomb(ctx, game, capX + 40, capY - 20, dmg, secondTarget) }, 430)
+        setTimeout(() => { if (ctx.app && ctx.playerShip) dropClusterBomb(ctx, game, capX + 40, capY - 20, dmg, secondTarget) }, Math.max(120, Math.round(430 * cooldownFactor)))
       }
     }
   }
@@ -509,14 +513,14 @@ export function updatePeriodicAbilities(ctx: GameContext, game: GameStore, dt: n
   if (cs.laserSweep) {
     ctx.lsTimer -= dt
     if (ctx.lsTimer <= 0) {
-      ctx.lsTimer = cs.laserSweepIntervalFrames
+      ctx.lsTimer = Math.max(8, cs.laserSweepIntervalFrames * cooldownFactor)
       const dmg = Math.round(50 * cs.laserSweepDmgMult)
       const laserCount = cs.laserSweepDouble ? 2 : 1
       const laserTargets = pickDistinctTargets(ctx, ctx.playerShip.x, ctx.playerShip.y, laserCount)
       fireLaserSweep(ctx, game, dmg, laserTargets[0]?.y)
       if (cs.laserSweepDouble) {
         const secondY = laserTargets[1]?.y
-        setTimeout(() => { if (ctx.app) fireLaserSweep(ctx, game, dmg, secondY) }, 380)
+        setTimeout(() => { if (ctx.app) fireLaserSweep(ctx, game, dmg, secondY) }, Math.max(100, Math.round(380 * cooldownFactor)))
       }
     }
   }

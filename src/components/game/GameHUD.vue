@@ -46,13 +46,22 @@ interface PauseSlot {
   kind: CardType | 'empty'
 }
 
-const pauseAttackCatalog = computed(() =>
-  ALL_CARD_DEFS.filter(card => card.type === 'attack' && (!card.shipId || card.shipId === game.selectedShip)).slice(0, 5),
-)
+function buildPauseCatalog(type: 'attack' | 'support'): CardDef[] {
+  const allByType = ALL_CARD_DEFS.filter(card => {
+    if (card.type !== type) return false
+    return type === 'support' || !card.shipId || card.shipId === game.selectedShip
+  })
+  const activeDefs = Object.keys(game.activeCards)
+    .map(id => getCardDef(id))
+    .filter((def): def is CardDef => !!def && def.type === type && (type === 'support' || !def.shipId || def.shipId === game.selectedShip) && (game.activeCards[def.id] ?? 0) > 0)
+  const activeIds = new Set(activeDefs.map(def => def.id))
+  const remainingDefs = allByType.filter(def => !activeIds.has(def.id))
+  return [...activeDefs, ...remainingDefs].slice(0, 5)
+}
 
-const pauseSupportCatalog = computed(() =>
-  ALL_CARD_DEFS.filter(card => card.type === 'support').slice(0, 5),
-)
+const pauseAttackCatalog = computed(() => buildPauseCatalog('attack'))
+
+const pauseSupportCatalog = computed(() => buildPauseCatalog('support'))
 
 const pauseAttackSlots = computed<PauseSlot[]>(() =>
   pauseAttackCatalog.value.map((attackDef) => {

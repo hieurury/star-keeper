@@ -87,8 +87,8 @@ function drawDroneBullet(g: Graphics, isUltimate = false) {
   g.clear()
   const color = isUltimate ? 0xff4455 : 0xfff3c6
   const glow = isUltimate ? 0xff1122 : 0xffcc66
-  g.roundRect(-1.6, -10, 3.2, 18, 1.2).fill({ color, alpha: 0.95 })
-  g.roundRect(-0.65, -14, 1.3, 8, 0.65).fill({ color: glow, alpha: 0.72 })
+  g.roundRect(-1.1, -8.5, 2.2, 14.5, 0.9).fill({ color, alpha: 0.95 })
+  g.roundRect(-0.45, -11.5, 0.9, 6.2, 0.45).fill({ color: glow, alpha: 0.72 })
 }
 
 function pointDistanceToRay(px: number, py: number, ox: number, oy: number, angle: number): { perp: number, dot: number } {
@@ -535,7 +535,8 @@ function gameLoop(ticker: Ticker) {
     const burstCount = Math.max(1, Math.floor(game.cardStats.allyDroneBurstCount))
     const beamCount = Math.max(1, Math.floor(game.cardStats.allyDroneBeamCount))
     const fireRateMult = Math.max(0.5, game.cardStats.allyDroneFireRateMult)
-    const droneShotInterval = 44 / fireRateMult
+    const cooldownFactor = Math.max(0.35, 1 - game.cardStats.cdReductionPct)
+    const droneShotInterval = Math.max(6, (44 / fireRateMult) * cooldownFactor)
     const droneBulletSpeed = isUltimateDrone ? 14.2 : 11.6
     const droneDamage = Math.round(game.upgrades.damage * (1 + game.cardStats.damageBonusPct / 100) * game.cardStats.allyDroneDamageMult)
 

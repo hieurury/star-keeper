@@ -161,11 +161,11 @@ export const ALL_CARD_DEFS: CardDef[] = [
   {
     id: 'skill_recovery', name: 'Phục Hồi Kỹ Năng', type: 'support', icon: 'PhArrowsClockwise', maxLevel: 5,
     levels: [
-      { desc: 'Giảm 8% thời gian hồi chiêu kỹ năng.' },
-      { desc: 'Giảm thêm 8% (tổng -16%) thời gian hồi chiêu.' },
-      { desc: 'Giảm thêm 8% (tổng -24%) thời gian hồi chiêu.' },
-      { desc: 'Giảm thêm 8% (tổng -32%) thời gian hồi chiêu.' },
-      { desc: 'Giảm thêm 8% (tổng -40%) thời gian hồi chiêu.' },
+      { desc: 'Giảm 8% hồi chiêu kỹ năng phi cơ và mọi lõi có thời gian hồi.' },
+      { desc: 'Giảm thêm 8% (tổng -16%) hồi chiêu kỹ năng phi cơ và lõi.' },
+      { desc: 'Giảm thêm 8% (tổng -24%) hồi chiêu kỹ năng phi cơ và lõi.' },
+      { desc: 'Giảm thêm 8% (tổng -32%) hồi chiêu kỹ năng phi cơ và lõi.' },
+      { desc: 'Giảm thêm 8% (tổng -40%) hồi chiêu kỹ năng phi cơ và lõi.' },
     ],
   },
   {
@@ -280,11 +280,11 @@ export const ALL_CARD_DEFS: CardDef[] = [
   {
     id: 'wing_boost', name: 'Cánh Tản Nhiệt', type: 'support', icon: 'PhWind', maxLevel: 5,
     levels: [
-      { desc: '+7% tốc bay.' },
-      { desc: '+7% tốc bay (tổng +14%).' },
-      { desc: '+7% tốc bay (tổng +21%).' },
-      { desc: '+7% tốc bay (tổng +28%).' },
-      { desc: '+7% tốc bay (tổng +35%). Tốc độ di chuyển tối đa tăng thêm.' },
+      { desc: '+7% độ phản hồi điều khiển khi kéo phi thuyền.' },
+      { desc: '+7% độ phản hồi điều khiển (tổng +14%).' },
+      { desc: '+7% độ phản hồi điều khiển (tổng +21%).' },
+      { desc: '+7% độ phản hồi điều khiển (tổng +28%).' },
+      { desc: '+7% độ phản hồi điều khiển (tổng +35%). Chỉ tăng điều khiển phi thuyền, không tăng tốc đạn.' },
     ],
   },
   {
@@ -1154,7 +1154,8 @@ export const useGameStore = defineStore('game', () => {
     shieldLivesLeft.value--
     if (shieldLivesLeft.value <= 0) {
       shieldActive.value = false
-      shieldCooldownLeft.value = cs.shieldCooldownSec
+      const cooldownFactor = Math.max(0.35, 1 - cs.cdReductionPct)
+      shieldCooldownLeft.value = cs.shieldCooldownSec * cooldownFactor
       if (cs.shieldHealOnBreak > 0) {
         playerHp.value = Math.min(playerMaxHp.value, playerHp.value + cs.shieldHealOnBreak)
       }

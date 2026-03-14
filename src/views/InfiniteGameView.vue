@@ -23,6 +23,17 @@ const showGameTour = ref(false)
 
 const isTouchDevice = 'ontouchstart' in window
 
+function getCurrentShipSkillTourText(): string {
+  const triggerText = isTouchDevice ? 'Chạm đôi (2× TAP) màn hình để kích hoạt.' : 'Nhấn chuột phải (RMB) để kích hoạt.'
+  if (game.selectedShip === 'star_shooter') {
+    return triggerText + '\n\nTriệu hồi Hố Đen kéo kẻ địch và xóa đạn trong vùng. Hồi chiêu cơ bản 35 giây (giảm bởi Phục Hồi Kỹ Năng).'
+  }
+  if (game.selectedShip === 'star_holder') {
+    return triggerText + '\n\nKích hoạt Thu Hoạch Linh Hồn khi đủ mảnh để bắn loạt tên lửa linh hồn. Mảnh rơi khi tiêu diệt kẻ địch.'
+  }
+  return triggerText + '\n\nGiải phóng Sóng Nhiệt hủy diệt toàn màn hình và phá sạch đạn kẻ địch. Hồi chiêu cơ bản 30 giây (giảm bởi Phục Hồi Kỹ Năng).'
+}
+
 const GAME_TOUR_STEPS: TourStep[] = [
   {
     title: '✈ THÀNH CHIẾN ĐẤU!',
@@ -46,15 +57,12 @@ const GAME_TOUR_STEPS: TourStep[] = [
   {
     target: 'hud-exp',
     title: 'Kinh Nghiệm (EXP)',
-    desc: 'Khi lên cấp, bạn được chọn 1 trong 3 thẻ kỹ năng ngẫu nhiên. Kết hợp đúng thẻ sẽ mở khóa được thẻ TỐI THƯỢNG cực mạnh!',
+    desc: 'Khi lên cấp, bạn chọn 1 trong 3 lõi sao ngẫu nhiên. Ghép đúng lõi Tấn công + Hỗ trợ sẽ mở được lõi Tối thượng rất mạnh.',
   },
   {
     target: 'hud-skill',
-    title: 'Kỹ Năng — Sóng Tầm Nhiệt',
-    desc: (isTouchDevice
-      ? 'Chạm đôi (2× TAP) màn hình để kích hoạt.'
-      : 'Nhấn chuột phải (RMB) để kích hoạt.'
-    ) + '\n\nGiải phóng sóng nhiệt hủy diệt toàn màn hình và phá sạch đạn kẻ địch. Hồi chiêu 30 giây.',
+    title: 'Kỹ Năng Phi Cơ',
+    desc: getCurrentShipSkillTourText(),
   },
   {
     target: 'game-bar',
@@ -63,7 +71,7 @@ const GAME_TOUR_STEPS: TourStep[] = [
   },
   {
     title: 'SẸN SÀNG!',
-    desc: 'Di chuyển: ' + (isTouchDevice ? 'chạm và trượt ngón tay' : 'kéo chuột') + '\nKỹ năng: ' + (isTouchDevice ? 'chạm đôi' : 'chuột phải') + '\n\nTiêu diệt kẻ địch, lên cấp, tồn tại càng lâu càng tốt. Chúc mừng chiến đấu! ⚡',
+    desc: 'Di chuyển: ' + (isTouchDevice ? 'chạm và trượt ngón tay' : 'kéo chuột') + '\nKỹ năng: ' + (isTouchDevice ? 'chạm đôi' : 'chuột phải') + '\n\nDừng game để xem lõi đã chọn và mở lại hướng dẫn bất cứ lúc nào. Chúc bạn chiến đấu hiệu quả! ⚡',
   },
 ]
 
