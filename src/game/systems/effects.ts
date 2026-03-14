@@ -61,6 +61,7 @@ export function screenFlash(
 }
 
 export function spawnDamageText(ctx: GameContext, x: number, y: number, dmg: number): void {
+  if (!ctx.gameLayer) return
   const style = new TextStyle({
     fill: 0xff8844,
     fontSize: 12,
@@ -71,8 +72,25 @@ export function spawnDamageText(ctx: GameContext, x: number, y: number, dmg: num
   t.anchor.set(0.5, 1)
   t.x = x + (Math.random() - 0.5) * 16
   t.y = y
-  ctx.uiLayer.addChild(t)
+  ctx.gameLayer.addChild(t)
   ctx.damageTexts.push({ gfx: t, vy: 1.4, life: 40 })
+}
+
+export function spawnHealText(ctx: GameContext, x: number, y: number, amount: number): void {
+  if (!ctx.gameLayer || amount <= 0) return
+  const style = new TextStyle({
+    fill: 0x5dff7a,
+    fontSize: 12,
+    fontFamily: "'Chakra Petch', sans-serif",
+    fontWeight: 'bold',
+  })
+  const t = new Text({ text: `+${amount}`, style })
+  t.anchor.set(0.5, 1)
+  t.x = x + (Math.random() - 0.5) * 14
+  t.y = y
+  // Heals float slightly slower so they are easy to distinguish from damage.
+  ctx.gameLayer.addChild(t)
+  ctx.damageTexts.push({ gfx: t, vy: 1.1, life: 44 })
 }
 
 export function getExpTierColor(tier: string): number {

@@ -14,6 +14,8 @@ export interface AllyDrone {
   gfx: Graphics
   angle: number
   shootTimer: number
+  burstRemaining: number
+  burstTimer: number
 }
 
 export type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'

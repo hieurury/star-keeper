@@ -12,7 +12,7 @@ import { drawShip, drawBullet, spawnHolderLaser, drawShooterMissile } from '../.
 import { drawFragmentMissile } from '../../game/projectiles/index'
 import { drawEnemyBullet, drawBossBullet, drawBossMissile, drawTrumSoMissile } from '../../game/projectiles/index'
 
-import { spawnExplosion, screenFlash, spawnDamageText, hitFlash, showStageClearBanner, spawnMissileWarning, spawnExpCollectEffect, getExpTierColor } from '../../game/systems/effects'
+import { spawnExplosion, screenFlash, spawnDamageText, spawnHealText, hitFlash, showStageClearBanner, spawnMissileWarning, spawnExpCollectEffect, getExpTierColor } from '../../game/systems/effects'
 import { createStar } from '../../game/systems/background'
 import { updateMissileLaunchers, updatePeriodicAbilities, activateHeatWave, activateBlackHole } from '../../game/systems/abilities'
 import { drawArtifactGfx, initArtifactGfx, activateNeutronVacuum, activateManaCoreOverload, activateSoulHarvest } from '../../game/systems/artifacts'
@@ -364,9 +364,11 @@ function gameLoop(ticker: Ticker) {
       const dx = (ctx.touchX - _blx) / _bz - ctx.playerShip.x
       const dy = ((ctx.touchY - _bly) / _bz - TOUCH_Y_OFFSET) - ctx.playerShip.y
       const hpPenalty = Math.max(0.7, Math.pow(100 / game.playerMaxHp, 0.15))
-      const spd = 5.5 * game.upgrades.shipSpeed * hpPenalty
-      ctx.playerShip.x += dx * 0.055 * spd * dt * 0.5
-      ctx.playerShip.y += dy * 0.055 * spd * dt * 0.5
+      const shipSpeedMult = Math.max(0.35, game.upgrades.shipSpeed)
+      const dragResponse = Math.max(0.2, Math.min(1.45, Math.pow(shipSpeedMult, 1.35)))
+      const spd = 5.5 * shipSpeedMult * hpPenalty
+      ctx.playerShip.x += dx * 0.055 * spd * dragResponse * dt * 0.5
+      ctx.playerShip.y += dy * 0.055 * spd * dragResponse * dt * 0.5
       const _xmin = GAME_W * (1 - 1 / _bz) / 2 + 20
       const _xmax = GAME_W * (1 + 1 / _bz) / 2 - 20
       const _ymin = GAME_H * (1 - 1 / _bz) / 2 + 60
@@ -506,6 +508,11 @@ function gameLoop(ticker: Ticker) {
     }
   }
 
+  const pendingHeal = game.consumePendingHealPopup()
+  if (pendingHeal > 0 && ctx.playerShip) {
+    spawnHealText(ctx, ctx.playerShip.x, ctx.playerShip.y - 22, pendingHeal)
+  }
+
   // Card abilities (blocked during boss entry animation)
   if (!isBossIntro) {
     updateMissileLaunchers(ctx, game, dt)
@@ -559,7 +566,7 @@ function gameLoop(ticker: Ticker) {
       dg.x = ctx.playerShip.x
       dg.y = ctx.playerShip.y - 22
       ctx.gameLayer.addChild(dg)
-      ctx.allyDrones.push({ gfx: dg, angle: 0, shootTimer: Math.random() * 20 })
+      ctx.allyDrones.push({ gfx: dg, angle: 0, shootTimer: Math.random() * 20, burstRemaining: 0, burstTimer: 0 })
     }
 
     const now = Date.now()
@@ -569,8 +576,9 @@ function gameLoop(ticker: Ticker) {
     const fireRateMult = Math.max(0.5, game.cardStats.allyDroneFireRateMult)
     const cooldownFactor = Math.max(0.35, 1 - game.cardStats.cdReductionPct)
     const droneShotInterval = Math.max(6, (44 / fireRateMult) * cooldownFactor)
+    const droneBurstGap = 6 // 0.1s at 60fps between shots in a burst
     const droneBulletSpeed = isUltimateDrone ? 14.2 : 11.6
-    const droneDamage = Math.round(game.upgrades.damage * (1 + game.cardStats.damageBonusPct / 100) * game.cardStats.allyDroneDamageMult)
+    const droneDamage = Math.round(game.upgrades.damage * 0.442 * (1 + game.cardStats.damageBonusPct / 100) * game.cardStats.allyDroneDamageMult)
 
     for (let i = 0; i < ctx.allyDrones.length; i++) {
       const drone = ctx.allyDrones[i] as AllyDrone
@@ -583,11 +591,25 @@ function gameLoop(ticker: Ticker) {
       drone.gfx.y += (targetY - drone.gfx.y) * Math.min(1, 0.18 * dt)
       drawAllyDrone(drone.gfx, isUltimateDrone)
 
-      drone.shootTimer -= dt
-      if (!isBossIntro && drone.shootTimer <= 0) {
-        drone.shootTimer = droneShotInterval
+      if (drone.burstRemaining > 0) {
+        drone.burstTimer -= dt
+      } else {
+        drone.shootTimer -= dt
+      }
+
+      if (!isBossIntro && (drone.burstRemaining > 0 ? drone.burstTimer <= 0 : drone.shootTimer <= 0)) {
         const target = findNearestEnemy(ctx.enemies, drone.gfx.x, drone.gfx.y)
         if (!target) continue
+
+        if (drone.burstRemaining <= 0) {
+          drone.burstRemaining = burstCount
+          drone.burstTimer = 0
+          drone.shootTimer = droneShotInterval
+        }
+
+        drone.burstRemaining -= 1
+        drone.burstTimer = drone.burstRemaining > 0 ? droneBurstGap : 0
+
         const baseDx = target.container.x - drone.gfx.x
         const baseDy = target.container.y - drone.gfx.y
         const baseMag = Math.sqrt(baseDx * baseDx + baseDy * baseDy) || 1
@@ -600,21 +622,18 @@ function gameLoop(ticker: Ticker) {
           const sin = Math.sin(spread)
           const shotDirX = dirX * cos - dirY * sin
           const shotDirY = dirX * sin + dirY * cos
-          const burstBackOffsets = burstCount === 1 ? [0] : [0, 2.8, 5.6]
-          for (const backOff of burstBackOffsets) {
-            const bg = new Graphics()
-            drawDroneBullet(bg, isUltimateDrone)
-            bg.x = drone.gfx.x - shotDirX * backOff
-            bg.y = drone.gfx.y - shotDirY * backOff
-            bg.rotation = Math.atan2(shotDirY, shotDirX) + Math.PI / 2
-            ctx.gameLayer.addChild(bg)
-            ctx.bullets.push({
-              gfx: bg,
-              vx: shotDirX * droneBulletSpeed,
-              vy: -shotDirY * droneBulletSpeed,
-              damage: droneDamage,
-            })
-          }
+          const bg = new Graphics()
+          drawDroneBullet(bg, isUltimateDrone)
+          bg.x = drone.gfx.x
+          bg.y = drone.gfx.y
+          bg.rotation = Math.atan2(shotDirY, shotDirX) + Math.PI / 2
+          ctx.gameLayer.addChild(bg)
+          ctx.bullets.push({
+            gfx: bg,
+            vx: shotDirX * droneBulletSpeed,
+            vy: -shotDirY * droneBulletSpeed,
+            damage: droneDamage,
+          })
         }
       }
     }
@@ -627,9 +646,11 @@ function gameLoop(ticker: Ticker) {
     const dx = (ctx.touchX - _blx2) / _bz2 - ctx.playerShip.x
     const dy = ((ctx.touchY - _bly2) / _bz2 - TOUCH_Y_OFFSET) - ctx.playerShip.y
     const hpPenalty = Math.max(0.7, Math.pow(100 / game.playerMaxHp, 0.15))
-    const spd = 5.5 * game.upgrades.shipSpeed * (1 + game.cardStats.speedCardPct / 100) * hpPenalty
-    ctx.playerShip.x += dx * 0.055 * spd * dt * 0.5
-    ctx.playerShip.y += dy * 0.055 * spd * dt * 0.5
+    const shipSpeedMult = Math.max(0.35, game.upgrades.shipSpeed * (1 + game.cardStats.speedCardPct / 100))
+    const dragResponse = Math.max(0.2, Math.min(1.45, Math.pow(shipSpeedMult, 1.35)))
+    const spd = 5.5 * shipSpeedMult * hpPenalty
+    ctx.playerShip.x += dx * 0.055 * spd * dragResponse * dt * 0.5
+    ctx.playerShip.y += dy * 0.055 * spd * dragResponse * dt * 0.5
     const _xmin2 = GAME_W * (1 - 1 / _bz2) / 2 + 20
     const _xmax2 = GAME_W * (1 + 1 / _bz2) / 2 - 20
     const _ymin2 = GAME_H * (1 - 1 / _bz2) / 2 + 60
@@ -1136,6 +1157,7 @@ function gameLoop(ticker: Ticker) {
 
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
     const e = ctx.enemies[i]
+    game.markEnemyEncountered(e.kind)
     if ((e.contactDamageCd ?? 0) > 0) e.contactDamageCd = Math.max(0, (e.contactDamageCd ?? 0) - dt)
 
     if (isBossIntro && e.kind.startsWith('boss')) {
@@ -3629,7 +3651,7 @@ function gameLoop(ticker: Ticker) {
     const d = ctx.damageTexts[i]
     d.gfx.y -= d.vy * dt; d.life--
     d.gfx.alpha = d.life / 40
-    if (d.life <= 0) { if (!d.gfx.destroyed) ctx.uiLayer.removeChild(d.gfx); ctx.damageTexts.splice(i, 1) }
+    if (d.life <= 0) { if (!d.gfx.destroyed) ctx.gameLayer.removeChild(d.gfx); ctx.damageTexts.splice(i, 1) }
   }
 }
 
@@ -3795,7 +3817,7 @@ watch(() => game.isPlaying, (val, old) => {
     for (const e of ctx.enemies) removeEnemyDetachedGraphics(e)
     for (const e of ctx.enemies) if (!e.container.destroyed) ctx.gameLayer?.removeChild(e.container)
     for (const b of ctx.enemyBullets) if (!b.gfx.destroyed) ctx.gameLayer?.removeChild(b.gfx)
-    for (const d of ctx.damageTexts) if (!d.gfx.destroyed) ctx.uiLayer?.removeChild(d.gfx)
+    for (const d of ctx.damageTexts) if (!d.gfx.destroyed) ctx.gameLayer?.removeChild(d.gfx)
     for (const o of ctx.expOrbs) if (!o.gfx.destroyed) ctx.gameLayer?.removeChild(o.gfx)
     for (const p of ctx.expCollectParticles) if (!p.gfx.destroyed) ctx.gameLayer?.removeChild(p.gfx)
     for (const o of ctx.fragmentOrbs) if (!o.gfx.destroyed) ctx.gameLayer?.removeChild(o.gfx)

@@ -24,6 +24,7 @@ import {
   PhDownloadSimple, PhUploadSimple, PhWarning, PhWrench, PhLightning,
   PhBell,
   PhTreasureChest,
+  PhBookOpen,
 } from '@phosphor-icons/vue'
 
 const router = useRouter()
@@ -375,6 +376,10 @@ function goToTest() {
   router.push('/test')
 }
 
+function goToCodex() {
+  router.push('/codex')
+}
+
 const canPlay = computed(() => {
   const dur = game.shipDurabilities[game.selectedShip] ?? (SHIP_DURABILITY_MAX[game.selectedShip] ?? 100)
   return dur >= 10
@@ -595,6 +600,10 @@ function onShipNameKey(e: KeyboardEvent) {
           <button class="menu-tile" data-tour="core-btn" @click="showCorePanel = true">
             <PhCards :size="24" weight="fill" />
             <span>Lõi Sao</span>
+          </button>
+          <button class="menu-tile" @click="goToCodex">
+            <PhBookOpen :size="24" weight="fill" />
+            <span>Bách Khoa</span>
           </button>
           <button class="menu-tile" @click="showSettingsPanel = true">
             <PhGear :size="24" weight="fill" />

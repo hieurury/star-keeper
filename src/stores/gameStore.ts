@@ -1,6 +1,24 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { UPDATE_NOTICES } from '../content/updateNotices'
+import type { EnemyKind } from '../game/types'
+
+export const ALL_ENEMY_KINDS: EnemyKind[] = [
+  'pioneer',
+  'kamikaze',
+  'sniper',
+  'dai_lien',
+  'thu_ho',
+  'thuat_si',
+  'cnox_greedy',
+  'cnox_shield',
+  'cnox_spark',
+  'boss_stardestroyer',
+  'boss_invader',
+  'boss_tinhvan',
+  'boss_trumso',
+  'boss_cnox_sun',
+]
 
 // ─── Card System ──────────────────────────────────────────────────────────────
 export type CardType = 'attack' | 'support' | 'ultimate'
@@ -613,6 +631,7 @@ export const useGameStore = defineStore('game', () => {
   const playerHp = ref(100)
   const playerMaxHp = ref(100)
   const baseSessionMaxHp = ref(100)
+  const pendingHealPopup = ref(0)
 
   // Hồ sơ người chơi
   const username = ref('Phi Công')
@@ -638,6 +657,7 @@ export const useGameStore = defineStore('game', () => {
 
   // Thành tựu
   const unlockedAchievements = ref<string[]>([])
+  const encounteredEnemyKinds = ref<EnemyKind[]>([])
 
   // Nâng cấp vĩnh viễn (mua bằng vàng, giữ giữa các ván)
   const permUpgrades = ref({
@@ -1157,14 +1177,27 @@ export const useGameStore = defineStore('game', () => {
       const cooldownFactor = Math.max(0.35, 1 - cs.cdReductionPct)
       shieldCooldownLeft.value = cs.shieldCooldownSec * cooldownFactor
       if (cs.shieldHealOnBreak > 0) {
+        const prevHp = playerHp.value
         playerHp.value = Math.min(playerMaxHp.value, playerHp.value + cs.shieldHealOnBreak)
+        const healed = Math.max(0, Math.round(playerHp.value - prevHp))
+        if (healed > 0) pendingHealPopup.value += healed
       }
     }
     return true
   }
 
   function healPlayer(amount: number) {
+    if (amount <= 0) return
+    const prevHp = playerHp.value
     playerHp.value = Math.min(playerMaxHp.value, playerHp.value + amount)
+    const healed = Math.max(0, Math.round(playerHp.value - prevHp))
+    if (healed > 0) pendingHealPopup.value += healed
+  }
+
+  function consumePendingHealPopup(): number {
+    const amount = pendingHealPopup.value
+    pendingHealPopup.value = 0
+    return amount
   }
 
   // ─── Account / Achievement / PermUpgrade helpers ─────────────────────
@@ -1180,6 +1213,16 @@ export const useGameStore = defineStore('game', () => {
     if (!unlockedAchievements.value.includes(id)) {
       unlockedAchievements.value.push(id)
     }
+  }
+
+  function hasEncounteredEnemy(kind: EnemyKind): boolean {
+    return encounteredEnemyKinds.value.includes(kind)
+  }
+
+  function markEnemyEncountered(kind: EnemyKind) {
+    if (encounteredEnemyKinds.value.includes(kind)) return
+    encounteredEnemyKinds.value = [...encounteredEnemyKinds.value, kind]
+    saveProgress()
   }
 
   function buyPermUpgrade(key: PermUpgradeKey): boolean {
@@ -1369,6 +1412,7 @@ export const useGameStore = defineStore('game', () => {
     skillCooldown.value = 0
     skillActivationPending.value = false
     fragmentCount.value = 0
+    pendingHealPopup.value = 0
     // Reset card system
     activeCards.value = {}
     // Test mode: auto-equip only the ship's Kho Vũ Khí card at max level
@@ -1393,6 +1437,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function endGame() {
+    pendingHealPopup.value = 0
     isGameOverSequence.value = false
     // Award gold/exp earned during this run when player exits manually
     if (isPlaying.value) {
@@ -1614,6 +1659,9 @@ export const useGameStore = defineStore('game', () => {
     const validAchievementIds = new Set(ALL_ACHIEVEMENTS.map(a => a.id))
     unlockedAchievements.value = [...new Set(unlockedAchievements.value.filter(id => validAchievementIds.has(id)))]
 
+    const validEnemyKinds = new Set<EnemyKind>(ALL_ENEMY_KINDS)
+    encounteredEnemyKinds.value = [...new Set(encounteredEnemyKinds.value.filter(kind => validEnemyKinds.has(kind as EnemyKind)))] as EnemyKind[]
+
     const validNoticeIds = new Set(UPDATE_NOTICES.map(n => n.id))
     updateNoticeSeenIds.value = [...new Set(updateNoticeSeenIds.value.filter(id => validNoticeIds.has(id)))]
 
@@ -1656,6 +1704,7 @@ export const useGameStore = defineStore('game', () => {
       shipUpgrades: shipUpgrades.value,
       // Achievements
       unlockedAchievements: unlockedAchievements.value,
+      encounteredEnemyKinds: encounteredEnemyKinds.value,
       // Permanent upgrades
       permUpgrades: permUpgrades.value,
       // Artifacts
@@ -1707,6 +1756,7 @@ export const useGameStore = defineStore('game', () => {
       },
     }
     unlockedAchievements.value    = (data.unlockedAchievements as string[])  ?? []
+    encounteredEnemyKinds.value   = ((data.encounteredEnemyKinds as EnemyKind[]) ?? []).filter(k => ALL_ENEMY_KINDS.includes(k))
     const pu = (data.permUpgrades as Record<string, number>) ?? {}
     permUpgrades.value = {
       baseDamage:  pu.baseDamage  ?? 0,
@@ -1877,6 +1927,9 @@ export const useGameStore = defineStore('game', () => {
     buyShipUpgrade,
     // Achievements
     unlockedAchievements,
+    encounteredEnemyKinds,
+    hasEncounteredEnemy,
+    markEnemyEncountered,
     // Permanent upgrades
     permUpgrades,
     addScore,
@@ -1890,6 +1943,7 @@ export const useGameStore = defineStore('game', () => {
     loseLife,
     takeDamage,
     healPlayer,
+    consumePendingHealPopup,
     upgradeShip,
     triggerLevelUp,
     chooseCard,
