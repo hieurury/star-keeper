@@ -12,28 +12,25 @@ app.use(pinia)
 app.use(router)
 
 const ui = useUiStore(pinia)
-const INITIAL_LOADING_TOKEN = ui.showLoading({
-	title: 'Star Keeper',
-	subtitle: 'Đang nạp hệ thống...',
-})
 
 router.beforeEach((to, _from, next) => {
-	ui.showLoading({
-		title: 'Star Keeper',
-		subtitle: to.path === '/game' ? 'Đang nạp chiến trường...' : 'Đang chuyển màn hình...',
-	})
+	const enteringGame = to.path === '/game'
+	const backToMenu = _from.path === '/game' && to.path === '/'
+	if (enteringGame || backToMenu) {
+		ui.showLoading({
+			title: 'Star Keeper',
+			subtitle: enteringGame ? 'Đang nạp chiến trường...' : 'Đang trở về trạm chỉ huy...',
+		})
+	}
 	next()
 })
 
 router.afterEach((to) => {
-	const delay = to.path === '/game' ? 950 : 420
+	const enteredGame = to.path === '/game'
+	const delay = enteredGame ? 950 : 420
 	setTimeout(() => ui.hideLoading(), delay)
 })
 
 registerSW({ immediate: true })
-
-router.isReady().then(() => {
-	setTimeout(() => ui.hideLoading(INITIAL_LOADING_TOKEN), 600)
-})
 
 app.mount('#app')
