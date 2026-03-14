@@ -504,7 +504,7 @@ function gameLoop(ticker: Ticker) {
   ctx.shootTimer += dt
   const baseShootInterval = isHolder ? 60 : (isShooter ? 160 : 18)
   const shootCount = isShooter ? effectiveMissileCount : effectiveBulletCount
-  const shootInterval = (baseShootInterval / Math.sqrt(shootCount)) / (1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100)
+  const shootInterval = (baseShootInterval / Math.sqrt(shootCount)) / ((1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100) * game.selectedShipFireRateMult)
   if (!isBossIntro && ctx.shootTimer >= shootInterval) {
     ctx.shootTimer = 0
     const cnt = isShooter ? effectiveMissileCount : effectiveBulletCount
@@ -1194,7 +1194,7 @@ function gameLoop(ticker: Ticker) {
       // Fast burst fire (-30% fire rate)
       e.shootTimer = (e.shootTimer ?? 25) - dt
       if (e.shootTimer <= 0 && ctx.playerShip) {
-      e.shootTimer = (20 + Math.random() * 12 + Math.max(0, 10 - game.currentStage)) * 1.56
+      e.shootTimer = (20 + Math.random() * 12 + Math.max(0, 10 - game.currentStage)) * 2.05
         const bg = new Graphics()
         drawDaiLienBullet(bg)
         bg.x = e.container.x

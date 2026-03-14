@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useGameStore, ALL_CARD_DEFS, ALL_ARTIFACT_DEFS, SHIP_ARTIFACT_SLOTS, SHIP_DURABILITY_MAX, type CardDef } from '../stores/gameStore'
+import {
+  useGameStore,
+  ALL_CARD_DEFS,
+  ALL_ARTIFACT_DEFS,
+  SHIP_ARTIFACT_SLOTS,
+  SHIP_DURABILITY_MAX,
+  type CardDef,
+  type ShipId,
+  type ShipUpgradeKey,
+} from '../stores/gameStore'
 import PixelButton from '../components/ui/PixelButton.vue'
 import TourOverlay, { type TourStep } from '../components/ui/TourOverlay.vue'
 import ArtifactIcon from '../components/ui/ArtifactIcon.vue'
@@ -40,6 +49,8 @@ const selectedCard = ref<CardDef | null>(null)
 const showComingSoon = ref(false)
 const showArtifactsPanel = ref(false)
 const showMissionsPanel = ref(false)
+const showShipUpgradePanel = ref(false)
+const upgradeShipId = ref<ShipId>('star_keeper')
 const showAdminInput = ref(false)
 const adminInput = ref('')
 const showTourPrompt = ref(false)
@@ -201,30 +212,97 @@ const editingShipName = ref(false)
 const usernameInput = ref('')
 const shipNameInput = ref('')
 
-// Dữ liệu phi cơ
-const starKeeperStats = [
-  { label: 'SÁT THƯƠNG',  display: '10 / 100',  pct: 10, color: '#ff4444' },
-  { label: 'TỐC ĐỘ BẮN', display: '1.0 / 1.5', pct: 67, color: '#ff9900' },
-  { label: 'ĐẠN / LỚT',   display: '1 / 3',    pct: 33, color: '#ffcc00' },
-  { label: 'TỐC BAY',     display: '1.0 / 1.5', pct: 67, color: '#44aaff' },
-  { label: 'HP',          display: '100 / 300', pct: 33, color: '#44ff88' },
-]
+interface ShipStatItem {
+  key: ShipUpgradeKey
+  label: string
+  display: string
+  basePct: number
+  bonusPct: number
+  pct: number
+  color: string
+}
 
-const starHolderStats = [
-  { label: 'SÁT THƯƠNG',  display: '25 / 150',  pct: 17, color: '#ff4444' },
-  { label: 'TỐC ĐỘ BẮN', display: '1.2 / 1.8', pct: 67, color: '#ff9900' },
-  { label: 'ĐẠN / LỚT',   display: '1 / 3',    pct: 33, color: '#ffcc00' },
-  { label: 'TỐC BAY',     display: '1.2 / 1.75', pct: 69, color: '#44aaff' },
-  { label: 'HP',          display: '180 / 300', pct: 60, color: '#44ff88' },
-]
+const SHIP_NAME_MAP: Record<ShipId, string> = {
+  star_keeper: 'Star Keeper',
+  star_holder: 'Star Holder',
+  star_shooter: 'Star Shooter',
+}
 
-const starShooterStats = [
-  { label: 'SÁT THƯƠNG',  display: '40 / 200',  pct: 20, color: '#ff4444' },
-  { label: 'TỐC ĐỘ BẮN', display: '0.38 / 1.25', pct: 30, color: '#ff9900' },
-  { label: 'ĐẠN / LỚT',   display: '1 / 4',    pct: 25, color: '#ffcc00' },
-  { label: 'TỐC BAY',     display: '0.7 / 1.1', pct: 64, color: '#44aaff' },
-  { label: 'HP',          display: '220 / 400', pct: 55, color: '#44ff88' },
-]
+const SHIP_UPGRADE_LABEL_MAP: Record<ShipUpgradeKey, string> = {
+  hp: 'HP',
+  fireRate: 'Tốc bắn',
+  damage: 'Sát thương',
+}
+
+const SHIP_UPGRADE_COLOR_MAP: Record<ShipUpgradeKey, string> = {
+  damage: '#ff4444',
+  fireRate: '#ff9900',
+  hp: '#44ff88',
+}
+
+function toPercent(current: number, max: number): number {
+  if (max <= 0) return 0
+  return Math.max(0, Math.min(100, Math.round((current / max) * 100)))
+}
+
+function formatShipStatValue(key: ShipUpgradeKey, current: number, max: number): string {
+  if (key === 'fireRate') return `${current.toFixed(2)} / ${max.toFixed(2)}`
+  return `${Math.round(current)} / ${Math.round(max)}`
+}
+
+function buildShipStatItems(shipId: ShipId): ShipStatItem[] {
+  const base = game.getShipBaseStats(shipId)
+  const max = game.getShipMaxStats(shipId)
+  const now = game.getShipEffectiveStats(shipId)
+
+  const rows: Array<{ key: ShipUpgradeKey, label: string }> = [
+    { key: 'damage', label: 'SÁT THƯƠNG' },
+    { key: 'fireRate', label: 'TỐC ĐỘ BẮN' },
+    { key: 'hp', label: 'HP' },
+  ]
+
+  return rows.map((r) => {
+    const b = r.key === 'damage' ? base.damage : r.key === 'fireRate' ? base.fireRate : base.hp
+    const n = r.key === 'damage' ? now.damage : r.key === 'fireRate' ? now.fireRate : now.hp
+    const m = r.key === 'damage' ? max.damage : r.key === 'fireRate' ? max.fireRate : max.hp
+    const basePct = toPercent(b, m)
+    const nowPct = toPercent(n, m)
+    return {
+      key: r.key,
+      label: r.label,
+      display: formatShipStatValue(r.key, n, m),
+      basePct,
+      bonusPct: Math.max(0, nowPct - basePct),
+      pct: nowPct,
+      color: SHIP_UPGRADE_COLOR_MAP[r.key],
+    }
+  })
+}
+
+const starKeeperStats = computed(() => buildShipStatItems('star_keeper'))
+const starHolderStats = computed(() => buildShipStatItems('star_holder'))
+const starShooterStats = computed(() => buildShipStatItems('star_shooter'))
+
+const upgradeShipName = computed(() => SHIP_NAME_MAP[upgradeShipId.value])
+const upgradeStatItems = computed(() => buildShipStatItems(upgradeShipId.value))
+const upgradeRows = computed(() => {
+  return (['hp', 'fireRate', 'damage'] as ShipUpgradeKey[]).map((key) => ({
+    key,
+    label: SHIP_UPGRADE_LABEL_MAP[key],
+    level: game.getShipUpgradeLevel(upgradeShipId.value, key),
+    cost: game.getShipUpgradeCost(upgradeShipId.value, key),
+  }))
+})
+
+function openShipUpgradePanel(shipId?: ShipId) {
+  const target = shipId ?? (game.selectedShip as ShipId)
+  upgradeShipId.value = target
+  showShipUpgradePanel.value = true
+}
+
+function buyShipUpgrade(key: ShipUpgradeKey) {
+  game.buyShipUpgrade(upgradeShipId.value, key)
+}
 
 function buyShip(id: string, cost: number) {
   game.buyShip(id, cost)
@@ -366,7 +444,7 @@ function onShipNameKey(e: KeyboardEvent) {
         <div class="equip-panel__title">TRANG BỊ</div>
         <div class="equip-panel__body">
           <!-- Left: ship SVG -->
-          <div class="equip-panel__ship">
+          <button class="equip-panel__ship" type="button" @click="openShipUpgradePanel()" title="Nâng cấp chiến cơ">
             <template v-if="game.selectedShip === 'star_keeper'">
               <svg viewBox="-32 -28 64 58" width="56" height="54">
                 <polygon points="-10,0 -28,18 -10,10" fill="#0077bb"/>
@@ -409,7 +487,7 @@ function onShipNameKey(e: KeyboardEvent) {
                 <rect x="-3" y="18" width="6" height="6" fill="#ffcc00" opacity="0.85"/>
               </svg>
             </template>
-          </div>
+          </button>
           <!-- Right: stats -->
           <div class="equip-panel__right">
             <!-- Durability bar -->
@@ -592,7 +670,10 @@ function onShipNameKey(e: KeyboardEvent) {
                   <div class="ship-stats">
                     <div v-for="stat in starKeeperStats" :key="stat.label" class="ship-stat">
                       <span class="ship-stat__label">{{ stat.label }}</span>
-                      <div class="ship-stat__track"><div class="ship-stat__fill" :style="{ width: stat.pct + '%', background: stat.color }" /></div>
+                      <div class="ship-stat__track">
+                        <div class="ship-stat__fill ship-stat__fill--base" :style="{ width: stat.basePct + '%', background: stat.color }" />
+                        <div v-if="stat.bonusPct > 0" class="ship-stat__fill ship-stat__fill--bonus" :style="{ left: stat.basePct + '%', width: stat.bonusPct + '%', background: stat.color }" />
+                      </div>
                       <span class="ship-stat__val">{{ stat.display }}</span>
                     </div>
                   </div>
@@ -633,7 +714,10 @@ function onShipNameKey(e: KeyboardEvent) {
                   <div class="ship-stats">
                     <div v-for="stat in starHolderStats" :key="stat.label" class="ship-stat">
                       <span class="ship-stat__label">{{ stat.label }}</span>
-                      <div class="ship-stat__track"><div class="ship-stat__fill" :style="{ width: stat.pct + '%', background: stat.color }" /></div>
+                      <div class="ship-stat__track">
+                        <div class="ship-stat__fill ship-stat__fill--base" :style="{ width: stat.basePct + '%', background: stat.color }" />
+                        <div v-if="stat.bonusPct > 0" class="ship-stat__fill ship-stat__fill--bonus" :style="{ left: stat.basePct + '%', width: stat.bonusPct + '%', background: stat.color }" />
+                      </div>
                       <span class="ship-stat__val">{{ stat.display }}</span>
                     </div>
                   </div>
@@ -690,7 +774,10 @@ function onShipNameKey(e: KeyboardEvent) {
                   <div class="ship-stats">
                     <div v-for="stat in starShooterStats" :key="stat.label" class="ship-stat">
                       <span class="ship-stat__label">{{ stat.label }}</span>
-                      <div class="ship-stat__track"><div class="ship-stat__fill" :style="{ width: stat.pct + '%', background: stat.color }" /></div>
+                      <div class="ship-stat__track">
+                        <div class="ship-stat__fill ship-stat__fill--base" :style="{ width: stat.basePct + '%', background: stat.color }" />
+                        <div v-if="stat.bonusPct > 0" class="ship-stat__fill ship-stat__fill--bonus" :style="{ left: stat.basePct + '%', width: stat.bonusPct + '%', background: stat.color }" />
+                      </div>
                       <span class="ship-stat__val">{{ stat.display }}</span>
                     </div>
                   </div>
@@ -730,6 +817,50 @@ function onShipNameKey(e: KeyboardEvent) {
               />
             </div>
           </div><!-- /.ship-carousel -->
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Ship Upgrade Panel -->
+    <Transition name="sheet">
+      <div v-if="showShipUpgradePanel" class="sheet-overlay" @click.self="showShipUpgradePanel = false">
+        <div class="ships-sheet">
+          <div class="sheet-header">
+            <div style="width:36px"/>
+            <div class="sheet-title">NÂNG CẤP CHIẾN CƠ</div>
+            <button class="sheet-close" @click="showShipUpgradePanel = false"><PhX :size="14" /></button>
+          </div>
+          <div class="ships-scroll" style="padding: 14px 14px 22px;">
+            <div class="ship-upgrade__name">{{ upgradeShipName }}</div>
+
+            <div class="ship-upgrade__chart">
+              <div v-for="stat in upgradeStatItems" :key="stat.key" class="ship-stat">
+                <span class="ship-stat__label">{{ stat.label }}</span>
+                <div class="ship-stat__track">
+                  <div class="ship-stat__fill ship-stat__fill--base" :style="{ width: stat.basePct + '%', background: stat.color }" />
+                  <div v-if="stat.bonusPct > 0" class="ship-stat__fill ship-stat__fill--bonus" :style="{ left: stat.basePct + '%', width: stat.bonusPct + '%', background: stat.color }" />
+                </div>
+                <span class="ship-stat__val">{{ stat.display }}</span>
+              </div>
+              <div class="ship-upgrade__hint">Phần mờ biểu thị chỉ số tăng thêm từ nâng cấp chiến cơ.</div>
+            </div>
+
+            <div class="ship-upgrade__rows">
+              <div v-for="row in upgradeRows" :key="row.key" class="ship-upgrade__row">
+                <div class="ship-upgrade__meta">
+                  <div class="ship-upgrade__label">{{ row.label }}</div>
+                  <div class="ship-upgrade__level">Lv {{ row.level }}/5</div>
+                </div>
+                <button
+                  class="ship-upgrade__btn"
+                  :disabled="row.cost === null || game.playerCoins < row.cost"
+                  @click="buyShipUpgrade(row.key)"
+                >
+                  {{ row.cost === null ? 'Đã tối đa' : `Nâng cấp - ${row.cost.toLocaleString()} 🪙` }}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </Transition>
@@ -1654,6 +1785,7 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .ship-stat__track {
   flex: 1;
+  position: relative;
   height: 9px;
   background: #0a0e1e;
   border: 2px solid #1a2040;
@@ -1661,8 +1793,17 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .ship-stat__fill {
   height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
   transition: width 0.6s ease;
-  box-shadow: 0 0 5px currentColor;
+}
+.ship-stat__fill--base {
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.18);
+}
+.ship-stat__fill--bonus {
+  opacity: 0.35;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 .ship-stat__val {
   font-family: var(--font-pixel);
@@ -2040,11 +2181,20 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   width: 64px;
   height: 64px;
   background: var(--color-panel-dark);
   border: 2px solid var(--color-border-dark);
   filter: drop-shadow(0 0 8px rgba(0, 200, 255, 0.3));
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.08s;
+}
+.equip-panel__ship:hover {
+  border-color: var(--color-accent);
+}
+.equip-panel__ship:active {
+  transform: translateY(1px);
 }
 .equip-panel__right {
   flex: 1;
@@ -2124,6 +2274,80 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   font-size: 9px;
   color: var(--color-text-dim);
   letter-spacing: 0.5px;
+}
+
+/* Ship upgrade panel */
+.ship-upgrade__name {
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  color: var(--color-accent);
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+.ship-upgrade__chart {
+  background: var(--color-panel-dark);
+  border: 2px solid var(--color-border-dark);
+  padding: 10px 10px 8px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.ship-upgrade__hint {
+  margin-top: 4px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  line-height: 1.5;
+}
+.ship-upgrade__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ship-upgrade__row {
+  border: 2px solid var(--color-border-dark);
+  background: var(--color-panel-dark);
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ship-upgrade__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ship-upgrade__label {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--color-text);
+  letter-spacing: 0.6px;
+}
+.ship-upgrade__level {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  letter-spacing: 0.5px;
+}
+.ship-upgrade__btn {
+  border: 2px solid #2a5f89;
+  background: #123355;
+  color: #8fd9ff;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 0.7px;
+  padding: 8px 10px;
+  min-width: 136px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.ship-upgrade__btn:disabled {
+  background: #161a24;
+  border-color: #313847;
+  color: #70798d;
+  cursor: not-allowed;
 }
 
 /* ─── Artifact Panel ─────────────────────────────────────────────────────── */

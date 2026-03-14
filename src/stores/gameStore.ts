@@ -336,6 +336,47 @@ export const ALL_ARTIFACT_DEFS: ArtifactDef[] = [
 export const SHIP_ARTIFACT_SLOTS: Record<string, number> = { star_keeper: 1, star_holder: 1, star_shooter: 1 }
 export const SHIP_DURABILITY_MAX: Record<string, number> = { star_keeper: 100, star_holder: 90, star_shooter: 95 }
 
+export type ShipId = 'star_keeper' | 'star_holder' | 'star_shooter'
+export type ShipUpgradeKey = 'hp' | 'fireRate' | 'damage'
+export interface ShipUpgradeLevels { hp: number, fireRate: number, damage: number }
+
+export const SHIP_UPGRADE_MAX_LEVEL = 5
+export const SHIP_UPGRADE_COSTS: Record<ShipUpgradeKey, number[]> = {
+  hp: [350, 700, 1200, 1900, 2800],
+  fireRate: [400, 780, 1300, 2050, 3000],
+  damage: [420, 820, 1380, 2180, 3200],
+}
+
+const SHIP_BASE_STATS: Record<ShipId, { hp: number, damage: number, fireRate: number, speed: number }> = {
+  star_keeper: { hp: 100, damage: 15, fireRate: 1.0, speed: 1.0 },
+  star_holder: { hp: 180, damage: 25, fireRate: 1.2, speed: 1.2 },
+  star_shooter: { hp: 220, damage: 40, fireRate: 0.38, speed: 1.0 },
+}
+
+const SHIP_MAX_STATS: Record<ShipId, { hp: number, damage: number, fireRate: number, speed: number }> = {
+  star_keeper: { hp: 300, damage: 100, fireRate: 1.5, speed: 1.5 },
+  star_holder: { hp: 300, damage: 150, fireRate: 1.8, speed: 1.75 },
+  star_shooter: { hp: 400, damage: 200, fireRate: 1.25, speed: 1.6 },
+}
+
+const SHIP_UPGRADE_STEP_FACTOR: Record<ShipUpgradeKey, number> = {
+  hp: 0.10,
+  fireRate: 0.10,
+  damage: 0.10,
+}
+
+export const SHIP_UNLOCK_COST: Record<ShipId, number> = {
+  star_keeper: 0,
+  star_holder: 5000,
+  star_shooter: 15000,
+}
+
+function getShipUpgradeCostMultiplierByUnlockCost(shipId: ShipId): number {
+  const unlockCost = SHIP_UNLOCK_COST[shipId] ?? 0
+  // Unlock cost 2000 -> x1.10, 5000 -> x1.25, 15000 -> x1.75
+  return 1 + unlockCost / 20000
+}
+
 // ─── Upgrade definitions ──────────────────────────────────────────────────────
 export type UpgradeRarity = 'white' | 'blue' | 'purple' | 'gold'
 export interface UpgradeOption {
@@ -550,6 +591,11 @@ export const useGameStore = defineStore('game', () => {
   // Phi cơ sở hữu
   const ownedShips = ref<string[]>(['star_keeper'])
   const selectedShip = ref('star_keeper')
+  const shipUpgrades = ref<Record<ShipId, ShipUpgradeLevels>>({
+    star_keeper: { hp: 0, fireRate: 0, damage: 0 },
+    star_holder: { hp: 0, fireRate: 0, damage: 0 },
+    star_shooter: { hp: 0, fireRate: 0, damage: 0 },
+  })
 
   // Thành tựu
   const unlockedAchievements = ref<string[]>([])
@@ -801,6 +847,49 @@ export const useGameStore = defineStore('game', () => {
       ? fragmentCount.value >= 10
       : skillCooldown.value <= 0
   )
+
+  function getShipBaseStats(shipId: ShipId) {
+    return SHIP_BASE_STATS[shipId]
+  }
+
+  function getShipMaxStats(shipId: ShipId) {
+    return SHIP_MAX_STATS[shipId]
+  }
+
+  function getShipUpgradeLevel(shipId: ShipId, key: ShipUpgradeKey): number {
+    const lv = shipUpgrades.value[shipId]?.[key] ?? 0
+    return Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(lv)))
+  }
+
+  function getShipUpgradeCost(shipId: ShipId, key: ShipUpgradeKey): number | null {
+    if (!ownedShips.value.includes(shipId)) return null
+    const lv = getShipUpgradeLevel(shipId, key)
+    if (lv >= SHIP_UPGRADE_MAX_LEVEL) return null
+    const baseCost = SHIP_UPGRADE_COSTS[key][lv]
+    if (baseCost == null) return null
+    const mult = getShipUpgradeCostMultiplierByUnlockCost(shipId)
+    return Math.round(baseCost * mult)
+  }
+
+  function getShipEffectiveStats(shipId: ShipId): { hp: number, damage: number, fireRate: number, speed: number } {
+    const base = getShipBaseStats(shipId)
+    const max = getShipMaxStats(shipId)
+    const up = shipUpgrades.value[shipId] ?? { hp: 0, fireRate: 0, damage: 0 }
+
+    const hp = Math.min(max.hp, Math.round(base.hp + (max.hp - base.hp) * SHIP_UPGRADE_STEP_FACTOR.hp * (up.hp ?? 0)))
+    const damage = Math.min(max.damage, Math.round(base.damage + (max.damage - base.damage) * SHIP_UPGRADE_STEP_FACTOR.damage * (up.damage ?? 0)))
+    const fireRate = Math.min(max.fireRate, Number((base.fireRate + (max.fireRate - base.fireRate) * SHIP_UPGRADE_STEP_FACTOR.fireRate * (up.fireRate ?? 0)).toFixed(2)))
+
+    return { hp, damage, fireRate, speed: base.speed }
+  }
+
+  const selectedShipFireRateMult = computed(() => {
+    const shipId = (selectedShip.value as ShipId)
+    const base = getShipBaseStats(shipId).fireRate
+    const now = getShipEffectiveStats(shipId).fireRate
+    if (base <= 0) return 1
+    return Math.max(0.25, now / base)
+  })
 
   // ─── Artifact stats computed ──────────────────────────────────────────────────
   const artifactStats = computed(() => {
@@ -1060,6 +1149,19 @@ export const useGameStore = defineStore('game', () => {
     return true
   }
 
+  function buyShipUpgrade(shipId: ShipId, key: ShipUpgradeKey): boolean {
+    if (!ownedShips.value.includes(shipId)) return false
+    const cost = getShipUpgradeCost(shipId, key)
+    if (cost == null) return false
+    if (playerCoins.value < cost) return false
+    playerCoins.value -= cost
+    const nextShip = { ...(shipUpgrades.value[shipId] ?? { hp: 0, fireRate: 0, damage: 0 }) }
+    nextShip[key] = Math.min(SHIP_UPGRADE_MAX_LEVEL, (nextShip[key] ?? 0) + 1)
+    shipUpgrades.value = { ...shipUpgrades.value, [shipId]: nextShip }
+    saveProgress()
+    return true
+  }
+
   function selectShip(id: string) {
     if (!ownedShips.value.includes(id)) return
     selectedShip.value = id
@@ -1122,16 +1224,18 @@ export const useGameStore = defineStore('game', () => {
     playerExp.value = 0
     // Áp dụng nâng cấp vĩnh viễn + cổ vật vào chỉ số bắt đầu
     const isHolder = selectedShip.value === 'star_holder'
-    const isShooter = selectedShip.value === 'star_shooter'
     const aStats = artifactStats.value
-    const baseHp = isShooter ? 220 : (isHolder ? 180 : 100)
-    const maxHpCap = isShooter ? 400 : 300
+    const shipId = selectedShip.value as ShipId
+    const effectiveShipStats = getShipEffectiveStats(shipId)
+    const maxShipStats = getShipMaxStats(shipId)
+    const baseHp = effectiveShipStats.hp
+    const maxHpCap = maxShipStats.hp
     playerMaxHp.value = Math.min(maxHpCap, baseHp + permUpgrades.value.baseHp * 25)
     playerHp.value = playerMaxHp.value
-    const baseDmg = isShooter ? 40 : (isHolder ? 25 : 10)
-    const maxDmg = isShooter ? 200 : (isHolder ? 150 : 100)
-    const baseSpd = isShooter ? 1.0 : (isHolder ? 1.2 : 1.0)
-    const maxSpd = isShooter ? 1.6 : (isHolder ? 1.75 : 1.5)
+    const baseDmg = effectiveShipStats.damage
+    const maxDmg = maxShipStats.damage
+    const baseSpd = SHIP_BASE_STATS[shipId].speed
+    const maxSpd = maxShipStats.speed
     upgrades.value = {
       bulletSpeed: isHolder ? 1.2 : 1,
       bulletCount: 1 + permUpgrades.value.bulletCount + aStats.extraBullet,
@@ -1428,6 +1532,7 @@ export const useGameStore = defineStore('game', () => {
       // Ships
       ownedShips: ownedShips.value,
       selectedShip: selectedShip.value,
+      shipUpgrades: shipUpgrades.value,
       // Achievements
       unlockedAchievements: unlockedAchievements.value,
       // Permanent upgrades
@@ -1459,6 +1564,24 @@ export const useGameStore = defineStore('game', () => {
     accountExp.value              = (data.accountExp as number)              ?? 0
     ownedShips.value              = (data.ownedShips as string[])            ?? ['star_keeper']
     selectedShip.value            = (data.selectedShip as string)            ?? 'star_keeper'
+    const rawShipUpgrades = (data.shipUpgrades as Record<string, Partial<ShipUpgradeLevels>>) ?? {}
+    shipUpgrades.value = {
+      star_keeper: {
+        hp: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_keeper?.hp ?? 0))),
+        fireRate: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_keeper?.fireRate ?? 0))),
+        damage: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_keeper?.damage ?? 0))),
+      },
+      star_holder: {
+        hp: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_holder?.hp ?? 0))),
+        fireRate: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_holder?.fireRate ?? 0))),
+        damage: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_holder?.damage ?? 0))),
+      },
+      star_shooter: {
+        hp: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_shooter?.hp ?? 0))),
+        fireRate: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_shooter?.fireRate ?? 0))),
+        damage: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_shooter?.damage ?? 0))),
+      },
+    }
     unlockedAchievements.value    = (data.unlockedAchievements as string[])  ?? []
     const pu = (data.permUpgrades as Record<string, number>) ?? {}
     permUpgrades.value = {
@@ -1619,6 +1742,14 @@ export const useGameStore = defineStore('game', () => {
     // Ships
     ownedShips,
     selectedShip,
+    shipUpgrades,
+    selectedShipFireRateMult,
+    getShipBaseStats,
+    getShipMaxStats,
+    getShipEffectiveStats,
+    getShipUpgradeLevel,
+    getShipUpgradeCost,
+    buyShipUpgrade,
     // Achievements
     unlockedAchievements,
     // Permanent upgrades

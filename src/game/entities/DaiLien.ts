@@ -68,7 +68,7 @@ export function spawnDaiLienPair(ctx: GameContext, game: GameStore): void {
       formTargetX: formX,
       formTargetY: formY,
       approachTimer: 999999,
-      shootTimer: 20 + Math.random() * 15,
+      shootTimer: 36 + Math.random() * 24,
     }
     ctx.enemies.push(e)
     game.stageEnemiesTotal++
