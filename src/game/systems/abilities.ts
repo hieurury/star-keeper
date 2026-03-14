@@ -131,6 +131,10 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
     const target = m.targetEnemy && ctx.enemies.includes(m.targetEnemy)
       ? m.targetEnemy
       : findNearestEnemy(ctx.enemies, m.gfx.x, m.gfx.y)
+    const hasCrystalTarget = m.targetX !== undefined && m.targetY !== undefined && ctx.enemies.some(e => {
+      if (e.kind !== 'boss_cnox_sun') return false
+      return (e.sunEnergyCrystals ?? []).some(c => dist2(c.x, c.y, m.targetX!, m.targetY!) < 36 * 36)
+    })
     if (target) {
       m.targetEnemy = target
       const dx = target.container.x - m.gfx.x
@@ -138,12 +142,17 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
       const mag = Math.sqrt(dx * dx + dy * dy) || 1
       m.vx += (dx / mag * spd - m.vx) * turnRate
       m.vy += (dy / mag * spd - m.vy) * turnRate
-    } else if (m.targetX !== undefined && m.targetY !== undefined) {
+    } else if (hasCrystalTarget && m.targetX !== undefined && m.targetY !== undefined) {
       const dx = m.targetX - m.gfx.x
       const dy = m.targetY - m.gfx.y
       const mag = Math.sqrt(dx * dx + dy * dy) || 1
       m.vx += (dx / mag * spd - m.vx) * turnRate
       m.vy += (dy / mag * spd - m.vy) * turnRate
+    } else {
+      // No valid target left: keep current heading so missile exits map and disappears.
+      m.targetEnemy = undefined
+      m.targetX = undefined
+      m.targetY = undefined
     }
     // Prevent freeze: sharp turns can drain speed to near-zero; always keep minimum velocity
     const curSpd2 = m.vx * m.vx + m.vy * m.vy

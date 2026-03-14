@@ -31,6 +31,7 @@ const game = useGameStore()
 let app: Application | null = null
 let autoPaused = false   // tracks pauses triggered by visibility/blur
 const ctx = createGameContext()
+const enemyWallStuckState = new WeakMap<Enemy, { x: number, y: number, stuckFrames: number }>()
 
 // Zoom indicator (shows when boss zoom is changing)
 let zoomIndicatorText: Text | null = null
@@ -148,6 +149,37 @@ function getCurrentViewBounds(paddingX = 0, paddingY = 0) {
   const minY = (GAME_H * (1 - 1 / ctx.bossZoom) / 2) + paddingY
   const maxY = (GAME_H * (1 + 1 / ctx.bossZoom) / 2) - paddingY
   return { minX, maxX, minY, maxY }
+}
+
+function resolveEnemyWallStuck(e: Enemy): void {
+  const view = getCurrentViewBounds(18, 18)
+  const prev = enemyWallStuckState.get(e) ?? { x: e.container.x, y: e.container.y, stuckFrames: 0 }
+  const dx = e.container.x - prev.x
+  const dy = e.container.y - prev.y
+  const moved2 = dx * dx + dy * dy
+  const nearLeft = e.container.x <= view.minX + 0.7
+  const nearRight = e.container.x >= view.maxX - 0.7
+  const pressingWall = nearLeft || nearRight
+  if (pressingWall && moved2 < 0.03) {
+    prev.stuckFrames++
+  } else {
+    prev.stuckFrames = Math.max(0, prev.stuckFrames - 3)
+  }
+
+  if (prev.stuckFrames >= 24) {
+    const inward = nearLeft ? 8 : -8
+    e.container.x = Math.max(view.minX, Math.min(view.maxX, e.container.x + inward))
+
+    if (e.formTargetX !== undefined) e.formTargetX = Math.max(view.minX + 10, Math.min(view.maxX - 10, e.formTargetX + inward * 2))
+    if (e.enterTargetX !== undefined) e.enterTargetX = Math.max(view.minX + 10, Math.min(view.maxX - 10, e.enterTargetX + inward * 2))
+    if (e.dodgeTarget !== undefined) e.dodgeTarget = Math.max(view.minX + 10, Math.min(view.maxX - 10, e.dodgeTarget + inward * 1.6))
+    if (e.targetX !== undefined) e.targetX = Math.max(view.minX + 10, Math.min(view.maxX - 10, e.targetX + inward * 1.6))
+    prev.stuckFrames = 0
+  }
+
+  prev.x = e.container.x
+  prev.y = e.container.y
+  enemyWallStuckState.set(e, prev)
 }
 
 function removeDisplayObject(obj?: Graphics | Text | null) {
@@ -561,21 +593,19 @@ function gameLoop(ticker: Ticker) {
         const baseMag = Math.sqrt(baseDx * baseDx + baseDy * baseDy) || 1
         const dirX = baseDx / baseMag
         const dirY = baseDy / baseMag
-        const normalX = -dirY
-        const normalY = dirX
 
-        const burstSpread = burstCount === 1 ? [0] : [-0.12, 0, 0.12]
-        for (const spread of burstSpread) {
+        const directionSpreads = beamCount === 1 ? [0] : [-0.10, 0.10]
+        for (const spread of directionSpreads) {
           const cos = Math.cos(spread)
           const sin = Math.sin(spread)
           const shotDirX = dirX * cos - dirY * sin
           const shotDirY = dirX * sin + dirY * cos
-          const beamOffsets = beamCount === 1 ? [0] : [-4, 4]
-          for (const off of beamOffsets) {
+          const burstBackOffsets = burstCount === 1 ? [0] : [0, 2.8, 5.6]
+          for (const backOff of burstBackOffsets) {
             const bg = new Graphics()
             drawDroneBullet(bg, isUltimateDrone)
-            bg.x = drone.gfx.x + normalX * off
-            bg.y = drone.gfx.y + normalY * off
+            bg.x = drone.gfx.x - shotDirX * backOff
+            bg.y = drone.gfx.y - shotDirY * backOff
             bg.rotation = Math.atan2(shotDirY, shotDirX) + Math.PI / 2
             ctx.gameLayer.addChild(bg)
             ctx.bullets.push({
@@ -1007,7 +1037,12 @@ function gameLoop(ticker: Ticker) {
   const shieldPack = ctx.enemies.filter(e => e.kind === 'cnox_shield')
   const shieldSlotTargets = new Map<Enemy, { x: number, y: number }>()
   if (shieldPack.length > 0) {
-    const laneYs = [GAME_H * 0.34, GAME_H * 0.48, GAME_H * 0.62]
+    const view = getCurrentViewBounds(24, 24)
+    const laneYs = [
+      view.minY + (view.maxY - view.minY) * 0.30,
+      view.minY + (view.maxY - view.minY) * 0.46,
+      view.minY + (view.maxY - view.minY) * 0.62,
+    ]
     const rowCenters: number[] = []
     const rowThreshold = 24
     const byY = [...shieldPack].sort((a, b) => (a.formTargetY ?? a.container.y) - (b.formTargetY ?? b.container.y))
@@ -1086,13 +1121,13 @@ function gameLoop(ticker: Ticker) {
       const usableWidth = GAME_W - 48
       const fitSpacing = count > 1 ? usableWidth / (count - 1) : maxSpacing
       const spacing = Math.max(minSpacing, Math.min(maxSpacing, fitSpacing))
-      const leftBound = 24
-      const rightBound = GAME_W - 24
+      const leftBound = view.minX
+      const rightBound = view.maxX
       for (let idx = 0; idx < row.members.length; idx++) {
         const m = row.members[idx]!
         const rawX = centerX - ((count - 1) * spacing) / 2 + idx * spacing
         const tx = Math.max(leftBound, Math.min(rightBound, rawX))
-        const ty = Math.max(GAME_H * 0.30, Math.min(GAME_H * 0.68, row.y + (idx % 2 === 0 ? -3 : 3)))
+        const ty = Math.max(view.minY + (view.maxY - view.minY) * 0.24, Math.min(view.maxY - 72, row.y + (idx % 2 === 0 ? -3 : 3)))
         shieldSlotTargets.set(m, { x: tx, y: ty })
       }
     }
@@ -3093,6 +3128,7 @@ function gameLoop(ticker: Ticker) {
 
     if (!e.kind.startsWith('boss_') && !e.isDyingMeteor && e.kind !== 'kamikaze') {
       clampEnemyInsideHorizontalView(e)
+      resolveEnemyWallStuck(e)
     }
 
     // -- Hit by player bullets ----------------------------------------------

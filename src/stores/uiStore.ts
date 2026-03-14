@@ -16,7 +16,7 @@ const DEFAULT_TIPS = [
   'Thử tổ hợp thẻ Tấn công và Hỗ trợ để mở khóa thẻ Tối thượng.',
   'Nên giữ vị trí giữa màn hình để dễ né đạn hơn.',
   'Đánh boss đúng lúc giúp vượt stage an toàn hơn.',
-  'Cánh Tản Nhiệt tăng độ phản hồi khi kéo phi thuyền, không tăng tốc đạn.',
+  'Cánh Tản Nhiệt tăng tốc độ bay của phi cơ, không tăng tốc đạn.',
   'Phục Hồi Kỹ Năng giảm hồi chiêu kỹ năng phi cơ và cả các lõi có thời gian hồi.',
   'Nhớ thu gom EXP sớm để không bỏ lỡ cấp độ quan trọng.',
   'Lá chắn năng lượng có thể cứu bạn ở tình huống nguy hiểm.',

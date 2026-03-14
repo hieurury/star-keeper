@@ -280,11 +280,11 @@ export const ALL_CARD_DEFS: CardDef[] = [
   {
     id: 'wing_boost', name: 'Cánh Tản Nhiệt', type: 'support', icon: 'PhWind', maxLevel: 5,
     levels: [
-      { desc: '+7% độ phản hồi điều khiển khi kéo phi thuyền.' },
-      { desc: '+7% độ phản hồi điều khiển (tổng +14%).' },
-      { desc: '+7% độ phản hồi điều khiển (tổng +21%).' },
-      { desc: '+7% độ phản hồi điều khiển (tổng +28%).' },
-      { desc: '+7% độ phản hồi điều khiển (tổng +35%). Chỉ tăng điều khiển phi thuyền, không tăng tốc đạn.' },
+      { desc: '+7% tốc độ bay của phi cơ.' },
+      { desc: '+7% tốc độ bay của phi cơ (tổng +14%).' },
+      { desc: '+7% tốc độ bay của phi cơ (tổng +21%).' },
+      { desc: '+7% tốc độ bay của phi cơ (tổng +28%).' },
+      { desc: '+7% tốc độ bay của phi cơ (tổng +35%). Không ảnh hưởng tốc độ đạn.' },
     ],
   },
   {
