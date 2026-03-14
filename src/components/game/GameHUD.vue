@@ -21,8 +21,8 @@ function getCardDef(id: string) {
   return ALL_CARD_DEFS.find(c => c.id === id)
 }
 
-function getUltimateSourceDefs(card: { requiresAttackId?: string; requiresSupportId?: string }) {
-  const ids = [card.requiresAttackId, card.requiresSupportId].filter((id): id is string => !!id)
+function getUltimateSourceDefs(card: { requiresAttackId?: string; requiresSupportId?: string; requiresSupportId2?: string }) {
+  const ids = [card.requiresAttackId, card.requiresSupportId, card.requiresSupportId2].filter((id): id is string => !!id)
   return ids.map(id => getCardDef(id)).filter((def): def is NonNullable<typeof def> => !!def)
 }
 

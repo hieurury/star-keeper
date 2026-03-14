@@ -1,7 +1,7 @@
 import type { Application, Graphics, Container, Text } from 'pixi.js'
 import type {
-  Bullet, Enemy, EnemyBullet, StarBg, DamageText, ExpOrb,
-  FragmentOrb, FragmentMissile, MissileLauncher, PlayerMissile,
+  AllyDrone, Bullet, Enemy, EnemyBullet, StarBg, DamageText, ExpOrb,
+  ExpCollectParticle, FragmentOrb, FragmentMissile, MissileLauncher, PlayerMissile,
   WaveSpawner, FlockState, GamePhase,
 } from './types'
 
@@ -18,9 +18,11 @@ export interface GameContext {
 
   // Entities
   bullets: Bullet[]
+  allyDrones: AllyDrone[]
   enemies: Enemy[]
   enemyBullets: EnemyBullet[]
   expOrbs: ExpOrb[]
+  expCollectParticles: ExpCollectParticle[]
   fragmentOrbs: FragmentOrb[]
   fragmentMissiles: FragmentMissile[]
   stars: StarBg[]
@@ -104,9 +106,11 @@ export function createGameContext(): GameContext {
     playerShip: null,
     shieldGfx: null,
     bullets: [],
+    allyDrones: [],
     enemies: [],
     enemyBullets: [],
     expOrbs: [],
+    expCollectParticles: [],
     fragmentOrbs: [],
     fragmentMissiles: [],
     stars: [],

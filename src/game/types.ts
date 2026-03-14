@@ -5,8 +5,15 @@ export interface Bullet {
   gfx: Graphics
   vy: number
   vx?: number
+  damage?: number
   pierceLeft?: number
   pierceDmgMult?: number
+}
+
+export interface AllyDrone {
+  gfx: Graphics
+  angle: number
+  shootTimer: number
 }
 
 export type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'
@@ -242,6 +249,18 @@ export interface DamageText {
   gfx: Text
   vy: number
   life: number
+}
+
+export interface ExpCollectParticle {
+  gfx: Graphics
+  x: number
+  y: number
+  vx: number
+  vy: number
+  targetX: number
+  targetY: number
+  life: number
+  maxLife: number
 }
 
 export type OrbTier = 'white' | 'blue' | 'purple' | 'gold'

@@ -18,6 +18,7 @@ export interface CardDef {
   levels: CardLevelDef[]         // index 0 = lv1 desc, etc.
   requiresAttackId?: string      // ultimate: required attack card (must be max level)
   requiresSupportId?: string     // ultimate: required support card (any level)
+  requiresSupportId2?: string    // ultimate: optional 2nd required support card (any level)
   shipId?: string                // if set, only available when using this ship
 }
 
@@ -76,6 +77,13 @@ export interface CardStats {
   shooterMissileDmgMult: number
   shooterMissileAoeSizeBonus: number
   shooterMissileKillCdReduce: number
+  armorPlatingHpPct: number
+  allyDroneCount: number
+  allyDroneDamageMult: number
+  allyDroneBurstCount: number
+  allyDroneBeamCount: number
+  allyDroneFireRateMult: number
+  allyDroneUltimate: boolean
 }
 
 export const ALL_CARD_DEFS: CardDef[] = [
@@ -190,6 +198,26 @@ export const ALL_CARD_DEFS: CardDef[] = [
       { desc: 'Tiêu diệt kẻ địch bổ sung hồi +5 HP (tổng 7 HP khi tiêu diệt).' },
     ],
   },
+  {
+    id: 'armor_plating', name: 'Bọc Thép', type: 'support', icon: 'PhShieldPlus', maxLevel: 5,
+    levels: [
+      { desc: 'Tăng 15% HP tối đa.' },
+      { desc: 'Tăng thêm 15% HP tối đa (tổng +30%).' },
+      { desc: 'Tăng thêm 15% HP tối đa (tổng +45%).' },
+      { desc: 'Tăng thêm 15% HP tối đa (tổng +60%).' },
+      { desc: 'Tăng thêm 15% HP tối đa (tổng +75%). Không vượt trần HP của máy bay.' },
+    ],
+  },
+  {
+    id: 'ally_drone_support', name: 'Đồng Minh Hỗ Trợ', type: 'attack', icon: 'PhAirplaneTilt', maxLevel: 5,
+    levels: [
+      { desc: 'Triệu hồi drone hỗ trợ tấn công, bắn đạn nhỏ dạng dài và tốc độ cao.' },
+      { desc: 'Sát thương drone +35%.' },
+      { desc: 'Drone bắn cùng lúc 3 viên.' },
+      { desc: 'Triệu hồi thêm 1 drone nữa.' },
+      { desc: 'Mỗi drone tăng số tia đạn lên 2.' },
+    ],
+  },
   // ── Tối thượng ──────────────────────────────────────────────────────────────
   {
     id: 'weapon_cache_shooter_ult', name: 'Tên Lửa Lạnh Lùng', type: 'ultimate', icon: 'PhTarget', maxLevel: 1, shipId: 'star_shooter',
@@ -276,6 +304,14 @@ export const ALL_CARD_DEFS: CardDef[] = [
     requiresSupportId: 'turbo_fire_card',
     levels: [
       { desc: 'Bom cụm bắn nhanh gấp đôi, luôn bắn kép.' },
+    ],
+  },
+  {
+    id: 'drone_annihilation', name: 'Drone Hủy Diệt', type: 'ultimate', icon: 'PhTarget', maxLevel: 1,
+    requiresAttackId: 'ally_drone_support',
+    requiresSupportId: 'power_advance',
+    levels: [
+      { desc: 'Drone đổi sang lõi trắng-đỏ, chỉ còn 1 tia đạn nhưng tốc độ xả cực cao.' },
     ],
   },
 ]
@@ -576,6 +612,7 @@ export const useGameStore = defineStore('game', () => {
   const currentScore = ref(0)
   const playerHp = ref(100)
   const playerMaxHp = ref(100)
+  const baseSessionMaxHp = ref(100)
 
   // Hồ sơ người chơi
   const username = ref('Phi Công')
@@ -701,6 +738,13 @@ export const useGameStore = defineStore('game', () => {
       shooterMissileDmgMult: 1.0,
       shooterMissileAoeSizeBonus: 0,
       shooterMissileKillCdReduce: 0,
+      armorPlatingHpPct: 0,
+      allyDroneCount: 0,
+      allyDroneDamageMult: 1,
+      allyDroneBurstCount: 1,
+      allyDroneBeamCount: 1,
+      allyDroneFireRateMult: 1,
+      allyDroneUltimate: false,
     }
     const c = activeCards.value
 
@@ -754,6 +798,23 @@ export const useGameStore = defineStore('game', () => {
     if (hvLv >= 2) stats.vampireKillHeal = 3
     if (hvLv >= 4) stats.vampireHitHeal = 2
     if (hvLv >= 5) stats.vampireKillHeal = 5
+
+    // armor_plating
+    stats.armorPlatingHpPct = (c['armor_plating'] ?? 0) * 15
+
+    // ally_drone_support
+    const adsLv = c['ally_drone_support'] ?? 0
+    if (adsLv >= 1) {
+      stats.allyDroneCount = 1
+      stats.allyDroneDamageMult = 1
+      stats.allyDroneBurstCount = 1
+      stats.allyDroneBeamCount = 1
+      stats.allyDroneFireRateMult = 1
+    }
+    if (adsLv >= 2) stats.allyDroneDamageMult = 1.35
+    if (adsLv >= 3) stats.allyDroneBurstCount = 3
+    if (adsLv >= 4) stats.allyDroneCount = 2
+    if (adsLv >= 5) stats.allyDroneBeamCount = 2
 
     // weapon_cache_star (Kho Vũ Khí - Star Keeper)
     const ac = c['weapon_cache_star'] ?? 0
@@ -813,6 +874,14 @@ export const useGameStore = defineStore('game', () => {
       stats.cbTurboBoost = true
       stats.clusterBombIntervalFrames = Math.round(stats.clusterBombIntervalFrames / 2)
       stats.clusterBombDouble = true
+    }
+
+    // drone_annihilation (ultimate)
+    if ((c['drone_annihilation'] ?? 0) >= 1) {
+      stats.allyDroneUltimate = true
+      stats.allyDroneBurstCount = 1
+      stats.allyDroneBeamCount = 1
+      stats.allyDroneFireRateMult = 2.8
     }
 
     return stats
@@ -973,15 +1042,21 @@ export const useGameStore = defineStore('game', () => {
     const atkFilled = getAttackSlotsFilled()
     const supFilled = getSupportSlotsFilled()
 
-    // Ultimates eligible: attack requirement met (mandatory), support requirement met (if present)
+    // Ultimates eligible: requirements met (attack max if provided, supports level>=1)
     const eligibleUltimates = ALL_CARD_DEFS.filter(def => {
       if (def.type !== 'ultimate') return false
       if (def.shipId && def.shipId !== selectedShip.value) return false
       if ((owned[def.id] ?? 0) >= def.maxLevel) return false
-      if (!def.requiresAttackId) return false
-      const atkDef = ALL_CARD_DEFS.find(c => c.id === def.requiresAttackId)
-      if ((owned[def.requiresAttackId] ?? 0) < (atkDef?.maxLevel ?? 5)) return false
+      const hasAtkReq = !!def.requiresAttackId
+      const hasSupReq = !!def.requiresSupportId
+      const hasSupReq2 = !!def.requiresSupportId2
+      if (!hasAtkReq && !hasSupReq && !hasSupReq2) return false
+      if (hasAtkReq) {
+        const atkDef = ALL_CARD_DEFS.find(c => c.id === def.requiresAttackId)
+        if ((owned[def.requiresAttackId!] ?? 0) < (atkDef?.maxLevel ?? 5)) return false
+      }
       if (def.requiresSupportId && (owned[def.requiresSupportId] ?? 0) < 1) return false
+      if (def.requiresSupportId2 && (owned[def.requiresSupportId2] ?? 0) < 1) return false
       return true
     })
 
@@ -1018,9 +1093,24 @@ export const useGameStore = defineStore('game', () => {
     const currentLv = activeCards.value[cardId] ?? 0
     if (currentLv >= def.maxLevel) return
     activeCards.value = { ...activeCards.value, [cardId]: currentLv + 1 }
+    applyArmorPlatingHpBonus()
     sessionCardsChosen.value++
     isLevelUpPending.value = false
     isPaused.value = false
+  }
+
+  function applyArmorPlatingHpBonus() {
+    const shipId = selectedShip.value as ShipId
+    const shipMaxHp = getShipMaxStats(shipId).hp
+    const armorMult = 1 + (cardStats.value.armorPlatingHpPct / 100)
+    const targetMax = Math.min(shipMaxHp, Math.round(baseSessionMaxHp.value * armorMult))
+    const oldMax = playerMaxHp.value
+    playerMaxHp.value = targetMax
+    if (targetMax >= oldMax) {
+      playerHp.value = Math.min(playerMaxHp.value, playerHp.value + (targetMax - oldMax))
+    } else {
+      playerHp.value = Math.min(playerHp.value, playerMaxHp.value)
+    }
   }
 
   function triggerLevelUp() {
@@ -1030,6 +1120,8 @@ export const useGameStore = defineStore('game', () => {
     if (hpBonus > 0) {
       playerMaxHp.value = Math.min(300, playerMaxHp.value + hpBonus)
       playerHp.value = Math.min(playerMaxHp.value, playerHp.value + hpBonus)
+      baseSessionMaxHp.value = Math.min(300, baseSessionMaxHp.value + hpBonus)
+      applyArmorPlatingHpBonus()
     }
     levelUpCardChoices.value = buildCardChoices()
     if (levelUpCardChoices.value.length === 0) return  // all cards maxed, skip
@@ -1254,6 +1346,7 @@ export const useGameStore = defineStore('game', () => {
     const maxHpCap = maxShipStats.hp
     playerMaxHp.value = Math.min(maxHpCap, baseHp + permUpgrades.value.baseHp * 25)
     playerHp.value = playerMaxHp.value
+    baseSessionMaxHp.value = playerMaxHp.value
     const baseDmg = effectiveShipStats.damage
     const maxDmg = maxShipStats.damage
     const baseSpd = SHIP_BASE_STATS[shipId].speed
@@ -1283,6 +1376,7 @@ export const useGameStore = defineStore('game', () => {
       const weaponCache = ALL_CARD_DEFS.find(d => d.shipId === shipId && d.id.startsWith('weapon_cache_') && d.type === 'attack')
       if (weaponCache) activeCards.value = { [weaponCache.id]: weaponCache.maxLevel }
     }
+    applyArmorPlatingHpBonus()
     shieldActive.value = false
     shieldLivesLeft.value = 0
     shieldCooldownLeft.value = 0

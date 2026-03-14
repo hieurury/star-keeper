@@ -75,6 +75,48 @@ export function spawnDamageText(ctx: GameContext, x: number, y: number, dmg: num
   ctx.damageTexts.push({ gfx: t, vy: 1.4, life: 40 })
 }
 
+export function getExpTierColor(tier: string): number {
+  if (tier === 'gold') return 0xffdd55
+  if (tier === 'purple') return 0xbb77ff
+  if (tier === 'blue') return 0x66ccff
+  return 0xffffff
+}
+
+export function spawnExpCollectEffect(
+  ctx: GameContext,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  amount: number,
+  color = 0x66ccff,
+): void {
+  if (!ctx.gameLayer) return
+  const particleCount = Math.max(2, Math.min(6, Math.round(Math.sqrt(Math.max(1, amount)) / 2.6)))
+  for (let i = 0; i < particleCount; i++) {
+    const g = new Graphics()
+    const size = 1.6 + Math.random() * 1.6
+    g.circle(0, 0, size).fill({ color, alpha: 0.95 })
+    g.circle(0, 0, size * 0.45).fill({ color: 0xffffff, alpha: 0.6 })
+    const sx = fromX + (Math.random() - 0.5) * 10
+    const sy = fromY + (Math.random() - 0.5) * 10
+    g.x = sx
+    g.y = sy
+    ctx.gameLayer.addChild(g)
+    ctx.expCollectParticles.push({
+      gfx: g,
+      x: sx,
+      y: sy,
+      vx: (Math.random() - 0.5) * 1.4,
+      vy: (Math.random() - 0.5) * 1.4,
+      targetX: toX + (Math.random() - 0.5) * 6,
+      targetY: toY + (Math.random() - 0.5) * 6,
+      life: 0,
+      maxLife: 18 + Math.random() * 10,
+    })
+  }
+}
+
 export function showStageClearBanner(ctx: GameContext): void {
   if (!ctx.app || !ctx.uiLayer) return
   const style = new TextStyle({

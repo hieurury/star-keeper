@@ -12,7 +12,7 @@ import { drawShip, drawBullet, spawnHolderLaser, drawShooterMissile } from '../.
 import { drawFragmentMissile } from '../../game/projectiles/index'
 import { drawEnemyBullet, drawBossBullet, drawBossMissile, drawTrumSoMissile } from '../../game/projectiles/index'
 
-import { spawnExplosion, screenFlash, spawnDamageText, hitFlash, showStageClearBanner, spawnMissileWarning } from '../../game/systems/effects'
+import { spawnExplosion, screenFlash, spawnDamageText, hitFlash, showStageClearBanner, spawnMissileWarning, spawnExpCollectEffect, getExpTierColor } from '../../game/systems/effects'
 import { createStar } from '../../game/systems/background'
 import { updateMissileLaunchers, updatePeriodicAbilities, activateHeatWave, activateBlackHole } from '../../game/systems/abilities'
 import { drawArtifactGfx, initArtifactGfx, activateNeutronVacuum, activateManaCoreOverload, activateSoulHarvest } from '../../game/systems/artifacts'
@@ -23,7 +23,7 @@ import { drawDaiLienBullet, spawnDaiLienPair } from '../../game/entities/DaiLien
 import { drawThuHo, spawnThuHoSwarm } from '../../game/entities/ThuHo'
 import { drawHealBeam, spawnThuatSi } from '../../game/entities/ThuatSi'
 import { drawCnoxGreedy } from '../../game/entities/CnoxGreedy'
-import type { Enemy, SunWeaponStar } from '../../game/types'
+import type { AllyDrone, Enemy, SunWeaponStar } from '../../game/types'
 
 const canvasWrapper = ref<HTMLDivElement>()
 const game = useGameStore()
@@ -73,6 +73,24 @@ function shoot(offsetX = 0, vxDrift = 0) {
   ctx.bullets.push({ gfx: g, vy: 8 * game.upgrades.bulletSpeed, vx: vxDrift, pierceLeft, pierceDmgMult })
 }
 
+function drawAllyDrone(g: Graphics, isUltimate = false) {
+  g.clear()
+  const coreColor = isUltimate ? 0xff6666 : 0xffdd66
+  const auraColor = isUltimate ? 0xff2233 : 0xffcc55
+  g.circle(0, 0, 6).fill({ color: auraColor, alpha: 0.2 })
+  g.poly([0, -7, 6, 2, 0, 7, -6, 2]).fill(0xffffff)
+  g.poly([0, -7, 6, 2, 0, 7, -6, 2]).stroke({ color: 0xcfd5ff, width: 1.2, alpha: 0.85 })
+  g.circle(0, 0, 2).fill(coreColor)
+}
+
+function drawDroneBullet(g: Graphics, isUltimate = false) {
+  g.clear()
+  const color = isUltimate ? 0xff4455 : 0xfff3c6
+  const glow = isUltimate ? 0xff1122 : 0xffcc66
+  g.roundRect(-1.6, -10, 3.2, 18, 1.2).fill({ color, alpha: 0.95 })
+  g.roundRect(-0.65, -14, 1.3, 8, 0.65).fill({ color: glow, alpha: 0.72 })
+}
+
 function pointDistanceToRay(px: number, py: number, ox: number, oy: number, angle: number): { perp: number, dot: number } {
   const lx = Math.cos(angle)
   const ly = Math.sin(angle)
@@ -118,6 +136,20 @@ function getCollisionDamageToEnemy(gameDamage: number, e: Enemy): number {
   return base
 }
 
+function clampEnemyInsideHorizontalView(e: Enemy, padding = 18): void {
+  const minX = (GAME_W * (1 - 1 / ctx.bossZoom) / 2) + padding
+  const maxX = (GAME_W * (1 + 1 / ctx.bossZoom) / 2) - padding
+  e.container.x = Math.max(minX, Math.min(maxX, e.container.x))
+}
+
+function getCurrentViewBounds(paddingX = 0, paddingY = 0) {
+  const minX = (GAME_W * (1 - 1 / ctx.bossZoom) / 2) + paddingX
+  const maxX = (GAME_W * (1 + 1 / ctx.bossZoom) / 2) - paddingX
+  const minY = (GAME_H * (1 - 1 / ctx.bossZoom) / 2) + paddingY
+  const maxY = (GAME_H * (1 + 1 / ctx.bossZoom) / 2) - paddingY
+  return { minX, maxX, minY, maxY }
+}
+
 function removeDisplayObject(obj?: Graphics | Text | null) {
   if (!obj || obj.destroyed) return
   if ('clear' in obj && typeof obj.clear === 'function') obj.clear()
@@ -160,16 +192,20 @@ function removeEnemyDetachedGraphics(e: Enemy) {
 
 function clearTransientCombatGraphics() {
   for (const b of ctx.bullets) if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
+  for (const d of ctx.allyDrones) if (!d.gfx.destroyed) ctx.gameLayer.removeChild(d.gfx)
   for (const b of ctx.enemyBullets) if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
   for (const m of ctx.playerMissiles) if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
   for (const m of ctx.shooterMissiles) if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
   for (const m of ctx.fragmentMissiles) if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx)
+  for (const p of ctx.expCollectParticles) if (!p.gfx.destroyed) ctx.gameLayer.removeChild(p.gfx)
 
   ctx.bullets = []
+  ctx.allyDrones = []
   ctx.enemyBullets = []
   ctx.playerMissiles = []
   ctx.shooterMissiles = []
   ctx.fragmentMissiles = []
+  ctx.expCollectParticles = []
 
   if (ctx.shooterBlackHoleGfx && !ctx.shooterBlackHoleGfx.destroyed) ctx.gameLayer.removeChild(ctx.shooterBlackHoleGfx)
   ctx.shooterBlackHoleGfx = null
@@ -475,6 +511,81 @@ function gameLoop(ticker: Ticker) {
       ctx.shieldGfx.circle(0, 0, 32).fill({ color: 0x2266ff, alpha: 0.10 * pulse })
     } else {
       ctx.shieldGfx.visible = false
+    }
+  }
+
+  // Ally drones (Đồng Minh Hỗ Trợ)
+  if (ctx.playerShip) {
+    const droneCount = Math.max(0, Math.floor(game.cardStats.allyDroneCount))
+    while (ctx.allyDrones.length > droneCount) {
+      const removed = ctx.allyDrones.pop()
+      if (removed && !removed.gfx.destroyed) ctx.gameLayer.removeChild(removed.gfx)
+    }
+    while (ctx.allyDrones.length < droneCount) {
+      const dg = new Graphics()
+      drawAllyDrone(dg, game.cardStats.allyDroneUltimate)
+      dg.x = ctx.playerShip.x
+      dg.y = ctx.playerShip.y - 22
+      ctx.gameLayer.addChild(dg)
+      ctx.allyDrones.push({ gfx: dg, angle: 0, shootTimer: Math.random() * 20 })
+    }
+
+    const now = Date.now()
+    const isUltimateDrone = game.cardStats.allyDroneUltimate
+    const burstCount = Math.max(1, Math.floor(game.cardStats.allyDroneBurstCount))
+    const beamCount = Math.max(1, Math.floor(game.cardStats.allyDroneBeamCount))
+    const fireRateMult = Math.max(0.5, game.cardStats.allyDroneFireRateMult)
+    const droneShotInterval = 44 / fireRateMult
+    const droneBulletSpeed = isUltimateDrone ? 14.2 : 11.6
+    const droneDamage = Math.round(game.upgrades.damage * (1 + game.cardStats.damageBonusPct / 100) * game.cardStats.allyDroneDamageMult)
+
+    for (let i = 0; i < ctx.allyDrones.length; i++) {
+      const drone = ctx.allyDrones[i] as AllyDrone
+      const baseAngle = (i / Math.max(1, droneCount)) * Math.PI * 2
+      const orbitA = now * 0.0019 + baseAngle
+      const orbitR = droneCount > 1 ? 26 : 22
+      const targetX = ctx.playerShip.x + Math.cos(orbitA) * orbitR
+      const targetY = ctx.playerShip.y - 20 + Math.sin(orbitA) * (orbitR * 0.55)
+      drone.gfx.x += (targetX - drone.gfx.x) * Math.min(1, 0.18 * dt)
+      drone.gfx.y += (targetY - drone.gfx.y) * Math.min(1, 0.18 * dt)
+      drawAllyDrone(drone.gfx, isUltimateDrone)
+
+      drone.shootTimer -= dt
+      if (!isBossIntro && drone.shootTimer <= 0) {
+        drone.shootTimer = droneShotInterval
+        const target = findNearestEnemy(ctx.enemies, drone.gfx.x, drone.gfx.y)
+        if (!target) continue
+        const baseDx = target.container.x - drone.gfx.x
+        const baseDy = target.container.y - drone.gfx.y
+        const baseMag = Math.sqrt(baseDx * baseDx + baseDy * baseDy) || 1
+        const dirX = baseDx / baseMag
+        const dirY = baseDy / baseMag
+        const normalX = -dirY
+        const normalY = dirX
+
+        const burstSpread = burstCount === 1 ? [0] : [-0.12, 0, 0.12]
+        for (const spread of burstSpread) {
+          const cos = Math.cos(spread)
+          const sin = Math.sin(spread)
+          const shotDirX = dirX * cos - dirY * sin
+          const shotDirY = dirX * sin + dirY * cos
+          const beamOffsets = beamCount === 1 ? [0] : [-4, 4]
+          for (const off of beamOffsets) {
+            const bg = new Graphics()
+            drawDroneBullet(bg, isUltimateDrone)
+            bg.x = drone.gfx.x + normalX * off
+            bg.y = drone.gfx.y + normalY * off
+            bg.rotation = Math.atan2(shotDirY, shotDirX) + Math.PI / 2
+            ctx.gameLayer.addChild(bg)
+            ctx.bullets.push({
+              gfx: bg,
+              vx: shotDirX * droneBulletSpeed,
+              vy: -shotDirY * droneBulletSpeed,
+              damage: droneDamage,
+            })
+          }
+        }
+      }
     }
   }
 
@@ -817,21 +928,23 @@ function gameLoop(ticker: Ticker) {
   // Advance flock anchors
   const flockSpeed = 1.4 + game.currentStage * 0.05
   for (const fs of ctx.flockStates.values()) {
+    const view = getCurrentViewBounds(46, 30)
+    const maxPatrolY = Math.min(view.maxY - 90, view.minY + (view.maxY - view.minY) * 0.78)
     fs.timer -= dt
     const dx = fs.tx - fs.x
     const dy = fs.ty - fs.y
     const d = Math.sqrt(dx * dx + dy * dy)
     if (d < 18 || fs.timer <= 0) {
-      fs.tx = GAME_W * 0.10 + Math.random() * GAME_W * 0.80
-      fs.ty = GAME_H * 0.06 + Math.random() * GAME_H * 0.72
+      fs.tx = view.minX + Math.random() * Math.max(1, (view.maxX - view.minX))
+      fs.ty = view.minY + Math.random() * Math.max(1, (maxPatrolY - view.minY))
       fs.timer = 140 + Math.random() * 100
     }
     const nx = dx / (d || 1)
     const ny = dy / (d || 1)
     fs.x += nx * flockSpeed * dt
     fs.y += ny * flockSpeed * dt
-    fs.x = Math.max(40, Math.min(GAME_W - 40, fs.x))
-    fs.y = Math.max(40, Math.min(GAME_H - 120, fs.y))
+    fs.x = Math.max(view.minX, Math.min(view.maxX, fs.x))
+    fs.y = Math.max(view.minY, Math.min(maxPatrolY, fs.y))
   }
 
   // Update enemies (entity modules handle their own AI)
@@ -1022,8 +1135,11 @@ function gameLoop(ticker: Ticker) {
       } else {
         const fs = e.squadId != null ? ctx.flockStates.get(e.squadId) : null
         if (fs) {
-          const tx = fs.x + (e.formOffsetX ?? 0)
-          const ty = fs.y + (e.formOffsetY ?? 0)
+          const view = getCurrentViewBounds(26, 24)
+          const txRaw = fs.x + (e.formOffsetX ?? 0)
+          const tyRaw = fs.y + (e.formOffsetY ?? 0)
+          const tx = Math.max(view.minX, Math.min(view.maxX, txRaw))
+          const ty = Math.max(view.minY, Math.min(view.maxY - 90, tyRaw))
           const dx = tx - e.container.x
           const dy = ty - e.container.y
           const dist = Math.sqrt(dx * dx + dy * dy)
@@ -1034,7 +1150,7 @@ function gameLoop(ticker: Ticker) {
           }
         }
       }
-      if (e.container.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 60 || e.container.x < (GAME_W * (1 - 1 / ctx.bossZoom) / 2) - 60 || e.container.x > (GAME_W * (1 + 1 / ctx.bossZoom) / 2) + 60) {
+      if (e.container.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 60) {
         if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
         ctx.enemies.splice(i, 1)
         game.stageEnemiesKilled++
@@ -1365,9 +1481,9 @@ function gameLoop(ticker: Ticker) {
         }
       } else {
         let targetOrb = null as typeof ctx.expOrbs[number] | null
-        let bestOrbD2 = 220 * 220
+        let bestOrbD2 = 330 * 330
         const stealPower = Math.max(1, e.cnoxPowerMult ?? 1)
-        const orbPullSpeed = 2.4 + (stealPower - 1) * 1.8
+        const orbPullSpeed = 3.8 + (stealPower - 1) * 2.4
         for (const orb of ctx.expOrbs) {
           const d2 = dist2(orb.x, orb.y, e.container.x, e.container.y)
           if (d2 < bestOrbD2) {
@@ -1383,9 +1499,10 @@ function gameLoop(ticker: Ticker) {
           targetOrb.y += (ody / od) * orbPullSpeed * dt
           targetOrb.gfx.x = targetOrb.x
           targetOrb.gfx.y = targetOrb.y
-          if (od < 16) {
+          if (od < 20) {
             const gained = Math.min(200 - (e.cnoxStolenExp ?? 0), targetOrb.amount)
             e.cnoxStolenExp = Math.min(200, (e.cnoxStolenExp ?? 0) + gained)
+            spawnExpCollectEffect(ctx, targetOrb.x, targetOrb.y, e.container.x, e.container.y, Math.max(1, gained), getExpTierColor(targetOrb.tier))
             if (!targetOrb.gfx.destroyed) ctx.gameLayer.removeChild(targetOrb.gfx)
             const orbIdx = ctx.expOrbs.indexOf(targetOrb)
             if (orbIdx >= 0) ctx.expOrbs.splice(orbIdx, 1)
@@ -2198,7 +2315,7 @@ function gameLoop(ticker: Ticker) {
               drawBossMissile(smg, true)
               smg.x = e.container.x + mox; smg.y = e.container.y + 20
               ctx.gameLayer.addChild(smg)
-              ctx.enemyBullets.push({ gfx: smg, vx: (mdx / mmag) * 3.0, vy: (mdy / mmag) * 3.0, homing: true, homingLife: 240, homingSpeed: 3.0 })
+              ctx.enemyBullets.push({ gfx: smg, vx: (mdx / mmag) * 4.2, vy: (mdy / mmag) * 4.2, homing: true, homingLife: 240, homingSpeed: 4.2 })
               e.pendingMissiles!--; e.missileFireTimer = 4
             }
           }
@@ -2973,6 +3090,10 @@ function gameLoop(ticker: Ticker) {
       }
     }
 
+    if (!e.kind.startsWith('boss_') && !e.isDyingMeteor && e.kind !== 'kamikaze') {
+      clampEnemyInsideHorizontalView(e)
+    }
+
     // -- Hit by player bullets ----------------------------------------------
     let killed = false
     // Th? H? reflect: during swarm reflect phase, bullets are bounced back
@@ -3025,7 +3146,8 @@ function gameLoop(ticker: Ticker) {
           const wx = e.container.x + t.offsetX; const wy = e.container.y + t.offsetY
           if (dist2(ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, wx, wy) < 12 * 12) {
             const bullet = ctx.bullets[j]!
-            const effectiveDmg = Math.round(bulletDmg * (bullet.pierceDmgMult ?? 1))
+            const bulletBaseDmg = bullet.damage ?? bulletDmg
+            const effectiveDmg = Math.round(bulletBaseDmg * (bullet.pierceDmgMult ?? 1))
             t.hp = Math.max(0, t.hp - effectiveDmg)
             spawnDamageText(ctx, wx, wy - 16, effectiveDmg)
             if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
@@ -3077,7 +3199,8 @@ function gameLoop(ticker: Ticker) {
         for (let ci = crystals.length - 1; ci >= 0; ci--) {
           const c = crystals[ci]!
           if (dist2(b.gfx.x, b.gfx.y, c.x, c.y) < 17 * 17) {
-            const effectiveDmg = Math.round(bulletDmg * (b.pierceDmgMult ?? 1))
+            const bulletBaseDmg = b.damage ?? bulletDmg
+            const effectiveDmg = Math.round(bulletBaseDmg * (b.pierceDmgMult ?? 1))
             c.hp = Math.max(0, c.hp - effectiveDmg)
             spawnDamageText(ctx, c.x, c.y - 14, effectiveDmg)
             if (c.hp <= 0) {
@@ -3144,7 +3267,8 @@ function gameLoop(ticker: Ticker) {
       const bulletHitR = e.kind === 'boss_tinhvan' ? 68 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 54 : (e.kind === 'boss_cnox_sun' ? 72 : 15))
       if (dist2(ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, e.container.x, e.container.y) < bulletHitR * bulletHitR) {
         const bullet = ctx.bullets[j]!
-        const effectiveDmg = Math.round(bulletDmg * (bullet.pierceDmgMult ?? 1))
+        const bulletBaseDmg = bullet.damage ?? bulletDmg
+        const effectiveDmg = Math.round(bulletBaseDmg * (bullet.pierceDmgMult ?? 1))
         e.hp = Math.max(0, e.hp - effectiveDmg)
         const dmgOffY = e.kind === 'boss_tinhvan' ? 75 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 60 : (e.kind === 'boss_cnox_sun' ? 68 : 14))
         spawnDamageText(ctx, e.container.x, e.container.y - dmgOffY, effectiveDmg)
@@ -3214,6 +3338,7 @@ function gameLoop(ticker: Ticker) {
     o.gfx.alpha = 0.65 + 0.35 * Math.abs(Math.sin(Date.now() * 0.007 + i * 1.5))
     if (o.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 20) { if (!o.gfx.destroyed) ctx.gameLayer.removeChild(o.gfx); ctx.expOrbs.splice(i, 1); continue }
     if (ctx.playerShip && dist2(o.gfx.x, o.y, ctx.playerShip.x, ctx.playerShip.y) < collectR2) {
+      spawnExpCollectEffect(ctx, o.x, o.y, ctx.playerShip.x, ctx.playerShip.y, o.amount, getExpTierColor(o.tier))
       game.gainSessionExp(o.amount)
       if (!o.gfx.destroyed) ctx.gameLayer.removeChild(o.gfx)
       ctx.expOrbs.splice(i, 1)
@@ -3365,6 +3490,7 @@ function gameLoop(ticker: Ticker) {
             ae.hp = Math.max(0, ae.hp - m.damage); hitFlash(ae.body)
             spawnDamageText(ctx, ae.container.x, ae.container.y - 14, m.damage)
             redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
+            if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
             if (ae.hp <= 0) {
               if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)
               killEnemy(ctx, game, ae, k)
@@ -3383,6 +3509,7 @@ function gameLoop(ticker: Ticker) {
           e.hp = Math.max(0, e.hp - m.damage); hitFlash(e.body)
           spawnDamageText(ctx, e.container.x, e.container.y - 14, m.damage)
           redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+          if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
           if (e.hp <= 0) {
             if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)
             killEnemy(ctx, game, e, nearestIdx)
@@ -3415,6 +3542,7 @@ function gameLoop(ticker: Ticker) {
               ae.hp = Math.max(0, ae.hp - m.damage); hitFlash(ae.body)
               spawnDamageText(ctx, ae.container.x, ae.container.y - 14, m.damage)
               redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
+              if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
               if (ae.hp <= 0) {
                 if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)
                 killEnemy(ctx, game, ae, k)
@@ -3425,6 +3553,7 @@ function gameLoop(ticker: Ticker) {
           e.hp = Math.max(0, e.hp - m.damage); hitFlash(e.body)
           spawnDamageText(ctx, e.container.x, e.container.y - 14, m.damage)
           redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+          if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
           spawnExplosion(ctx, m.gfx.x, m.gfx.y, 14, 0xff4400, 0xffaa00)
           if (e.hp <= 0) {
             if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)
@@ -3435,6 +3564,27 @@ function gameLoop(ticker: Ticker) {
       }
     }
     if (hit) { if (!m.gfx.destroyed) ctx.gameLayer.removeChild(m.gfx); ctx.shooterMissiles.splice(i, 1) }
+  }
+
+  // Damage texts
+  for (let i = ctx.expCollectParticles.length - 1; i >= 0; i--) {
+    const p = ctx.expCollectParticles[i]!
+    const ax = (p.targetX - p.x) * 0.055
+    const ay = (p.targetY - p.y) * 0.055
+    p.vx = (p.vx + ax * dt) * 0.9
+    p.vy = (p.vy + ay * dt) * 0.9
+    p.x += p.vx * dt
+    p.y += p.vy * dt
+    p.gfx.x = p.x
+    p.gfx.y = p.y
+    p.life += dt
+    const t = Math.min(1, p.life / p.maxLife)
+    p.gfx.alpha = 1 - t
+    p.gfx.scale.set(0.85 + (1 - t) * 0.35)
+    if (t >= 1 || dist2(p.x, p.y, p.targetX, p.targetY) < 8 * 8) {
+      if (!p.gfx.destroyed) ctx.gameLayer.removeChild(p.gfx)
+      ctx.expCollectParticles.splice(i, 1)
+    }
   }
 
   // Damage texts
@@ -3575,8 +3725,8 @@ function destroyPixi() {
     app.destroy(true, { children: true })
     app = null; ctx.app = null
   }
-  ctx.bullets = []; ctx.enemies = []; ctx.enemyBullets = []; ctx.stars = []
-  ctx.damageTexts = []; ctx.expOrbs = []; ctx.fragmentOrbs = []; ctx.fragmentMissiles = []
+  ctx.bullets = []; ctx.allyDrones = []; ctx.enemies = []; ctx.enemyBullets = []; ctx.stars = []
+  ctx.damageTexts = []; ctx.expOrbs = []; ctx.expCollectParticles = []; ctx.fragmentOrbs = []; ctx.fragmentMissiles = []
   ctx.soulMissileQueue = 0; ctx.soulMissileFireTimer = 0
   ctx.neutronVacuumTimer = 0; ctx.manaCoreKillCount = 0; ctx.artifactOrbitAngle = 0
   ctx.artifactGfx = null
@@ -3604,14 +3754,16 @@ watch(() => game.isGameOverSequence, (val) => {
 watch(() => game.isPlaying, (val, old) => {
   if (val && !old && app) {
     for (const b of ctx.bullets) if (!b.gfx.destroyed) ctx.gameLayer?.removeChild(b.gfx)
+    for (const d of ctx.allyDrones) if (!d.gfx.destroyed) ctx.gameLayer?.removeChild(d.gfx)
     for (const e of ctx.enemies) removeEnemyDetachedGraphics(e)
     for (const e of ctx.enemies) if (!e.container.destroyed) ctx.gameLayer?.removeChild(e.container)
     for (const b of ctx.enemyBullets) if (!b.gfx.destroyed) ctx.gameLayer?.removeChild(b.gfx)
     for (const d of ctx.damageTexts) if (!d.gfx.destroyed) ctx.uiLayer?.removeChild(d.gfx)
     for (const o of ctx.expOrbs) if (!o.gfx.destroyed) ctx.gameLayer?.removeChild(o.gfx)
+    for (const p of ctx.expCollectParticles) if (!p.gfx.destroyed) ctx.gameLayer?.removeChild(p.gfx)
     for (const o of ctx.fragmentOrbs) if (!o.gfx.destroyed) ctx.gameLayer?.removeChild(o.gfx)
     if (ctx.stageTitleText) { ctx.uiLayer?.removeChild(ctx.stageTitleText); ctx.stageTitleText = null }
-    ctx.bullets = []; ctx.enemies = []; ctx.enemyBullets = []; ctx.damageTexts = []; ctx.expOrbs = []; ctx.fragmentOrbs = []
+    ctx.bullets = []; ctx.allyDrones = []; ctx.enemies = []; ctx.enemyBullets = []; ctx.damageTexts = []; ctx.expOrbs = []; ctx.expCollectParticles = []; ctx.fragmentOrbs = []
     for (const ml of ctx.missileLaunchers) if (!ml.gfx.destroyed) ctx.gameLayer?.removeChild(ml.gfx)
     for (const pm of ctx.playerMissiles) if (!pm.gfx.destroyed) ctx.gameLayer?.removeChild(pm.gfx)
     for (const fm of ctx.fragmentMissiles) if (!fm.gfx.destroyed) ctx.gameLayer?.removeChild(fm.gfx)

@@ -1,7 +1,7 @@
 import { Graphics } from 'pixi.js'
 import type { GameContext } from '../context'
 import type { useGameStore } from '../../stores/gameStore'
-import { screenFlash, spawnDamageText } from './effects'
+import { screenFlash, spawnDamageText, spawnExpCollectEffect, getExpTierColor } from './effects'
 import { killEnemy } from '../entities/kill'
 
 type GameStore = ReturnType<typeof useGameStore>
@@ -63,6 +63,7 @@ export function activateNeutronVacuum(ctx: GameContext, game: GameStore): void {
   if (!ctx.playerShip) return
   for (let i = ctx.expOrbs.length - 1; i >= 0; i--) {
     const o = ctx.expOrbs[i]
+    spawnExpCollectEffect(ctx, o.x, o.y, ctx.playerShip.x, ctx.playerShip.y, o.amount, getExpTierColor(o.tier))
     game.gainSessionExp(o.amount)
     if (!o.gfx.destroyed) ctx.gameLayer.removeChild(o.gfx)
   }

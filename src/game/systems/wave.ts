@@ -98,7 +98,7 @@ function buildCnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[]
   for (let i = 0; i < shieldGroups; i++) tankers.push(() => spawnCnoxShieldWall(ctx, game))
 
   if (stage >= 2) {
-    const greedyCount = (Math.random() < 0.45 ? 1 : 0) + (stage >= 7 && Math.random() < 0.22 ? 1 : 0)
+    const greedyCount = 1 + (Math.random() < 0.55 ? 1 : 0) + (stage >= 7 && Math.random() < 0.28 ? 1 : 0)
     for (let i = 0; i < greedyCount; i++) regular.push(() => spawnCnoxGreedy(ctx, game))
   }
 
