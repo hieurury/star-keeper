@@ -424,6 +424,7 @@ const MISSION_POOL: Array<{
 // loadProgress() sẽ dùng số này để chạy migration thích hợp.
 const SAVE_VERSION = 1
 const SAVE_KEY = 'ban-may-bay-save'
+const SAVE_REJECTED_KEY = 'ban-may-bay-save-rejected'
 const SAVE_ENVELOPE_VERSION = 1
 const SAVE_SIGNATURE_PEPPER = 'ban-may-bay::save-signature::2026'
 
@@ -432,6 +433,27 @@ interface SaveEnvelope {
   envelopeVersion: number
   payload: Record<string, unknown>
   sig: string
+}
+
+type SaveVerifyMode = 'ok' | 'legacy-ok' | 'invalid'
+
+function normalizeForJson(value: unknown): unknown {
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol') return undefined
+  if (value === null || typeof value !== 'object') return value
+  if (Array.isArray(value)) {
+    // JSON arrays preserve length; undefined/function/symbol become null.
+    return value.map(item => {
+      const normalized = normalizeForJson(item)
+      return normalized === undefined ? null : normalized
+    })
+  }
+  const obj = value as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const key of Object.keys(obj)) {
+    const normalized = normalizeForJson(obj[key])
+    if (normalized !== undefined) out[key] = normalized
+  }
+  return out
 }
 
 function stableStringify(value: unknown): string {
@@ -456,7 +478,21 @@ function fnv1aHash(input: string): string {
 }
 
 function createSaveSignature(payload: Record<string, unknown>): string {
-  return fnv1aHash(`${stableStringify(payload)}|${SAVE_SIGNATURE_PEPPER}`)
+  const normalizedPayload = normalizeForJson(payload) as Record<string, unknown>
+  return fnv1aHash(`${stableStringify(normalizedPayload)}|${SAVE_SIGNATURE_PEPPER}`)
+}
+
+function createLegacyV1SignatureWithKnownBug(payload: Record<string, unknown>): string {
+  // Compatibility path for previously saved envelopes where undefined fields were
+  // included in signature input but dropped by JSON persistence.
+  const cloned = structuredClone(payload) as Record<string, unknown>
+  const missions = Array.isArray(cloned.dailyMissions) ? cloned.dailyMissions as Array<Record<string, unknown>> : []
+  for (const m of missions) {
+    if (m && typeof m === 'object' && !Array.isArray(m) && !Object.prototype.hasOwnProperty.call(m, 'shipId')) {
+      m.shipId = undefined
+    }
+  }
+  return fnv1aHash(`${stableStringify(cloned)}|${SAVE_SIGNATURE_PEPPER}`)
 }
 
 function buildSaveEnvelope(payload: Record<string, unknown>): SaveEnvelope {
@@ -479,8 +515,12 @@ function isSaveEnvelope(data: unknown): data is SaveEnvelope {
     && typeof obj.sig === 'string'
 }
 
-function verifySaveEnvelope(envelope: SaveEnvelope): boolean {
-  return envelope.sig === createSaveSignature(envelope.payload)
+function getSaveVerificationMode(envelope: SaveEnvelope): SaveVerifyMode {
+  const current = createSaveSignature(envelope.payload)
+  if (envelope.sig === current) return 'ok'
+  const legacy = createLegacyV1SignatureWithKnownBug(envelope.payload)
+  if (envelope.sig === legacy) return 'legacy-ok'
+  return 'invalid'
 }
 
 export const useGameStore = defineStore('game', () => {
@@ -1462,7 +1502,9 @@ export const useGameStore = defineStore('game', () => {
         let data: Record<string, unknown> | null = null
 
         if (isSaveEnvelope(parsed)) {
-          if (!isAdminMode.value && !verifySaveEnvelope(parsed)) {
+          const verifyMode = getSaveVerificationMode(parsed)
+          if (!isAdminMode.value && verifyMode === 'invalid') {
+            localStorage.setItem(SAVE_REJECTED_KEY, saved)
             localStorage.removeItem(SAVE_KEY)
             generateDailyMissions()
             return
@@ -1486,7 +1528,7 @@ export const useGameStore = defineStore('game', () => {
         _applyDataToStore(data)
         if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
         // Lưu lại với version mới nhất nếu đã migrate
-        if (ver < SAVE_VERSION || !isSaveEnvelope(parsed)) saveProgress()
+        if (ver < SAVE_VERSION || !isSaveEnvelope(parsed) || (isSaveEnvelope(parsed) && getSaveVerificationMode(parsed) === 'legacy-ok')) saveProgress()
       } catch {
         // Dữ liệu save bị hỏng hoàn toàn → giữ giá trị mặc định
       }
@@ -1520,7 +1562,7 @@ export const useGameStore = defineStore('game', () => {
     try {
       const raw = JSON.parse(jsonStr) as unknown
       if (isSaveEnvelope(raw)) {
-        if (!isAdminMode.value && !verifySaveEnvelope(raw)) return false
+        if (!isAdminMode.value && getSaveVerificationMode(raw) === 'invalid') return false
         localStorage.setItem(SAVE_KEY, JSON.stringify(raw))
       } else {
         // Chỉ admin mới được import save dạng không ký.

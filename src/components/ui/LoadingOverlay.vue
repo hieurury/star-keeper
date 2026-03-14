@@ -11,7 +11,7 @@ function startTipTimer() {
   if (tipTimer) return
   tipTimer = setInterval(() => {
     ui.nextLoadingTip()
-  }, 2800)
+  }, 4200)
 }
 
 function stopTipTimer() {

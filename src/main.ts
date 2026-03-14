@@ -27,7 +27,7 @@ router.beforeEach((to, _from, next) => {
 
 router.afterEach((to) => {
 	const enteredGame = to.path === '/game'
-	const delay = enteredGame ? 950 : 420
+	const delay = enteredGame ? 2200 : 1400
 	setTimeout(() => ui.hideLoading(), delay)
 })
 
