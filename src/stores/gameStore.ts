@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { UPDATE_NOTICES } from '../content/updateNotices'
 
 // ─── Card System ──────────────────────────────────────────────────────────────
 export type CardType = 'attack' | 'support' | 'ultimate'
@@ -580,6 +581,7 @@ export const useGameStore = defineStore('game', () => {
   const username = ref('Phi Công')
   const avatarId = ref(0)
   const shipName = ref('Chiến Cơ Alpha')
+  const updateNoticeSeenIds = ref<string[]>([])
 
   // Tiến trình tài khoản (persistent, không reset giữa các ván)
   const accountLevel = ref(1)
@@ -1149,6 +1151,26 @@ export const useGameStore = defineStore('game', () => {
     return true
   }
 
+  function isUpdateNoticeSeen(id: string): boolean {
+    return updateNoticeSeenIds.value.includes(id)
+  }
+
+  function markUpdateNoticeSeen(id: string) {
+    if (!UPDATE_NOTICES.some(n => n.id === id)) return
+    if (updateNoticeSeenIds.value.includes(id)) return
+    updateNoticeSeenIds.value = [...updateNoticeSeenIds.value, id]
+    saveProgress()
+  }
+
+  function markAllUpdateNoticesSeen() {
+    const allIds = UPDATE_NOTICES.map(n => n.id)
+    const same = allIds.length === updateNoticeSeenIds.value.length
+      && allIds.every(id => updateNoticeSeenIds.value.includes(id))
+    if (same) return
+    updateNoticeSeenIds.value = allIds
+    saveProgress()
+  }
+
   function buyShipUpgrade(shipId: ShipId, key: ShipUpgradeKey): boolean {
     if (!ownedShips.value.includes(shipId)) return false
     const cost = getShipUpgradeCost(shipId, key)
@@ -1497,6 +1519,9 @@ export const useGameStore = defineStore('game', () => {
     const validAchievementIds = new Set(ALL_ACHIEVEMENTS.map(a => a.id))
     unlockedAchievements.value = [...new Set(unlockedAchievements.value.filter(id => validAchievementIds.has(id)))]
 
+    const validNoticeIds = new Set(UPDATE_NOTICES.map(n => n.id))
+    updateNoticeSeenIds.value = [...new Set(updateNoticeSeenIds.value.filter(id => validNoticeIds.has(id)))]
+
     const perm = { ...permUpgrades.value }
     for (const def of PERM_UPGRADE_DEFS) {
       const maxLv = def.costs.length
@@ -1526,6 +1551,7 @@ export const useGameStore = defineStore('game', () => {
       username: username.value,
       avatarId: avatarId.value,
       shipName: shipName.value,
+      updateNoticeSeenIds: updateNoticeSeenIds.value,
       // Account progression
       accountLevel: accountLevel.value,
       accountExp: accountExp.value,
@@ -1560,6 +1586,9 @@ export const useGameStore = defineStore('game', () => {
     username.value                = (data.username as string)                ?? 'Phi Công'
     avatarId.value                = (data.avatarId as number)                ?? 0
     shipName.value                = (data.shipName as string)                ?? 'Chiến Cơ Alpha'
+    const rawNoticeIds = (data.updateNoticeSeenIds as string[]) ?? []
+    const validNoticeIds = new Set(UPDATE_NOTICES.map(n => n.id))
+    updateNoticeSeenIds.value = [...new Set(rawNoticeIds.filter(id => validNoticeIds.has(id)))]
     accountLevel.value            = (data.accountLevel as number)            ?? 1
     accountExp.value              = (data.accountExp as number)              ?? 0
     ownedShips.value              = (data.ownedShips as string[])            ?? ['star_keeper']
@@ -1734,6 +1763,7 @@ export const useGameStore = defineStore('game', () => {
     username,
     avatarId,
     shipName,
+    updateNoticeSeenIds,
     // Account
     accountLevel,
     accountExp,
@@ -1770,6 +1800,9 @@ export const useGameStore = defineStore('game', () => {
     chooseCard,
     saveProgress,
     loadProgress,
+    isUpdateNoticeSeen,
+    markUpdateNoticeSeen,
+    markAllUpdateNoticesSeen,
     unlockAchievement,
     buyPermUpgrade,
     skillCooldown,

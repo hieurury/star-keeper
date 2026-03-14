@@ -15,12 +15,14 @@ import PixelButton from '../components/ui/PixelButton.vue'
 import TourOverlay, { type TourStep } from '../components/ui/TourOverlay.vue'
 import ArtifactIcon from '../components/ui/ArtifactIcon.vue'
 import CardIcon from '../components/ui/CardIcon.vue'
+import { UPDATE_NOTICES, type UpdateNotice } from '../content/updateNotices'
 import {
   PhCoins, PhDiamond, PhSword, PhShield, PhCrown,
   PhPlay, PhAirplaneTilt, PhRocketLaunch, PhMagicWand, PhCards, PhGear,
   PhClipboardText, PhPencilSimple, PhCheck, PhX,
   PhArrowLeft, PhCaretLeft, PhCaretRight, PhTimer,
   PhDownloadSimple, PhUploadSimple, PhWarning, PhWrench, PhLightning,
+  PhBell,
   PhTreasureChest,
 } from '@phosphor-icons/vue'
 
@@ -51,6 +53,8 @@ const showArtifactsPanel = ref(false)
 const showMissionsPanel = ref(false)
 const showShipUpgradePanel = ref(false)
 const upgradeShipId = ref<ShipId>('star_keeper')
+const showUpdateNotices = ref(false)
+const selectedNoticeId = ref<string | null>(null)
 const showAdminInput = ref(false)
 const adminInput = ref('')
 const showTourPrompt = ref(false)
@@ -76,6 +80,11 @@ function onImportFile(e: Event) {
 
 const completedMissions = computed(() => game.dailyMissions.filter(m => m.completed).length)
 const unclaimedMissions = computed(() => game.dailyMissions.filter(m => m.completed && !m.claimed).length)
+
+const notices = computed(() => [...UPDATE_NOTICES])
+const unreadNoticeIds = computed(() => notices.value.map(n => n.id).filter(id => !game.isUpdateNoticeSeen(id)))
+const unreadNoticeCount = computed(() => unreadNoticeIds.value.length)
+const selectedNotice = computed<UpdateNotice | null>(() => notices.value.find(n => n.id === selectedNoticeId.value) ?? null)
 
 const MILESTONE_ITEMS: Array<{ step: 3|5; reward: string }> = [
   { step: 3, reward: '400🪙+EXP' },
@@ -134,6 +143,30 @@ function startTour() {
 function onTourDone() {
   showTour.value = false
   localStorage.setItem('hasTakenTour', '1')
+}
+
+function openUpdateNotices() {
+  if (!selectedNoticeId.value) {
+    selectedNoticeId.value = unreadNoticeIds.value[0] ?? notices.value[0]?.id ?? null
+  }
+  showUpdateNotices.value = true
+}
+
+function closeUpdateNotices() {
+  showUpdateNotices.value = false
+}
+
+function chooseNotice(id: string) {
+  selectedNoticeId.value = id
+}
+
+function markSelectedNoticeSeen() {
+  if (!selectedNotice.value) return
+  game.markUpdateNoticeSeen(selectedNotice.value.id)
+}
+
+function markAllNoticesSeen() {
+  game.markAllUpdateNoticesSeen()
 }
 
 function confirmAdmin() {
@@ -318,6 +351,12 @@ onMounted(() => {
   if (!localStorage.getItem('hasTakenTour')) {
     showTourPrompt.value = true
   }
+  if (!selectedNoticeId.value && notices.value.length > 0) {
+    selectedNoticeId.value = unreadNoticeIds.value[0] ?? notices.value[0]!.id
+  }
+  if (unreadNoticeCount.value > 0) {
+    showUpdateNotices.value = true
+  }
   // Thụ động tái sinh độ bền: 1/phút
   regenInterval = setInterval(() => game.tickDurabilityRegen(), 60000)
   document.addEventListener('keydown', onAdminKeyDown)
@@ -412,6 +451,10 @@ function onShipNameKey(e: KeyboardEvent) {
         <div class="topbar-lv__exp">{{ game.accountExp }}/{{ game.accountExpToNextLevel }}</div>
       </div>
       <div class="topbar-right" data-tour="currency">
+        <button class="topbar-notices" @click="openUpdateNotices">
+          <PhBell weight="fill" :size="18" />
+          <span v-if="unreadNoticeCount > 0" class="topbar-notices__badge">{{ unreadNoticeCount }}</span>
+        </button>
         <button class="topbar-missions" @click="showMissionsPanel = true">
           <PhClipboardText weight="fill" :size="18" />
           <span v-if="unclaimedMissions > 0" class="topbar-missions__badge">{{ unclaimedMissions }}</span>
@@ -1027,6 +1070,65 @@ function onShipNameKey(e: KeyboardEvent) {
           <div class="modal-dialog__title">SẮP RA MẮT</div>
           <div class="modal-dialog__desc">Tính năng này đang được phát triển và sẽ có mặt trong phiên bản tới!</div>
           <PixelButton label="Đã Hiểu" size="md" @click="showComingSoon = false" />
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Update notices panel -->
+    <Transition name="sheet">
+      <div v-if="showUpdateNotices" class="sheet-overlay" @click.self="closeUpdateNotices">
+        <div class="ships-sheet">
+          <div class="sheet-header">
+            <div style="width:36px"/>
+            <div class="sheet-title">THÔNG BÁO CẬP NHẬT</div>
+            <button class="sheet-close" @click="closeUpdateNotices"><PhX :size="14" /></button>
+          </div>
+
+          <div class="ships-scroll" style="padding: 12px 14px 20px;">
+            <div class="notice-tabs">
+              <button
+                v-for="n in notices"
+                :key="n.id"
+                class="notice-tab"
+                :class="{ 'notice-tab--active': selectedNoticeId === n.id, 'notice-tab--unread': !game.isUpdateNoticeSeen(n.id) }"
+                @click="chooseNotice(n.id)"
+              >
+                <span class="notice-tab__version">{{ n.version }}</span>
+                <span class="notice-tab__title">{{ n.title }}</span>
+              </button>
+            </div>
+
+            <div v-if="selectedNotice" class="notice-detail">
+              <div class="notice-detail__top">
+                <div>
+                  <div class="notice-detail__version">{{ selectedNotice.version }} · {{ selectedNotice.date }}</div>
+                  <h3 class="notice-detail__title">{{ selectedNotice.title }}</h3>
+                </div>
+                <div v-if="!game.isUpdateNoticeSeen(selectedNotice.id)" class="notice-pill">MỚI</div>
+              </div>
+
+              <div class="notice-detail__summary">{{ selectedNotice.summary }}</div>
+
+              <div v-if="selectedNotice.media?.length" class="notice-media-grid">
+                <figure v-for="(m, idx) in selectedNotice.media" :key="m.src + idx" class="notice-media">
+                  <img :src="m.src" :alt="m.alt" />
+                  <figcaption v-if="m.caption">{{ m.caption }}</figcaption>
+                </figure>
+              </div>
+
+              <div v-for="section in selectedNotice.sections" :key="section.heading" class="notice-section">
+                <div class="notice-section__heading">{{ section.heading }}</div>
+                <ul class="notice-section__list">
+                  <li v-for="(b, i) in section.bullets" :key="section.heading + i">{{ b }}</li>
+                </ul>
+              </div>
+
+              <div class="notice-actions">
+                <button class="notice-btn" @click="markSelectedNoticeSeen">Đánh dấu đã xem</button>
+                <button class="notice-btn notice-btn--ghost" @click="markAllNoticesSeen">Đánh dấu xem tất cả</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </Transition>
@@ -2450,6 +2552,39 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   align-items: center;
   gap: 6px;
 }
+.topbar-notices {
+  position: relative;
+  background: none;
+  border: 2px solid var(--color-border-dark);
+  color: var(--color-text-dim);
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.topbar-notices:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.topbar-notices__badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #ff4444;
+  color: #fff;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  min-width: 15px;
+  height: 15px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-bg);
+  padding: 0 2px;
+}
 .topbar-missions {
   position: relative;
   background: none;
@@ -2482,6 +2617,151 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   justify-content: center;
   border: 2px solid var(--color-bg);
   padding: 0 2px;
+}
+
+/* ─── Update Notice Panel ─────────────────────────────────────────────── */
+.notice-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.notice-tab {
+  background: var(--color-panel-dark);
+  border: 2px solid var(--color-border-dark);
+  color: var(--color-text);
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.notice-tab--active {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px rgba(0, 207, 255, 0.25);
+}
+.notice-tab--unread .notice-tab__title {
+  color: #fff4a2;
+}
+.notice-tab__version {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-accent);
+  letter-spacing: 0.8px;
+}
+.notice-tab__title {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--color-text-dim);
+  letter-spacing: 0.5px;
+}
+.notice-detail {
+  border: 2px solid var(--color-border-dark);
+  background: var(--color-panel-dark);
+  padding: 10px;
+}
+.notice-detail__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.notice-detail__version {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-accent);
+}
+.notice-detail__title {
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  color: var(--color-text);
+  margin: 2px 0 0;
+  letter-spacing: 0.5px;
+}
+.notice-pill {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #2a1000;
+  background: #ffb347;
+  border: 1px solid #ffd28f;
+  padding: 2px 6px;
+  letter-spacing: 0.8px;
+}
+.notice-detail__summary {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--color-text-dim);
+  line-height: 1.75;
+  margin-bottom: 8px;
+}
+.notice-media-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.notice-media {
+  margin: 0;
+  border: 2px solid var(--color-border-dark);
+  background: #081425;
+  padding: 6px;
+}
+.notice-media img {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+}
+.notice-media figcaption {
+  margin-top: 6px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+  line-height: 1.6;
+}
+.notice-section {
+  margin-bottom: 9px;
+}
+.notice-section__heading {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #d9f3ff;
+  letter-spacing: 0.8px;
+  margin-bottom: 4px;
+}
+.notice-section__list {
+  margin: 0;
+  padding-left: 16px;
+}
+.notice-section__list li {
+  font-family: var(--font-pixel);
+  font-size: 8.5px;
+  color: var(--color-text-dim);
+  line-height: 1.8;
+}
+.notice-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.notice-btn {
+  flex: 1;
+  border: 2px solid #2f7ba8;
+  background: #10395c;
+  color: #bce9ff;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 0.6px;
+  padding: 8px 10px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.notice-btn--ghost {
+  background: #13212f;
+  border-color: #33475a;
+  color: #9db1c5;
 }
 
 /* ─── Mission Panel ──────────────────────────────────────────────────────── */
