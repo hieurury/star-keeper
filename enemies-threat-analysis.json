@@ -1,0 +1,158 @@
+{
+  "metadata": {
+    "stage": 0,
+    "normalizedScales": {
+      "speed_stat": "0-100 (pixels per frame)",
+      "damage_stat": "0-100 (collision damage to player)",
+      "threat_stat": "1-100 (overall threat assessment)"
+    },
+    "notes": "All values calculated at stage 0. Speed scales with stage progression for most enemies (except static enemies). Damage scales linearly: base + stage * multiplier."
+  },
+  "enemies": [
+    {
+      "kind": "pioneer",
+      "speed_stat": 80,
+      "damage_stat": 42,
+      "threat_stat": 40,
+      "behavior_notes": "Fast basic attacker with no special mechanics. Forms squads in various formations. Predictable movement patterns. Low threat individually but dangerous in groups."
+    },
+    {
+      "kind": "kamikaze",
+      "speed_stat": 60,
+      "damage_stat": 42,
+      "threat_stat": 85,
+      "behavior_notes": "SELF-DESTRUCT MECHANIC: Descends until near player, then enters 'aim' state with warning sign and targeting line. Represents extreme suicide threat. One collision = heavy damage from detonation."
+    },
+    {
+      "kind": "sniper",
+      "speed_stat": 22,
+      "damage_stat": 42,
+      "threat_stat": 70,
+      "behavior_notes": "Mobile ranged attacker. Positions from distance, shoots repeatedly. Dodges and evades. Slow vertical movement but delivers sustained ranged damage. Spawns with escorts (Pioneers). Multi-hit threat."
+    },
+    {
+      "kind": "thuatsi",
+      "speed_stat": 64,
+      "damage_stat": 42,
+      "threat_stat": 55,
+      "behavior_notes": "Support/utility enemy - HEALS ALLIES via animated lightning beams. Reduces overall threat to player by keeping enemies alive. Meteor transformation on death. Moderate independent threat but enhances squad survivability."
+    },
+    {
+      "kind": "cnox_greedy",
+      "speed_stat": 68,
+      "damage_stat": 42,
+      "threat_stat": 50,
+      "behavior_notes": "Greed mechanic: steals exp when collecting orbs, changes core color based on stolen exp. Grows stronger with stolen resources. Average combat stats but exp denial is secondary threat."
+    },
+    {
+      "kind": "dai_lien",
+      "speed_stat": 92,
+      "damage_stat": 42,
+      "threat_stat": 65,
+      "behavior_notes": "FASTEST regular enemy. Shoots elongated bullets repeatedly (shootTimer: 36-60 frames). High mobility combined with ranged attack. Spawns in pairs/trios. Rapid fire DPS threat."
+    },
+    {
+      "kind": "cnox_spark",
+      "speed_stat": 32,
+      "damage_stat": 71,
+      "threat_stat": 80,
+      "behavior_notes": "LASER WEAPON enemy. Very high collision damage (20 base). Enters 'warn' then 'laser' states. Powerful beam attack. Moderate speed offset by high damage output. Significant sustained damage threat."
+    },
+    {
+      "kind": "cnox_shield",
+      "speed_stat": 0,
+      "damage_stat": 62,
+      "threat_stat": 45,
+      "behavior_notes": "STATIC TANK with 4 shield orbs. High HP (60 base). Doesn't attack player directly - purely defensive. Blocks projectiles and space. Threat is positional (blocking lanes) not combat damage."
+    },
+    {
+      "kind": "thu_ho",
+      "speed_stat": 0,
+      "damage_stat": 42,
+      "threat_stat": 35,
+      "behavior_notes": "SHIELD TANK with reflection mechanic. Slow horizontal approach (3.2 px/frame sideways). Forms tight blocking lines. High HP (64 base). Defensive support - low direct threat, medium positional threat."
+    },
+    {
+      "kind": "boss_cnoxsun",
+      "speed_stat": 0,
+      "damage_stat": 100,
+      "threat_stat": 95,
+      "behavior_notes": "Boss with 6 rotating wing weapons and energy crystal attacks. Multiple weapon patterns. Can spawn projectiles in radial bursts. Stationary but devastating output. 2000+ HP base."
+    },
+    {
+      "kind": "boss_invader",
+      "speed_stat": 0,
+      "damage_stat": 100,
+      "threat_stat": 95,
+      "behavior_notes": "Boss with 5 turrets that fire independently. Multi-phase combat. Spawns Kamikaze units from turrets. Can stun turrets but adds complexity. 2000+ HP base. Turret-based DPS threat."
+    },
+    {
+      "kind": "boss_stardestroyer",
+      "speed_stat": 0,
+      "damage_stat": 100,
+      "threat_stat": 96,
+      "behavior_notes": "Boss with dual attack systems: radial bullet spray AND homing missiles. Missiles with 180-240 frame lifetimes. Advanced targeting. 1600+ HP base. Combines pattern variety with homing mechanic - highest complexity threat."
+    },
+    {
+      "kind": "boss_trumso",
+      "speed_stat": 0,
+      "damage_stat": 100,
+      "threat_stat": 95,
+      "behavior_notes": "Boss variant (Trump-themed). Stationary. Boss-class collision damage (24 base). 2000+ HP range. Multi-phase combat patterns. Extreme threat tier."
+    },
+    {
+      "kind": "boss_tinhvan",
+      "speed_stat": 0,
+      "damage_stat": 100,
+      "threat_stat": 95,
+      "behavior_notes": "Boss variant (Vietnamese-themed). Stationary. Boss-class collision damage (24 base). 1800+ HP range. Multi-phase patterns. Extreme threat tier."
+    }
+  ],
+  "threat_rankings": {
+    "extreme": [
+      "boss_stardestroyer (96)",
+      "boss_cnoxsun (95)",
+      "boss_invader (95)",
+      "boss_trumso (95)",
+      "boss_tinhvan (95)"
+    ],
+    "very_high": [
+      "kamikaze (85)",
+      "cnox_spark (80)"
+    ],
+    "high": [
+      "sniper (70)",
+      "dai_lien (65)"
+    ],
+    "medium": [
+      "thuatsi (55)",
+      "cnox_greedy (50)",
+      "cnox_shield (45)"
+    ],
+    "low_medium": [
+      "pioneer (40)",
+      "thu_ho (35)"
+    ]
+  },
+  "mechanics_summary": {
+    "damage_scaling": "damage = base + (current_stage * multiplier)",
+    "speed_scaling": "Most enemies: vy = base + (current_stage * 0.06-0.1), Kamikaze: vy = 1.2 + rand(0.6) + stage * 0.08",
+    "special_mechanics": {
+      "kamikaze": "Self-destruct on collision",
+      "thuatsi": "Heals allied enemies via laser beam",
+      "cnox_greedy": "Steals exp orbs, grows in power",
+      "cnox_spark": "Laser attack weapon",
+      "cnox_shield": "Static shield tank, blocks projectiles",
+      "thu_ho": "Reflects damage, blocks paths",
+      "bosses": "Multi-phase, high HP, complex attack patterns"
+    },
+    "threat_factors": {
+      "high_damage": "Bosses (24), CnoxSpark (20), CnoxShield (18)",
+      "high_speed": "DaiLien (2.3), Pioneer (2.0), ThuatSi (1.6), CnoxGreedy (1.5-1.9)",
+      "self_destruct": "Kamikaze - instant threat multiplier",
+      "ranged_attacks": "Sniper, DaiLien (continuous fire), Bosses (patterns)",
+      "support": "ThuatSi (heals), Thu_ho (reflects), CnoxShield (shields)",
+      "defensive": "CnoxShield, ThuHo - positional threat vs combat threat"
+    }
+  }
+}

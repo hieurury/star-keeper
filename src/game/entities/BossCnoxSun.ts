@@ -8,7 +8,7 @@ import { screenFlash } from '../systems/effects'
 
 type GameStore = ReturnType<typeof useGameStore>
 
-function drawSunBossBody(g: Graphics, size: number): void {
+export function drawSunBossBody(g: Graphics, size: number): void {
   g.clear()
   g.circle(0, 0, size * 1.08).fill({ color: 0x1a1105, alpha: 0.72 })
   g.circle(0, 0, size).fill(0x2a1707)

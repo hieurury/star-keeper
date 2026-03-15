@@ -41,7 +41,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Giữ vị trí trung tâm để tránh bị ép vào biên.',
       'Dọn bớt từng cánh đội hình trước để mở khoảng trống.',
     ],
-    stats: { hp: 22, speed: 54, damage: 28, threat: 24 },
+    stats: { hp: 28, speed: 80, damage: 42, threat: 38 },
     phases: [
       { title: 'Tiến vào', desc: 'Bay vào khu vực chiến đấu theo điểm tập kết.', art: 'pioneer_enter' },
       { title: 'Patrol', desc: 'Dao động nhỏ để duy trì áp lực đường đạn.', art: 'pioneer_patrol' },
@@ -61,7 +61,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Đổi hướng ngay khi thấy vạch khóa.',
       'Không đứng yên gần mép dưới màn hình.',
     ],
-    stats: { hp: 24, speed: 78, damage: 52, threat: 45 },
+    stats: { hp: 30, speed: 68, damage: 42, threat: 82 },
     phases: [
       { title: 'Khóa mục tiêu', desc: 'Hiện cảnh báo trước khi nạp lao.', art: 'kamikaze_lock' },
       { title: 'Charge', desc: 'Tăng tốc cực nhanh theo quỹ đạo đã ngắm.', art: 'kamikaze_charge' },
@@ -81,7 +81,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Ưu tiên hạ Sniper trước khi xử lý đám đông.',
       'Di chuyển zig-zag để phá đường ngắm.',
     ],
-    stats: { hp: 30, speed: 40, damage: 64, threat: 58 },
+    stats: { hp: 12, speed: 22, damage: 42, threat: 68 },
     phases: [
       { title: 'Ngắm bắn', desc: 'Neo vị trí và khóa trục tấn công.', art: 'sniper_aim' },
       { title: 'Bắn tỉa', desc: 'Bắn đạn mạnh từng nhịp với độ chính xác cao.', art: 'sniper_shot' },
@@ -100,7 +100,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Né sang hai cánh khi chúng bắt đầu burst.',
       'Dùng sát thương diện rộng để cắt cụm Đại Liên nhanh.',
     ],
-    stats: { hp: 36, speed: 42, damage: 57, threat: 54 },
+    stats: { hp: 32, speed: 92, damage: 42, threat: 70 },
     phases: [
       { title: 'Giữ đội hình', desc: 'Giữ cự ly để chuẩn bị xả liên thanh.', art: 'dailien_hold' },
       { title: 'Burst', desc: 'Phun đạn theo chùm ngắn nhưng dày.', art: 'dailien_burst' },
@@ -119,7 +119,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Quan sát hiệu ứng sáng trước khi dồn sát thương.',
       'Tách đàn Thủ Hộ để giảm phản xạ diện rộng.',
     ],
-    stats: { hp: 44, speed: 36, damage: 46, threat: 52 },
+    stats: { hp: 64, speed: 32, damage: 42, threat: 42 },
     phases: [
       { title: 'Canh phòng', desc: 'Bay chậm, giữ tuyến trước cho đồng đội.', art: 'thuho_guard' },
       { title: 'Phản đòn', desc: 'Bật trạng thái phản xạ theo nhịp đội hình.', art: 'thuho_reflect' },
@@ -138,7 +138,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Ưu tiên hạ Thuật Sĩ trước khi xử lý tanker.',
       'Né ngang khi nó chuyển sang dạng thiên thạch.',
     ],
-    stats: { hp: 38, speed: 34, damage: 38, threat: 50 },
+    stats: { hp: 28, speed: 60, damage: 42, threat: 52 },
     phases: [
       { title: 'Hồi phục tia', desc: 'Kênh tia hồi máu lên mục tiêu gần nhất.', art: 'thuatsi_heal' },
       { title: 'Thiên thạch', desc: 'Bị hạ sẽ hóa đá rơi, gây va chạm mạnh.', art: 'thuatsi_meteor' },
@@ -157,7 +157,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Tập trung hạ sớm trước khi nó tích nhiều EXP.',
       'Giữ khu vực orb sạch để hạn chế tăng trưởng.',
     ],
-    stats: { hp: 52, speed: 40, damage: 55, threat: 60 },
+    stats: { hp: 22, speed: 60, damage: 42, threat: 58 },
     phases: [
       { title: 'Hút EXP', desc: 'Thu orb quanh khu vực để tích trữ năng lượng.', art: 'greedy_absorb' },
       { title: 'Tiến hóa', desc: 'Tăng kích cỡ, HP và sức tấn công.', art: 'greedy_evolve' },
@@ -176,7 +176,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Dùng kỹ năng xuyên hoặc sát thương lan để phá hàng.',
       'Không đứng quá lâu cùng một lane khi hàng khiên áp xuống.',
     ],
-    stats: { hp: 48, speed: 32, damage: 42, threat: 48 },
+    stats: { hp: 60, speed: 0, damage: 62, threat: 52 },
     phases: [
       { title: 'Lập hàng', desc: 'Xếp đội hình và khóa trục tiến quân.', art: 'shield_form' },
       { title: 'Đẩy lane', desc: 'Tiến chậm nhưng tạo áp lực không gian lớn.', art: 'shield_push' },
@@ -195,7 +195,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Quan sát giai đoạn warning để đổi vị trí sớm.',
       'Không đứng giữa 2 Spark đang chuẩn bị link beam.',
     ],
-    stats: { hp: 46, speed: 46, damage: 62, threat: 66 },
+    stats: { hp: 34, speed: 32, damage: 71, threat: 80 },
     phases: [
       { title: 'Warning', desc: 'Vẽ cone/ray cảnh báo trước khi bắn.', art: 'spark_warning' },
       { title: 'Firing', desc: 'Bắn tia quét hoặc liên kết theo cặp.', art: 'spark_fire' },
@@ -215,7 +215,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Giữ khoảng trống để né tên lửa nhiều đợt.',
       'Ưu tiên né laser khóa trước khi dồn DPS.',
     ],
-    stats: { hp: 78, speed: 28, damage: 82, threat: 74 },
+    stats: { hp: 1600, speed: 0, damage: 100, threat: 95 },
     phases: [
       { title: 'Pha 1', desc: 'Pháo chính + đạn nền.', art: 'sd_phase1' },
       { title: 'Pha 2', desc: 'Khóa laser và ép góc né.', art: 'sd_phase2' },
@@ -235,7 +235,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Hạ các tháp pháo gây khó chịu sớm nếu có cơ hội.',
       'Đừng đứng giữa boss và mép dưới quá lâu.',
     ],
-    stats: { hp: 84, speed: 26, damage: 86, threat: 79 },
+    stats: { hp: 2000, speed: 0, damage: 100, threat: 96 },
     phases: [
       { title: 'Tháp pháo', desc: 'Nhiều ụ súng hoạt động song song.', art: 'inv_turret' },
       { title: 'Ép vùng', desc: 'AOE và mưa đạn buộc đổi lane.', art: 'inv_zone' },
@@ -255,7 +255,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Tránh đứng gần tâm hố đen khi đang có đạn dày.',
       'Canh thời điểm cổng triệu hồi để dọn lính sớm.',
     ],
-    stats: { hp: 88, speed: 24, damage: 88, threat: 84 },
+    stats: { hp: 2200, speed: 0, damage: 100, threat: 95 },
     phases: [
       { title: 'Quỹ đạo súng', desc: 'Nhiều mấu súng bắn burst theo vòng quay.', art: 'tv_orbit' },
       { title: 'Hố đen', desc: 'Tạo vùng kéo, phá nhịp điều khiển người chơi.', art: 'tv_blackhole' },
@@ -275,7 +275,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Quan sát hiệu ứng warning để biết mode chuẩn bị kích hoạt.',
       'Khi charge lane, né ngang sớm thay vì né muộn.',
     ],
-    stats: { hp: 82, speed: 30, damage: 90, threat: 86 },
+    stats: { hp: 2800, speed: 0, damage: 100, threat: 96 },
     phases: [
       { title: 'Machinegun', desc: 'Xả đạn nhanh theo cụm ngắn.', art: 'trum_machinegun' },
       { title: 'Missile', desc: 'Phóng tên lửa truy đuổi theo nhịp.', art: 'trum_missile' },
@@ -295,7 +295,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
       'Ưu tiên phá tinh thể để chặn hồi máu boss.',
       'Trong pha core laser, giữ di chuyển đều theo hướng quét.',
     ],
-    stats: { hp: 94, speed: 26, damage: 94, threat: 93 },
+    stats: { hp: 3400, speed: 0, damage: 100, threat: 96 },
     phases: [
       { title: 'Vũ khí sao', desc: '4 sao quanh boss thay phiên pattern tấn công.', art: 'sun_stars' },
       { title: 'Tinh thể năng lượng', desc: 'Spawn tinh thể, hồi HP theo số lượng còn lại.', art: 'sun_crystal' },

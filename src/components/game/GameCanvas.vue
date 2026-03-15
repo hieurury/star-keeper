@@ -1643,12 +1643,12 @@ function gameLoop(ticker: Ticker) {
       e.cnoxShieldAngle = (e.cnoxShieldAngle ?? 0) + 0.05 * dt
       if (e.cnoxShields?.length) {
         const radius = 22
-        e.cnoxShields[0].x = Math.cos(e.cnoxShieldAngle) * radius
-        e.cnoxShields[0].y = Math.sin(e.cnoxShieldAngle) * radius
-        e.cnoxShields[0].rotation = e.cnoxShieldAngle
-        e.cnoxShields[1].x = Math.cos((e.cnoxShieldAngle ?? 0) + Math.PI) * radius
-        e.cnoxShields[1].y = Math.sin((e.cnoxShieldAngle ?? 0) + Math.PI) * radius
-        e.cnoxShields[1].rotation = (e.cnoxShieldAngle ?? 0) + Math.PI
+        for (let si = 0; si < e.cnoxShields.length; si++) {
+          const angle = (e.cnoxShieldAngle ?? 0) + (si * Math.PI / 2)
+          e.cnoxShields[si].x = Math.cos(angle) * radius
+          e.cnoxShields[si].y = Math.sin(angle) * radius
+          e.cnoxShields[si].rotation = angle
+        }
       }
       if (e.container.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 60) {
         if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
