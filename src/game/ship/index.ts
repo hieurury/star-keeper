@@ -48,6 +48,41 @@ export function drawShip(g: Graphics, shipId: string): void {
     // Engine exhaust
     g.rect(-5, 18, 10, 7).fill({ color: 0xff5500, alpha: 0.9 })
     g.rect(-3, 22, 6, 5).fill({ color: 0xffcc22, alpha: 0.95 })
+  } else if (shipId === 'star_faster') {
+    g.clear()
+    // Fuselage - wider, sports car look (F12-inspired) - SCALED UP
+    g.rect(-6, -28, 12, 44).fill(0xf5f5ff)
+    // Body highlight - glossy effect on left side
+    g.rect(-5.5, -28, 2.5, 44).fill({ color: 0xffffff, alpha: 0.5 })
+    // Extended nose cone - long pointed muzzle
+    g.poly([0, -40, 6, -20, -6, -20]).fill(0x6644bb)
+    g.poly([0, -40, 0, -25, 6, -20]).fill({ color: 0x8855dd, alpha: 0.7 })
+    // Aggressive cockpit - angular windshield
+    g.poly([-4, -20, 4, -20, 3, -10, -3, -10]).fill({ color: 0x4477ff, alpha: 1.0 })
+    g.poly([-3.5, -10, 3.5, -10, 2.5, -2, -2.5, -2]).fill({ color: 0x6699ff, alpha: 0.8 })
+    // Hood vents (air intake)
+    g.rect(-5, -7, 1.8, 5).fill({ color: 0xb8a8dd, alpha: 0.7 })
+    g.rect(3.2, -7, 1.8, 5).fill({ color: 0xb8a8dd, alpha: 0.7 })
+    // Upper swept wings - pair 1 (primary) - long and swept back
+    g.poly([-6, -10, -27, -5, -25, 7, -6, 0]).fill(0xb8a0ff)
+    g.poly([6, -10, 27, -5, 25, 7, 6, 0]).fill(0xb8a0ff)
+    // Wing upper detail line
+    g.poly([-6, -10, -27, -5, -26, -2, -6, -5]).fill({ color: 0xd0c0ff, alpha: 0.6 })
+    g.poly([6, -10, 27, -5, 25, -2, 6, -5]).fill({ color: 0xd0c0ff, alpha: 0.6 })
+    // Mid wings - pair 2 (canards-like) - longer and curved 90 back
+    g.poly([-6, -2, -20, -2, -18, 13, -6, 7]).fill({ color: 0xa08add, alpha: 0.85 })
+    g.poly([6, -2, 20, -2, 18, 13, 6, 7]).fill({ color: 0xa08add, alpha: 0.85 })
+    // Rear wings - pair 3 (stabilizers)
+    g.poly([-6, 5, -15, 5, -13, 10, -6, 7]).fill({ color: 0x8878cc, alpha: 0.8 })
+    g.poly([6, 5, 15, 5, 13, 10, 6, 7]).fill({ color: 0x8878cc, alpha: 0.8 })
+    // Rear body - muscular curves
+    g.poly([-6, 15, 6, 15, 4, 20, -4, 20]).fill(0x9a88cc)
+    // Side stripes down the body (accent)
+    g.rect(-5.8, -12, 1, 27).fill({ color: 0xc0a8ff, alpha: 0.5 })
+    g.rect(4.8, -12, 1, 27).fill({ color: 0xc0a8ff, alpha: 0.5 })
+    // Main engine - glowing core
+    g.circle(0, 16, 3.8).fill({ color: 0x00eeff, alpha: 0.6 })
+    g.circle(0, 16, 2.2).fill({ color: 0x66ffff, alpha: 1.0 })
   } else {
     g.clear()
     g.rect(-10, -22, 20, 34).fill(0x00cfff)
@@ -59,13 +94,23 @@ export function drawShip(g: Graphics, shipId: string): void {
 }
 
 // ─── Player bullet ────────────────────────────────────────────────────────────
-export function drawBullet(g: Graphics, spdScale = 1.0): void {
+export function drawBullet(g: Graphics, spdScale = 1.0, shipId = 'star_keeper'): void {
   g.clear()
   const sz = Math.max(0.6, 1.0 / Math.pow(spdScale, 0.35))
-  const w = Math.max(2, Math.round(4 * sz))
-  const h = Math.max(11, Math.round(18 * sz))
-  g.rect(-w / 2, -(h * 0.55), w, h).fill(0xffee22)
-  g.rect(-w / 4, -(h * 0.55) - Math.round(h * 0.22), Math.max(1, w / 2), Math.round(h * 0.4)).fill({ color: 0xffffff, alpha: 0.8 })
+  
+  if (shipId === 'star_faster') {
+    // Thin small purple bullet for Star Faster
+    const w = Math.max(1, Math.round(2 * sz))
+    const h = Math.max(10, Math.round(16 * sz))
+    g.rect(-w / 2, -(h * 0.6), w, h).fill(0xd9a7f7)
+    g.rect(-w / 3, -(h * 0.6) - Math.round(h * 0.12), Math.max(1, Math.round(w / 1.5)), Math.round(h * 0.25)).fill({ color: 0xf5e6ff, alpha: 0.8 })
+  } else {
+    // Yellow bullet for other ships
+    const w = Math.max(2, Math.round(4 * sz))
+    const h = Math.max(11, Math.round(18 * sz))
+    g.rect(-w / 2, -(h * 0.55), w, h).fill(0xffee22)
+    g.rect(-w / 4, -(h * 0.55) - Math.round(h * 0.22), Math.max(1, w / 2), Math.round(h * 0.4)).fill({ color: 0xffffff, alpha: 0.8 })
+  }
 }
 
 // ─── Star Shooter missile ────────────────────────────────────────────────────

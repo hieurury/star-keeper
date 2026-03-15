@@ -90,6 +90,11 @@ export interface GameContext {
   shooterBlackHoleProjTX: number
   shooterBlackHoleProjTY: number
 
+  // Star Faster
+  starFasterSkillTimer: number
+  starFasterEnemySlowFactor: number
+  starFasterFireRateBoost: number
+
   // Input
   isDragging: boolean
   touchX: number
@@ -159,6 +164,9 @@ export function createGameContext(): GameContext {
     shooterBlackHoleProjGfx: null,
     shooterBlackHoleProjTX: 0,
     shooterBlackHoleProjTY: 0,
+    starFasterSkillTimer: 0,
+    starFasterEnemySlowFactor: 1,
+    starFasterFireRateBoost: 1,
     isDragging: false,
     touchX: 0,
     touchY: 0,

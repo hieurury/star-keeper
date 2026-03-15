@@ -14,7 +14,7 @@ import { drawEnemyBullet, drawBossBullet, drawBossMissile, drawTrumSoMissile } f
 
 import { spawnExplosion, screenFlash, spawnDamageText, spawnHealText, hitFlash, showStageClearBanner, spawnMissileWarning, spawnExpCollectEffect, getExpTierColor } from '../../game/systems/effects'
 import { createStar } from '../../game/systems/background'
-import { updateMissileLaunchers, updatePeriodicAbilities, activateHeatWave, activateBlackHole } from '../../game/systems/abilities'
+import { updateMissileLaunchers, updatePeriodicAbilities, activateHeatWave, activateBlackHole, activateParticleAcceleration } from '../../game/systems/abilities'
 import { drawArtifactGfx, initArtifactGfx, activateNeutronVacuum, activateManaCoreOverload, activateSoulHarvest } from '../../game/systems/artifacts'
 import { launchWave } from '../../game/systems/wave'
 import { killEnemy } from '../../game/entities/kill'
@@ -29,6 +29,7 @@ const canvasWrapper = ref<HTMLDivElement>()
 const game = useGameStore()
 
 let app: Application | null = null
+let starFasterAuraGfx: Graphics | null = null
 let autoPaused = false   // tracks pauses triggered by visibility/blur
 const ctx = createGameContext()
 const enemyWallStuckState = new WeakMap<Enemy, { x: number, y: number, stuckFrames: number }>()
@@ -62,16 +63,16 @@ function handleWindowFocus() {
 }
 
 // --- Shoot --------------------------------------------------------------------
-function shoot(offsetX = 0, vxDrift = 0) {
+function shoot(offsetX = 0, vxDrift = 0, speedMul = 1) {
   if (!ctx.playerShip) return
   const g = new Graphics()
-  drawBullet(g, game.upgrades.bulletSpeed)
+  drawBullet(g, game.upgrades.bulletSpeed, game.selectedShip as any)
   g.x = ctx.playerShip.x + offsetX
   g.y = ctx.playerShip.y - 22
   ctx.gameLayer.addChild(g)
   const pierceLeft = game.cardStats.bulletPierceOnKill ? 2 : undefined
   const pierceDmgMult = game.cardStats.bulletPierceOnKill ? 1.0 : undefined
-  ctx.bullets.push({ gfx: g, vy: 8 * game.upgrades.bulletSpeed, vx: vxDrift, pierceLeft, pierceDmgMult })
+  ctx.bullets.push({ gfx: g, vy: 8 * game.upgrades.bulletSpeed * speedMul, vx: vxDrift, pierceLeft, pierceDmgMult })
 }
 
 function drawAllyDrone(g: Graphics, isUltimate = false) {
@@ -246,6 +247,7 @@ function clearTransientCombatGraphics() {
 
   if (ctx.sfGfx) { ctx.sfGfx.clear(); ctx.sfGfx.visible = false }
   if (ctx.shieldGfx) { ctx.shieldGfx.clear(); ctx.shieldGfx.visible = false }
+  if (starFasterAuraGfx) { starFasterAuraGfx.clear(); starFasterAuraGfx.visible = false }
 
   for (const e of ctx.enemies) {
     removeEnemyDetachedGraphics(e)
@@ -467,6 +469,18 @@ function gameLoop(ticker: Ticker) {
   game.tickShield(dt / 60)
   if (ctx.bossAttackLockTimer > 0) ctx.bossAttackLockTimer = Math.max(0, ctx.bossAttackLockTimer - dt)
 
+  if (ctx.starFasterSkillTimer > 0) {
+    ctx.starFasterSkillTimer = Math.max(0, ctx.starFasterSkillTimer - dt)
+    if (ctx.starFasterSkillTimer <= 0) {
+      ctx.starFasterEnemySlowFactor = 1
+      ctx.starFasterFireRateBoost = 1
+    }
+  }
+  const starFasterSkillActive = game.selectedShip === 'star_faster' && ctx.starFasterSkillTimer > 0
+  const enemyTimeScale = starFasterSkillActive ? ctx.starFasterEnemySlowFactor : 1
+  const enemyBulletDt = dt * enemyTimeScale
+  const starFasterFireBoost = starFasterSkillActive ? ctx.starFasterFireRateBoost : 1
+
   // Neutron Star vacuum timer
   if (game.artifactStats.neutronVacuumActive) {
     ctx.neutronVacuumTimer += dt / 60
@@ -503,6 +517,8 @@ function gameLoop(ticker: Ticker) {
       activateSoulHarvest(ctx, game)
     } else if (game.selectedShip === 'star_shooter') {
       activateBlackHole(ctx, game)
+    } else if (game.selectedShip === 'star_faster') {
+      activateParticleAcceleration(ctx, game)
     } else {
       activateHeatWave(ctx, game)
     }
@@ -550,6 +566,30 @@ function gameLoop(ticker: Ticker) {
       ctx.shieldGfx.circle(0, 0, 32).fill({ color: 0x2266ff, alpha: 0.10 * pulse })
     } else {
       ctx.shieldGfx.visible = false
+    }
+  }
+
+  if (starFasterAuraGfx && ctx.playerShip) {
+    if (starFasterSkillActive) {
+      starFasterAuraGfx.visible = true
+      starFasterAuraGfx.x = ctx.playerShip.x
+      starFasterAuraGfx.y = ctx.playerShip.y
+      starFasterAuraGfx.clear()
+      const pulse = 0.6 + Math.sin(Date.now() * 0.012) * 0.4
+      const r1 = 24 + pulse * 4
+      const r2 = 32 + pulse * 6
+      starFasterAuraGfx.circle(0, 0, r2).stroke({ color: 0xb894ff, width: 2, alpha: 0.35 + pulse * 0.15 })
+      starFasterAuraGfx.circle(0, 0, r1).stroke({ color: 0x66eeff, width: 2.2, alpha: 0.55 + pulse * 0.2 })
+      starFasterAuraGfx.circle(0, 0, r1 - 9).fill({ color: 0x8b5fff, alpha: 0.10 + pulse * 0.05 })
+      for (let i = 0; i < 6; i++) {
+        const a = (Date.now() * 0.006) + (i * Math.PI * 2 / 6)
+        const x = Math.cos(a) * (r2 + 3)
+        const y = Math.sin(a) * (r2 + 3)
+        starFasterAuraGfx.circle(x, y, 1.8).fill({ color: 0xdcc7ff, alpha: 0.8 })
+      }
+    } else {
+      starFasterAuraGfx.visible = false
+      starFasterAuraGfx.clear()
     }
   }
 
@@ -662,12 +702,15 @@ function gameLoop(ticker: Ticker) {
   // Shooting
   const isHolder = game.selectedShip === 'star_holder'
   const isShooter = game.selectedShip === 'star_shooter'
-  const effectiveBulletCount = isShooter ? 1 : (game.upgrades.bulletCount + game.cardStats.arsenalBulletBonus)
+  const isFaster = game.selectedShip === 'star_faster'
+  const maxPrimaryBullets = isFaster ? 5 : (isShooter ? 4 : 3)
+  const baselineBullets = isFaster ? Math.max(2, game.upgrades.bulletCount) : game.upgrades.bulletCount
+  const effectiveBulletCount = isShooter ? 1 : Math.min(maxPrimaryBullets, baselineBullets + game.cardStats.arsenalBulletBonus)
   const effectiveMissileCount = isShooter ? (game.upgrades.bulletCount + game.cardStats.shooterMissileBonus) : 1
   ctx.shootTimer += dt
-  const baseShootInterval = isHolder ? 60 : (isShooter ? 160 : 18)
+  const baseShootInterval = isHolder ? 60 : (isShooter ? 160 : (isFaster ? 12 : 18))
   const shootCount = isShooter ? effectiveMissileCount : effectiveBulletCount
-  const shootInterval = (baseShootInterval / Math.sqrt(shootCount)) / ((1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100) * game.selectedShipFireRateMult)
+  const shootInterval = (baseShootInterval / Math.sqrt(shootCount)) / ((1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100) * game.selectedShipFireRateMult * starFasterFireBoost)
   if (!isBossIntro && ctx.shootTimer >= shootInterval) {
     ctx.shootTimer = 0
     const cnt = isShooter ? effectiveMissileCount : effectiveBulletCount
@@ -718,12 +761,14 @@ function gameLoop(ticker: Ticker) {
         }
       }
     } else {
-      const maxHalfAngle = Math.min(Math.PI * 12 / 180, (cnt - 1) * Math.PI * 3 / 180)
-      const bulletVy = 8 * game.upgrades.bulletSpeed
+      const perShotSpreadDeg = isFaster ? 1.35 : 3
+      const maxHalfAngle = Math.min(Math.PI * 12 / 180, (cnt - 1) * Math.PI * perShotSpreadDeg / 180)
+      const bulletSpeedMul = isFaster ? 1.45 : 1.15
+      const bulletVy = 8 * game.upgrades.bulletSpeed * bulletSpeedMul
       for (let i = 0; i < cnt; i++) {
         const norm = cnt > 1 ? (i - (cnt - 1) / 2) / ((cnt - 1) / 2) : 0
         const vxDrift = Math.tan(norm * maxHalfAngle) * bulletVy
-        shoot((i - (cnt - 1) / 2) * 12, vxDrift)
+        shoot((i - (cnt - 1) / 2) * 12, vxDrift, bulletSpeedMul)
       }
     }
   }
@@ -839,12 +884,12 @@ function gameLoop(ticker: Ticker) {
       const inHomingRange = homingRange === undefined
         || dist2(b.gfx.x, b.gfx.y, ctx.playerShip.x, ctx.playerShip.y) <= homingRange * homingRange
       if (inHomingRange) {
-        b.homingLife! -= dt
+        b.homingLife! -= enemyBulletDt
         const spd = b.homingSpeed ?? 3.5
         const dx = ctx.playerShip.x - b.gfx.x
         const dy = ctx.playerShip.y - b.gfx.y
         const mag = Math.sqrt(dx * dx + dy * dy) || 1
-        const steer = Math.min(0.2, 0.045 * dt)
+        const steer = Math.min(0.2, 0.045 * enemyBulletDt)
         b.vx += (dx / mag * spd - b.vx) * steer
         b.vy += (dy / mag * spd - b.vy) * steer
         const vmag = Math.sqrt(b.vx * b.vx + b.vy * b.vy) || 1
@@ -869,8 +914,8 @@ function gameLoop(ticker: Ticker) {
       flame.clear()
       flame.poly([0, 2, 3.2, 10.5, 0, 24 + pulse * 4, -3.2, 10.5]).fill({ color: b.missileTrailColor ?? 0xffa3ff, alpha: 0.64 + pulse * 0.16 })
     }
-    b.gfx.x += b.vx * dt
-    b.gfx.y += b.vy * dt
+    b.gfx.x += b.vx * enemyBulletDt
+    b.gfx.y += b.vy * enemyBulletDt
     if (b.gfx.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 40 || b.gfx.y < (GAME_H * (1 - 1 / ctx.bossZoom) / 2) - 40 || b.gfx.x < (GAME_W * (1 - 1 / ctx.bossZoom) / 2) - 40 || b.gfx.x > (GAME_W * (1 + 1 / ctx.bossZoom) / 2) + 40) {
       if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
       ctx.enemyBullets.splice(i, 1)
@@ -1157,8 +1202,10 @@ function gameLoop(ticker: Ticker) {
 
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
     const e = ctx.enemies[i]
+    const enemyPrevX = e.container.x
+    const enemyPrevY = e.container.y
     game.markEnemyEncountered(e.kind)
-    if ((e.contactDamageCd ?? 0) > 0) e.contactDamageCd = Math.max(0, (e.contactDamageCd ?? 0) - dt)
+    if ((e.contactDamageCd ?? 0) > 0) e.contactDamageCd = Math.max(0, (e.contactDamageCd ?? 0) - enemyBulletDt)
 
     if (isBossIntro && e.kind.startsWith('boss')) {
       continue
@@ -1643,8 +1690,10 @@ function gameLoop(ticker: Ticker) {
       e.cnoxShieldAngle = (e.cnoxShieldAngle ?? 0) + 0.05 * dt
       if (e.cnoxShields?.length) {
         const radius = 22
+        const shieldCount = Math.max(1, e.cnoxShields.length)
+        const step = (Math.PI * 2) / shieldCount
         for (let si = 0; si < e.cnoxShields.length; si++) {
-          const angle = (e.cnoxShieldAngle ?? 0) + (si * Math.PI / 2)
+          const angle = (e.cnoxShieldAngle ?? 0) + (si * step)
           e.cnoxShields[si].x = Math.cos(angle) * radius
           e.cnoxShields[si].y = Math.sin(angle) * radius
           e.cnoxShields[si].rotation = angle
@@ -3327,14 +3376,22 @@ function gameLoop(ticker: Ticker) {
       if (dist2(ctx.bullets[j].gfx.x, ctx.bullets[j].gfx.y, e.container.x, e.container.y) < bulletHitR * bulletHitR) {
         const bullet = ctx.bullets[j]!
         const bulletBaseDmg = bullet.damage ?? bulletDmg
-        const effectiveDmg = Math.round(bulletBaseDmg * (bullet.pierceDmgMult ?? 1))
+        const isBoss = e.kind.startsWith('boss_')
+        let woundMult = 1
+        if (game.selectedShip === 'star_faster' && game.cardStats.fasterDeepWound && bullet.damage == null) {
+          const perHitBonus = isBoss ? 0.025 : 0.05
+          const maxBonus = isBoss ? 0.5 : 1.0
+          const nextBonus = Math.min(maxBonus, (e.starFasterWoundBonus ?? 0) + perHitBonus)
+          e.starFasterWoundBonus = nextBonus
+          woundMult += nextBonus
+        }
+        const effectiveDmg = Math.round(bulletBaseDmg * (bullet.pierceDmgMult ?? 1) * woundMult)
         e.hp = Math.max(0, e.hp - effectiveDmg)
         const dmgOffY = e.kind === 'boss_tinhvan' ? 75 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 60 : (e.kind === 'boss_cnox_sun' ? 68 : 14))
         spawnDamageText(ctx, e.container.x, e.container.y - dmgOffY, effectiveDmg)
         hitFlash(e.body)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
         if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
-        const isBoss = e.kind.startsWith('boss_')
         if (game.cardStats.bulletPierceOnKill && !isBoss) {
           bullet.pierceDmgMult = (bullet.pierceDmgMult ?? 1) * 0.75
           bullet.pierceLeft = Math.max(0, (bullet.pierceLeft ?? 2) - 1)
@@ -3352,6 +3409,11 @@ function gameLoop(ticker: Ticker) {
       }
     }
     if (killed) continue
+
+    if (starFasterSkillActive) {
+      e.container.x = enemyPrevX + (e.container.x - enemyPrevX) * enemyTimeScale
+      e.container.y = enemyPrevY + (e.container.y - enemyPrevY) * enemyTimeScale
+    }
 
     // Contact damage: all hp enemies can damage and be damaged on collision with player
     if (!isBossIntro && ctx.playerShip && (e.contactDamageCd ?? 0) <= 0) {
@@ -3690,6 +3752,10 @@ async function initPixi() {
   ctx.shieldGfx.visible = false
   ctx.gameLayer.addChild(ctx.shieldGfx)
 
+  starFasterAuraGfx = new Graphics()
+  starFasterAuraGfx.visible = false
+  ctx.gameLayer.addChild(starFasterAuraGfx)
+
   // Zoom level indicator
   const zStyle = new TextStyle({
     fill: 0xffdd44, fontSize: 12,
@@ -3793,6 +3859,8 @@ function destroyPixi() {
   ctx.shooterMissiles = []; ctx.shooterBlackHoleTimer = 0; ctx.shooterBlackHoleGfx = null
   if (ctx.shooterBlackHoleProjGfx && !ctx.shooterBlackHoleProjGfx.destroyed) ctx.gameLayer?.removeChild(ctx.shooterBlackHoleProjGfx)
   ctx.shooterBlackHoleProjGfx = null
+  if (starFasterAuraGfx && !starFasterAuraGfx.destroyed) ctx.gameLayer?.removeChild(starFasterAuraGfx)
+  starFasterAuraGfx = null
 }
 
 onMounted(async () => { await initPixi(); game.startGame() })
@@ -3836,6 +3904,10 @@ watch(() => game.isPlaying, (val, old) => {
     ctx.pbTimer = 0; ctx.cbTimer = 0; ctx.lsTimer = 0; ctx.sfDmgTimer = 0
     if (ctx.shieldGfx) ctx.shieldGfx.visible = false
     if (ctx.sfGfx) ctx.sfGfx.visible = false
+    if (starFasterAuraGfx) { starFasterAuraGfx.visible = false; starFasterAuraGfx.clear() }
+    ctx.starFasterSkillTimer = 0
+    ctx.starFasterEnemySlowFactor = 1
+    ctx.starFasterFireRateBoost = 1
     ctx.shootTimer = 0; ctx.bossAttackLockTimer = 0; ctx.waveQueue = []; ctx.waveDispatchTimer = 0
     ctx.waveIsClearing = false; ctx.stageClearTimer = 0; ctx.stageAnnouncePending = false
     ctx.gamePhase = 'intro'; ctx.introTimer = 0

@@ -35,7 +35,7 @@ const AVATARS = ['PhRocketLaunch', 'PhAirplaneTilt', 'PhLightning', 'PhFire', 'P
 const showProfileSheet = ref(false)
 const showShipsPanel = ref(false)
 const shipIndex = ref(0)
-const SHIP_COUNT = 3
+const SHIP_COUNT = 4
 
 function prevShip() { shipIndex.value = (shipIndex.value - 1 + SHIP_COUNT) % SHIP_COUNT }
 function nextShip() { shipIndex.value = (shipIndex.value + 1) % SHIP_COUNT }
@@ -247,7 +247,7 @@ const usernameInput = ref('')
 const shipNameInput = ref('')
 
 interface ShipStatItem {
-  key: ShipUpgradeKey
+  key: ShipUpgradeKey | 'bulletCount'
   label: string
   display: string
   basePct: number
@@ -260,6 +260,7 @@ const SHIP_NAME_MAP: Record<ShipId, string> = {
   star_keeper: 'Star Keeper',
   star_holder: 'Star Holder',
   star_shooter: 'Star Shooter',
+  star_faster: 'Star Faster',
 }
 
 const SHIP_UPGRADE_LABEL_MAP: Record<ShipUpgradeKey, string> = {
@@ -272,6 +273,13 @@ const SHIP_UPGRADE_COLOR_MAP: Record<ShipUpgradeKey, string> = {
   damage: '#ff4444',
   fireRate: '#ff9900',
   hp: '#44ff88',
+}
+
+const SHIP_BULLET_COUNT: Record<ShipId, { base: number, max: number }> = {
+  star_keeper: { base: 1, max: 3 },
+  star_holder: { base: 1, max: 3 },
+  star_shooter: { base: 1, max: 4 },
+  star_faster: { base: 2, max: 5 },
 }
 
 function toPercent(current: number, max: number): number {
@@ -289,13 +297,27 @@ function buildShipStatItems(shipId: ShipId): ShipStatItem[] {
   const max = game.getShipMaxStats(shipId)
   const now = game.getShipEffectiveStats(shipId)
 
-  const rows: Array<{ key: ShipUpgradeKey, label: string }> = [
+  const rows: Array<{ key: ShipUpgradeKey | 'bulletCount', label: string }> = [
     { key: 'damage', label: 'SÁT THƯƠNG' },
     { key: 'fireRate', label: 'TỐC ĐỘ BẮN' },
     { key: 'hp', label: 'HP' },
+    { key: 'bulletCount', label: 'SỐ TIA ĐẠN' },
   ]
 
   return rows.map((r) => {
+    if (r.key === 'bulletCount') {
+      const bc = SHIP_BULLET_COUNT[shipId]
+      const pct = toPercent(bc.base, bc.max)
+      return {
+        key: 'bulletCount',
+        label: r.label,
+        display: `${bc.base} / ${bc.max}`,
+        basePct: pct,
+        bonusPct: 0,
+        pct: pct,
+        color: '#66ff88',
+      }
+    }
     const b = r.key === 'damage' ? base.damage : r.key === 'fireRate' ? base.fireRate : base.hp
     const n = r.key === 'damage' ? now.damage : r.key === 'fireRate' ? now.fireRate : now.hp
     const m = r.key === 'damage' ? max.damage : r.key === 'fireRate' ? max.fireRate : max.hp
@@ -304,11 +326,11 @@ function buildShipStatItems(shipId: ShipId): ShipStatItem[] {
     return {
       key: r.key,
       label: r.label,
-      display: formatShipStatValue(r.key, n, m),
+      display: formatShipStatValue(r.key as ShipUpgradeKey, n, m),
       basePct,
       bonusPct: Math.max(0, nowPct - basePct),
       pct: nowPct,
-      color: SHIP_UPGRADE_COLOR_MAP[r.key],
+      color: SHIP_UPGRADE_COLOR_MAP[r.key as ShipUpgradeKey],
     }
   })
 }
@@ -316,6 +338,7 @@ function buildShipStatItems(shipId: ShipId): ShipStatItem[] {
 const starKeeperStats = computed(() => buildShipStatItems('star_keeper'))
 const starHolderStats = computed(() => buildShipStatItems('star_holder'))
 const starShooterStats = computed(() => buildShipStatItems('star_shooter'))
+const starFasterStats = computed(() => buildShipStatItems('star_faster'))
 
 const upgradeShipName = computed(() => SHIP_NAME_MAP[upgradeShipId.value])
 const upgradeStatItems = computed(() => buildShipStatItems(upgradeShipId.value))
@@ -355,9 +378,10 @@ onMounted(() => {
   if (!selectedNoticeId.value && notices.value.length > 0) {
     selectedNoticeId.value = unreadNoticeIds.value[0] ?? notices.value[0]!.id
   }
-  if (unreadNoticeCount.value > 0) {
-    showUpdateNotices.value = true
-  }
+  // Disable auto-open notifications
+  // if (unreadNoticeCount.value > 0) {
+  //   showUpdateNotices.value = true
+  // }
   // Thụ động tái sinh độ bền: 1/phút
   regenInterval = setInterval(() => game.tickDurabilityRegen(), 60000)
   document.addEventListener('keydown', onAdminKeyDown)
@@ -502,6 +526,18 @@ function onShipNameKey(e: KeyboardEvent) {
                 <rect x="-6" y="12" width="12" height="9" fill="#ff6600" opacity="0.85"/>
               </svg>
             </template>
+            <template v-else-if="game.selectedShip === 'star_holder'">
+              <svg viewBox="-34 -32 68 66" width="56" height="54">
+                <polygon points="-9,4 -30,20 -9,14" fill="#dd6600"/>
+                <polygon points="-25,18 -30,20 -20,22" fill="#ff8800"/>
+                <polygon points="9,4 30,20 9,14" fill="#dd6600"/>
+                <polygon points="25,18 30,20 20,22" fill="#ff8800"/>
+                <rect x="-9" y="-24" width="18" height="38" fill="#ff9900"/>
+                <polygon points="0,-28 8,-18 -8,-18" fill="#ffee44"/>
+                <rect x="-6" y="14" width="12" height="10" fill="#ff4400" opacity="0.9"/>
+                <rect x="-3" y="18" width="6" height="6" fill="#ffcc00" opacity="0.85"/>
+              </svg>
+            </template>
             <template v-else-if="game.selectedShip === 'star_shooter'">
               <svg viewBox="-32 -33 64 62" width="56" height="54">
                 <polygon points="-7,-4 -29,-12 -25,5 -7,5" fill="#27405f"/>
@@ -521,6 +557,31 @@ function onShipNameKey(e: KeyboardEvent) {
                 <rect x="-3" y="-19" width="6" height="8" fill="#66ccff" opacity="0.88"/>
                 <rect x="-5" y="18" width="10" height="7" fill="#ff5500" opacity="0.9"/>
                 <rect x="-3" y="22" width="6" height="5" fill="#ffcc22" opacity="0.95"/>
+              </svg>
+            </template>
+            <template v-else-if="game.selectedShip === 'star_faster'">
+              <svg viewBox="-36 -44 72 64" width="56" height="54">
+                <rect x="-6" y="-28" width="12" height="44" fill="#f5f5ff"/>
+                <rect x="-5.5" y="-28" width="2.5" height="44" fill="#ffffff" opacity="0.5"/>
+                <polygon points="0,-40 6,-20 -6,-20" fill="#6644bb"/>
+                <polygon points="0,-40 0,-25 6,-20" fill="#8855dd" opacity="0.7"/>
+                <polygon points="-4,-20 4,-20 3,-10 -3,-10" fill="#4477ff"/>
+                <polygon points="-3.5,-10 3.5,-10 2.5,-2 -2.5,-2" fill="#6699ff" opacity="0.8"/>
+                <rect x="-5" y="-7" width="1.8" height="5" fill="#b8a8dd" opacity="0.7"/>
+                <rect x="3.2" y="-7" width="1.8" height="5" fill="#b8a8dd" opacity="0.7"/>
+                <polygon points="-6,-10 -27,-5 -25,7 -6,0" fill="#b8a0ff"/>
+                <polygon points="6,-10 27,-5 25,7 6,0" fill="#b8a0ff"/>
+                <polygon points="-6,-10 -27,-5 -26,-2 -6,-5" fill="#d0c0ff" opacity="0.6"/>
+                <polygon points="6,-10 27,-5 25,-2 6,-5" fill="#d0c0ff" opacity="0.6"/>
+                <polygon points="-6,-2 -20,-2 -18,13 -6,7" fill="#a08add" opacity="0.85"/>
+                <polygon points="6,-2 20,-2 18,13 6,7" fill="#a08add" opacity="0.85"/>
+                <polygon points="-6,5 -15,5 -13,10 -6,7" fill="#8878cc" opacity="0.8"/>
+                <polygon points="6,5 15,5 13,10 6,7" fill="#8878cc" opacity="0.8"/>
+                <polygon points="-6,15 6,15 4,20 -4,20" fill="#9a88cc"/>
+                <rect x="-5.8" y="-12" width="1" height="27" fill="#c0a8ff" opacity="0.5"/>
+                <rect x="4.8" y="-12" width="1" height="27" fill="#c0a8ff" opacity="0.5"/>
+                <circle cx="0" cy="16" r="3.8" fill="#00eeff" opacity="0.6"/>
+                <circle cx="0" cy="16" r="2.2" fill="#66ffff"/>
               </svg>
             </template>
             <template v-else>
@@ -702,7 +763,7 @@ function onShipNameKey(e: KeyboardEvent) {
             <!-- Slide track -->
             <div class="ship-carousel__track" :style="{ transform: `translateX(${-shipIndex * 100}%)` }">
 
-              <!-- Slide 0: Star Keeper -->
+              <!-- Slide 0: Star Keeper (0 gold) -->
               <div class="ship-carousel__slide">
                 <div class="ship-card" :class="{ 'ship-card--selected': game.selectedShip === 'star_keeper' }">
                   <div class="ship-card__header">
@@ -741,7 +802,7 @@ function onShipNameKey(e: KeyboardEvent) {
                 </div>
               </div>
 
-              <!-- Slide 1: Star Holder -->
+              <!-- Slide 1: Star Holder (Price: 5,000) - Note: Carousel order should be by price -->
               <div class="ship-carousel__slide">
                 <div class="ship-card" :class="{ 'ship-card--selected': game.selectedShip === 'star_holder' }">
                   <div class="ship-card__header">
@@ -792,7 +853,7 @@ function onShipNameKey(e: KeyboardEvent) {
                 </div>
               </div>
 
-              <!-- Slide 2: Star Shooter -->
+              <!-- Slide 2: Star Shooter (Price: 15,000) -->
               <div class="ship-carousel__slide">
                 <div class="ship-card" :class="{ 'ship-card--selected': game.selectedShip === 'star_shooter' }">
                   <div class="ship-card__header">
@@ -846,6 +907,81 @@ function onShipNameKey(e: KeyboardEvent) {
                     </template>
                     <template v-else>
                       <button v-if="game.selectedShip !== 'star_shooter'" class="ship-btn ship-btn--select" @click="selectShip('star_shooter')"><PhCheck :size="11" style="vertical-align:middle;margin-right:4px"/>Chọn phi cơ này</button>
+                      <div v-else class="ship-btn ship-btn--active"><PhLightning weight="fill" :size="11" style="vertical-align:middle;margin-right:4px"/>Đang sử dụng</div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Slide 3: Star Faster (Price: 5,000) -->
+              <div class="ship-carousel__slide">
+                <div class="ship-card" :class="{ 'ship-card--selected': game.selectedShip === 'star_faster' }">
+                  <div class="ship-card__header">
+                    <svg class="ship-svg" viewBox="-36 -44 72 64" width="64" height="56">
+                      <!-- Fuselage body -->
+                      <rect x="-6" y="-28" width="12" height="44" fill="#f5f5ff"/>
+                      <rect x="-5.5" y="-28" width="2.5" height="44" fill="#ffffff" opacity="0.5"/>
+                      <!-- Extended nose cone -->
+                      <polygon points="0,-40 6,-20 -6,-20" fill="#6644bb"/>
+                      <polygon points="0,-40 0,-25 6,-20" fill="#8855dd" opacity="0.7"/>
+                      <!-- Cockpit windshield -->
+                      <polygon points="-4,-20 4,-20 3,-10 -3,-10" fill="#4477ff"/>
+                      <polygon points="-3.5,-10 3.5,-10 2.5,-2 -2.5,-2" fill="#6699ff" opacity="0.8"/>
+                      <!-- Hood vents -->
+                      <rect x="-5" y="-7" width="1.8" height="5" fill="#b8a8dd" opacity="0.7"/>
+                      <rect x="3.2" y="-7" width="1.8" height="5" fill="#b8a8dd" opacity="0.7"/>
+                      <!-- Upper swept wings - pair 1 long and curved back -->
+                      <polygon points="-6,-10 -27,-5 -25,7 -6,0" fill="#b8a0ff"/>
+                      <polygon points="6,-10 27,-5 25,7 6,0" fill="#b8a0ff"/>
+                      <!-- Wing detail -->
+                      <polygon points="-6,-10 -27,-5 -26,-2 -6,-5" fill="#d0c0ff" opacity="0.6"/>
+                      <polygon points="6,-10 27,-5 25,-2 6,-5" fill="#d0c0ff" opacity="0.6"/>
+                      <!-- Mid wings - pair 2 curved 90 back -->
+                      <polygon points="-6,-2 -20,-2 -18,13 -6,7" fill="#a08add" opacity="0.85"/>
+                      <polygon points="6,-2 20,-2 18,13 6,7" fill="#a08add" opacity="0.85"/>
+                      <!-- Rear wings - pair 3 -->
+                      <polygon points="-6,5 -15,5 -13,10 -6,7" fill="#8878cc" opacity="0.8"/>
+                      <polygon points="6,5 15,5 13,10 6,7" fill="#8878cc" opacity="0.8"/>
+                      <!-- Rear body -->
+                      <polygon points="-6,15 6,15 4,20 -4,20" fill="#9a88cc"/>
+                      <!-- Side stripes -->
+                      <rect x="-5.8" y="-12" width="1" height="27" fill="#c0a8ff" opacity="0.5"/>
+                      <rect x="4.8" y="-12" width="1" height="27" fill="#c0a8ff" opacity="0.5"/>
+                      <!-- Engine -->
+                      <circle cx="0" cy="16" r="3.8" fill="#00eeff" opacity="0.6"/>
+                      <circle cx="0" cy="16" r="2.2" fill="#66ffff"/>
+                    </svg>
+                    <div class="ship-card__info">
+                      <div class="ship-card__name">STAR FASTER</div>
+                      <div class="ship-card__tag" :class="game.ownedShips.includes('star_faster') ? 'tag--owned' : 'tag--locked'">
+                        {{ game.ownedShips.includes('star_faster') ? '✅ Đã sở hữu' : '🔒 Cần mở khoá · 5,000 🪙' }}
+                      </div>
+                      <div class="ship-card__desc">Chiến cơ tiểu liên với tốc độ xả đạn cực nhanh. Đạn nhỏ mảnh nhưng chính xác cao, độ lệch bắn cực thấp khi xả liên thanh.</div>
+                    </div>
+                  </div>
+                  <div class="ship-stats">
+                    <div v-for="stat in starFasterStats" :key="stat.label" class="ship-stat">
+                      <span class="ship-stat__label">{{ stat.label }}</span>
+                      <div class="ship-stat__track">
+                        <div class="ship-stat__fill ship-stat__fill--base" :style="{ width: stat.basePct + '%', background: stat.color }" />
+                        <div v-if="stat.bonusPct > 0" class="ship-stat__fill ship-stat__fill--bonus" :style="{ left: stat.basePct + '%', width: stat.bonusPct + '%', background: stat.color }" />
+                      </div>
+                      <span class="ship-stat__val">{{ stat.display }}</span>
+                    </div>
+                  </div>
+                  <div class="ship-skill ship-skill--cyan">
+                    <div class="ship-skill__name">⚡ GIA TỐC HẠT</div>
+                    <div class="ship-skill__cd"><PhTimer :size="11" style="vertical-align:middle;margin-right:4px"/>Hồi chiêu: 30 giây</div>
+                    <div class="ship-skill__desc">Kích hoạt tốc độ tối đa làm không gian xung quanh như chậm lại. Trong 5 giây, kẻ địch và đạn của chúng giảm tốc 70%, tốc độ bắn của phi cơ đạt đỉnh.</div>
+                  </div>
+                  <div class="ship-card__actions">
+                    <template v-if="!game.ownedShips.includes('star_faster')">
+                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < 5000" @click="buyShip('star_faster', 5000)">
+                        {{ game.playerCoins >= 5000 ? 'Mua — 5,000 🪙' : 'Không đủ vàng' }}
+                      </button>
+                    </template>
+                    <template v-else>
+                      <button v-if="game.selectedShip !== 'star_faster'" class="ship-btn ship-btn--select" @click="selectShip('star_faster')"><PhCheck :size="11" style="vertical-align:middle;margin-right:4px"/>Chọn phi cơ này</button>
                       <div v-else class="ship-btn ship-btn--active"><PhLightning weight="fill" :size="11" style="vertical-align:middle;margin-right:4px"/>Đang sử dụng</div>
                     </template>
                   </div>
@@ -1790,6 +1926,9 @@ function onShipNameKey(e: KeyboardEvent) {
   padding: 14px 16px 60px;
   box-sizing: border-box;
 }
+/* Keep visual shop order by ascending price: Keeper -> Holder -> Faster -> Shooter. */
+.ship-carousel__track > .ship-carousel__slide:nth-child(3) { order: 4; }
+.ship-carousel__track > .ship-carousel__slide:nth-child(4) { order: 3; }
 .ship-carousel__arrow {
   position: absolute;
   bottom: 44px;

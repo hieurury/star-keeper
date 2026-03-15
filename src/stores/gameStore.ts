@@ -102,6 +102,7 @@ export interface CardStats {
   allyDroneBeamCount: number
   allyDroneFireRateMult: number
   allyDroneUltimate: boolean
+  fasterDeepWound: boolean
 }
 
 export const ALL_CARD_DEFS: CardDef[] = [
@@ -157,7 +158,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'weapon_cache_shooter', name: 'Kho Vũ Khí - Star Shooter', type: 'attack', icon: 'PhRocketLaunch', maxLevel: 5, shipId: 'star_shooter',
+    id: 'weapon_cache_shooter', name: 'Kho Vũ Khí - Star Shooter', type: 'attack', icon: 'PhTarget', maxLevel: 5, shipId: 'star_shooter',
     levels: [
       { desc: 'Tăng thêm 1 tên lửa bắn ra.' },
       { desc: 'Tên lửa bây giờ gây sát thương AOE tầm gần khi nổ.' },
@@ -173,6 +174,15 @@ export const ALL_CARD_DEFS: CardDef[] = [
       { desc: '+30% sát thương laser và +20% tốc độ bắn.' },
       { desc: 'Bắn thêm 1 tia laser nữa (tổng +2 tia).' },
       { desc: '+40% sát thương laser và +20% kích thước laser.' },
+    ],
+  },
+  { id: 'weapon_cache_faster', name: 'Kho Vũ Khí - Star Faster', type: 'attack', icon: 'PhCrosshair', maxLevel: 5, shipId: 'star_faster',
+    levels: [
+      { desc: 'Tăng 30% sát thương đạn.' },
+      { desc: 'Tăng thêm 1 tia đạn.' },
+      { desc: 'Tăng 20% tốc độ bắn, tăng thêm 20% sát thương đạn.' },
+      { desc: 'Tăng thêm 1 tia đạn và tăng 20% tốc độ bắn.' },
+      { desc: 'Tăng thêm 1 tia đạn và tăng 30% sát thương đạn.' },
     ],
   },
   // ── Hỗ trợ ──────────────────────────────────────────────────────────────────
@@ -238,7 +248,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
   },
   // ── Tối thượng ──────────────────────────────────────────────────────────────
   {
-    id: 'weapon_cache_shooter_ult', name: 'Tên Lửa Lạnh Lùng', type: 'ultimate', icon: 'PhTarget', maxLevel: 1, shipId: 'star_shooter',
+    id: 'weapon_cache_shooter_ult', name: 'Tên Lửa Lạnh Lùng', type: 'ultimate', icon: 'PhShootingStar', maxLevel: 1, shipId: 'star_shooter',
     requiresAttackId: 'weapon_cache_shooter',
     levels: [
       { desc: 'Kẻ địch bị tên lửa tiêu diệt giảm 0.5s hồi chiêu kỹ năng.' },
@@ -259,7 +269,14 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'interstellar_missile', name: 'Tên Lửa Liên Sao', type: 'ultimate', icon: 'PhShootingStar', maxLevel: 1,
+    id: 'weapon_cache_faster_ult', name: 'Vết Thương Sâu', type: 'ultimate', icon: 'PhDrop', maxLevel: 1, shipId: 'star_faster',
+    requiresAttackId: 'weapon_cache_faster',
+    levels: [
+      { desc: 'Kẻ địch càng dính nhiều đạn của Star Faster càng nhận thêm sát thương, tối đa +100% với quái thường và +50% với boss.' },
+    ],
+  },
+  {
+    id: 'interstellar_missile', name: 'Tên Lửa Liên Sao', type: 'ultimate', icon: 'PhPlanet', maxLevel: 1,
     requiresAttackId: 'heat_missile',
     requiresSupportId: 'skill_recovery',
     levels: [
@@ -306,7 +323,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'turbo_fire_card', name: 'Xạ Thủ Nhanh', type: 'support', icon: 'PhTarget', maxLevel: 5,
+    id: 'turbo_fire_card', name: 'Xạ Thủ Nhanh', type: 'support', icon: 'PhLightning', maxLevel: 5,
     levels: [
       { desc: '+10% tốc độ bắn.' },
       { desc: '+10% tốc độ bắn (tổng +20%).' },
@@ -325,7 +342,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'drone_annihilation', name: 'Drone Hủy Diệt', type: 'ultimate', icon: 'PhTarget', maxLevel: 1,
+    id: 'drone_annihilation', name: 'Drone Hủy Diệt', type: 'ultimate', icon: 'PhStar', maxLevel: 1,
     requiresAttackId: 'ally_drone_support',
     requiresSupportId: 'power_advance',
     levels: [
@@ -388,10 +405,10 @@ export const ALL_ARTIFACT_DEFS: ArtifactDef[] = [
   { id: 'mana_core',    name: 'Lõi Mana',      icon: '💠', cost: 3500, desc: '+1 đạn (vượt giới hạn); mỗi 10 tiêu diệt → nổ diện rộng' },
 ]
 
-export const SHIP_ARTIFACT_SLOTS: Record<string, number> = { star_keeper: 1, star_holder: 1, star_shooter: 1 }
-export const SHIP_DURABILITY_MAX: Record<string, number> = { star_keeper: 100, star_holder: 90, star_shooter: 95 }
+export const SHIP_ARTIFACT_SLOTS: Record<string, number> = { star_keeper: 1, star_holder: 1, star_shooter: 1, star_faster: 1 }
+export const SHIP_DURABILITY_MAX: Record<string, number> = { star_keeper: 100, star_holder: 90, star_shooter: 95, star_faster: 100 }
 
-export type ShipId = 'star_keeper' | 'star_holder' | 'star_shooter'
+export type ShipId = 'star_keeper' | 'star_holder' | 'star_shooter' | 'star_faster'
 export type ShipUpgradeKey = 'hp' | 'fireRate' | 'damage'
 export interface ShipUpgradeLevels { hp: number, fireRate: number, damage: number }
 
@@ -406,12 +423,14 @@ const SHIP_BASE_STATS: Record<ShipId, { hp: number, damage: number, fireRate: nu
   star_keeper: { hp: 100, damage: 15, fireRate: 1.0, speed: 1.0 },
   star_holder: { hp: 180, damage: 25, fireRate: 1.2, speed: 1.2 },
   star_shooter: { hp: 220, damage: 40, fireRate: 0.38, speed: 1.0 },
+  star_faster: { hp: 100, damage: 10, fireRate: 1.5, speed: 1.25 },
 }
 
 const SHIP_MAX_STATS: Record<ShipId, { hp: number, damage: number, fireRate: number, speed: number }> = {
   star_keeper: { hp: 300, damage: 100, fireRate: 1.5, speed: 1.5 },
   star_holder: { hp: 300, damage: 150, fireRate: 1.8, speed: 1.75 },
   star_shooter: { hp: 400, damage: 200, fireRate: 1.25, speed: 1.6 },
+  star_faster: { hp: 310, damage: 65, fireRate: 2.0, speed: 2.0 },
 }
 
 const SHIP_UPGRADE_STEP_FACTOR: Record<ShipUpgradeKey, number> = {
@@ -424,6 +443,7 @@ export const SHIP_UNLOCK_COST: Record<ShipId, number> = {
   star_keeper: 0,
   star_holder: 5000,
   star_shooter: 15000,
+  star_faster: 5000,
 }
 
 function getShipUpgradeCostMultiplierByUnlockCost(shipId: ShipId): number {
@@ -498,6 +518,10 @@ const MISSION_POOL: Array<{
     { target: 2, desc: 'Chơi 2 ván với Star Shooter', reward: { coins: 80 } },
     { target: 4, desc: 'Chơi 4 ván với Star Shooter', reward: { coins: 130 } },
   ]},
+  { kind: 'play_with_ship', shipId: 'star_faster', variants: [
+    { target: 2, desc: 'Chơi 2 ván với Star Faster', reward: { coins: 75 } },
+    { target: 4, desc: 'Chơi 4 ván với Star Faster', reward: { coins: 125 } },
+  ]},
   { kind: 'play_time', variants: [
     { target: 120, desc: 'Chơi liên tục 2 phút trong 1 ván',   reward: { accountExp: 60 } },
     { target: 240, desc: 'Chơi liên tục 4 phút trong 1 ván',   reward: { accountExp: 90 } },
@@ -520,9 +544,15 @@ const MISSION_POOL: Array<{
 // loadProgress() sẽ dùng số này để chạy migration thích hợp.
 const SAVE_VERSION = 1
 const SAVE_KEY = 'ban-may-bay-save'
+const SAVE_BACKUP_KEY = 'ban-may-bay-save-backup'
 const SAVE_REJECTED_KEY = 'ban-may-bay-save-rejected'
 const SAVE_ENVELOPE_VERSION = 1
-const SAVE_SIGNATURE_PEPPER = 'ban-may-bay::save-signature::2026'
+const SAVE_SIGNATURE_PEPPER_CURRENT = 'ban-may-bay::save-signature::2026'
+const SAVE_SIGNATURE_PEPPERS_LEGACY = [
+  'ban-may-bay::save-signature::2025',
+  'ban-may-bay::save-signature::2024',
+  'ban-may-bay::save-signature',
+]
 
 interface SaveEnvelope {
   format: 'signed'
@@ -573,12 +603,16 @@ function fnv1aHash(input: string): string {
   return (h >>> 0).toString(16).padStart(8, '0')
 }
 
-function createSaveSignature(payload: Record<string, unknown>): string {
+function createSaveSignatureWithPepper(payload: Record<string, unknown>, pepper: string): string {
   const normalizedPayload = normalizeForJson(payload) as Record<string, unknown>
-  return fnv1aHash(`${stableStringify(normalizedPayload)}|${SAVE_SIGNATURE_PEPPER}`)
+  return fnv1aHash(`${stableStringify(normalizedPayload)}|${pepper}`)
 }
 
-function createLegacyV1SignatureWithKnownBug(payload: Record<string, unknown>): string {
+function createSaveSignature(payload: Record<string, unknown>): string {
+  return createSaveSignatureWithPepper(payload, SAVE_SIGNATURE_PEPPER_CURRENT)
+}
+
+function createLegacyV1SignatureWithKnownBug(payload: Record<string, unknown>, pepper: string): string {
   // Compatibility path for previously saved envelopes where undefined fields were
   // included in signature input but dropped by JSON persistence.
   const cloned = structuredClone(payload) as Record<string, unknown>
@@ -588,7 +622,7 @@ function createLegacyV1SignatureWithKnownBug(payload: Record<string, unknown>): 
       m.shipId = undefined
     }
   }
-  return fnv1aHash(`${stableStringify(cloned)}|${SAVE_SIGNATURE_PEPPER}`)
+  return fnv1aHash(`${stableStringify(cloned)}|${pepper}`)
 }
 
 function buildSaveEnvelope(payload: Record<string, unknown>): SaveEnvelope {
@@ -612,10 +646,14 @@ function isSaveEnvelope(data: unknown): data is SaveEnvelope {
 }
 
 function getSaveVerificationMode(envelope: SaveEnvelope): SaveVerifyMode {
-  const current = createSaveSignature(envelope.payload)
-  if (envelope.sig === current) return 'ok'
-  const legacy = createLegacyV1SignatureWithKnownBug(envelope.payload)
-  if (envelope.sig === legacy) return 'legacy-ok'
+  if (envelope.sig === createSaveSignature(envelope.payload)) return 'ok'
+
+  const knownPeppers = [SAVE_SIGNATURE_PEPPER_CURRENT, ...SAVE_SIGNATURE_PEPPERS_LEGACY]
+  for (const pepper of knownPeppers) {
+    if (envelope.sig === createSaveSignatureWithPepper(envelope.payload, pepper)) return 'legacy-ok'
+    if (envelope.sig === createLegacyV1SignatureWithKnownBug(envelope.payload, pepper)) return 'legacy-ok'
+  }
+
   return 'invalid'
 }
 
@@ -653,6 +691,7 @@ export const useGameStore = defineStore('game', () => {
     star_keeper: { hp: 0, fireRate: 0, damage: 0 },
     star_holder: { hp: 0, fireRate: 0, damage: 0 },
     star_shooter: { hp: 0, fireRate: 0, damage: 0 },
+    star_faster: { hp: 0, fireRate: 0, damage: 0 },
   })
 
   // Thành tựu
@@ -765,6 +804,7 @@ export const useGameStore = defineStore('game', () => {
       allyDroneBeamCount: 1,
       allyDroneFireRateMult: 1,
       allyDroneUltimate: false,
+      fasterDeepWound: false,
     }
     const c = activeCards.value
 
@@ -853,6 +893,16 @@ export const useGameStore = defineStore('game', () => {
     if (hac >= 4) stats.arsenalBulletBonus = 2
     if (hac >= 5) { stats.arsenalDamagePct = 70; stats.arsenalLaserSizePct = 45 }
     if ((c['weapon_cache_holder_ult'] ?? 0) >= 1) stats.laserKillDropsSoul = true
+
+    // weapon_cache_faster (Kho Vũ Khí - Star Faster)
+    const fac = c['weapon_cache_faster'] ?? 0
+    if (fac >= 1) stats.arsenalDamagePct = 30
+    if (fac >= 2) stats.arsenalBulletBonus = 1
+    if (fac >= 3) { stats.arsenalFireRatePct = 20; stats.arsenalDamagePct = 50 }
+    if (fac >= 4) { stats.arsenalBulletBonus = 2; stats.arsenalFireRatePct = 40 }
+    if (fac >= 5) { stats.arsenalBulletBonus = 3; stats.arsenalDamagePct = 80 }
+    if ((c['weapon_cache_faster_ult'] ?? 0) >= 1) stats.fasterDeepWound = true
+
     if ((c['interstellar_missile'] ?? 0) >= 1) {
       stats.interstellarMissile = true
       if (stats.missileLaunchers === 0) stats.missileLaunchers = 1
@@ -915,7 +965,7 @@ export const useGameStore = defineStore('game', () => {
   // ─── Artifact & Durability state ─────────────────────────────────────────────
   const ownedArtifacts = ref<string[]>([])
   const equippedArtifacts = ref<Record<string, string[]>>({})  // shipId → artifactId[]
-  const shipDurabilities = ref<Record<string, number>>({ star_keeper: 100, star_holder: 90, star_shooter: 95 })
+  const shipDurabilities = ref<Record<string, number>>({ star_keeper: 100, star_holder: 90, star_shooter: 95, star_faster: 100 })
   // Runtime artifact progress (0–1), written by GameCanvas each frame for HUD
   const neutronVacuumPct = ref(0)
   const manaCorePct = ref(0)
@@ -1395,9 +1445,12 @@ export const useGameStore = defineStore('game', () => {
     const maxDmg = maxShipStats.damage
     const baseSpd = SHIP_BASE_STATS[shipId].speed
     const maxSpd = maxShipStats.speed
+    const shipBaseBulletCount = shipId === 'star_faster' ? 2 : 1
+    const shipMaxBulletCount = shipId === 'star_faster' ? 5 : (shipId === 'star_shooter' ? 4 : 3)
+    const shipBaseBulletSpeed = isHolder ? 1.2 : (shipId === 'star_faster' ? 1.45 : 1)
     upgrades.value = {
-      bulletSpeed: isHolder ? 1.2 : 1,
-      bulletCount: 1 + permUpgrades.value.bulletCount + aStats.extraBullet,
+      bulletSpeed: shipBaseBulletSpeed,
+      bulletCount: Math.min(shipMaxBulletCount, shipBaseBulletCount + permUpgrades.value.bulletCount + aStats.extraBullet),
       shipSpeed: Math.min(maxSpd, (baseSpd + permUpgrades.value.baseSpeed * 0.05) * (1 + aStats.speedBonus)),
       shield: 0,
       bombCount: 0,
@@ -1651,7 +1704,7 @@ export const useGameStore = defineStore('game', () => {
     accountLevel.value = Math.max(1, Math.floor(accountLevel.value))
     accountExp.value = Math.max(0, Math.floor(accountExp.value))
 
-    const validShipIds = new Set(['star_keeper', 'star_holder', 'star_shooter'])
+    const validShipIds = new Set(['star_keeper', 'star_holder', 'star_shooter', 'star_faster'])
     const safeOwnedShips = ownedShips.value.filter(id => validShipIds.has(id))
     ownedShips.value = safeOwnedShips.length > 0 ? [...new Set(safeOwnedShips)] : ['star_keeper']
     if (!ownedShips.value.includes(selectedShip.value)) selectedShip.value = ownedShips.value[0] ?? 'star_keeper'
@@ -1720,6 +1773,8 @@ export const useGameStore = defineStore('game', () => {
       milestone5Claimed: milestone5Claimed.value,
     }
     const envelope = buildSaveEnvelope(data as Record<string, unknown>)
+    const prev = localStorage.getItem(SAVE_KEY)
+    if (prev) localStorage.setItem(SAVE_BACKUP_KEY, prev)
     localStorage.setItem(SAVE_KEY, JSON.stringify(envelope))
   }
 
@@ -1753,6 +1808,11 @@ export const useGameStore = defineStore('game', () => {
         hp: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_shooter?.hp ?? 0))),
         fireRate: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_shooter?.fireRate ?? 0))),
         damage: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_shooter?.damage ?? 0))),
+      },
+      star_faster: {
+        hp: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_faster?.hp ?? 0))),
+        fireRate: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_faster?.fireRate ?? 0))),
+        damage: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_faster?.damage ?? 0))),
       },
     }
     unlockedAchievements.value    = (data.unlockedAchievements as string[])  ?? []
@@ -1792,19 +1852,23 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function loadProgress() {
-    const saved = localStorage.getItem(SAVE_KEY)
-    if (saved) {
+    const saveCandidates = [
+      localStorage.getItem(SAVE_KEY),
+      localStorage.getItem(SAVE_BACKUP_KEY),
+    ]
+
+    for (const saved of saveCandidates) {
+      if (!saved) continue
       try {
         const parsed = JSON.parse(saved) as unknown
         let data: Record<string, unknown> | null = null
+        let verifyMode: SaveVerifyMode = 'ok'
 
         if (isSaveEnvelope(parsed)) {
-          const verifyMode = getSaveVerificationMode(parsed)
+          verifyMode = getSaveVerificationMode(parsed)
           if (!isAdminMode.value && verifyMode === 'invalid') {
             localStorage.setItem(SAVE_REJECTED_KEY, saved)
-            localStorage.removeItem(SAVE_KEY)
-            generateDailyMissions()
-            return
+            continue
           }
           data = parsed.payload
         } else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
@@ -1812,10 +1876,7 @@ export const useGameStore = defineStore('game', () => {
           data = parsed as Record<string, unknown>
         }
 
-        if (!data) {
-          generateDailyMissions()
-          return
-        }
+        if (!data) continue
 
         // ── Migration chain ──────────────────────────────────────────────────
         const ver = typeof data.version === 'number' ? data.version : 0
@@ -1824,12 +1885,14 @@ export const useGameStore = defineStore('game', () => {
         // ────────────────────────────────────────────────────────────────────
         _applyDataToStore(data)
         if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
-        // Lưu lại với version mới nhất nếu đã migrate
-        if (ver < SAVE_VERSION || !isSaveEnvelope(parsed) || (isSaveEnvelope(parsed) && getSaveVerificationMode(parsed) === 'legacy-ok')) saveProgress()
+        // Lưu lại với version mới nhất hoặc khi vừa đọc từ định dạng cũ/chữ ký cũ.
+        if (ver < SAVE_VERSION || !isSaveEnvelope(parsed) || verifyMode === 'legacy-ok') saveProgress()
+        break
       } catch {
-        // Dữ liệu save bị hỏng hoàn toàn → giữ giá trị mặc định
+        localStorage.setItem(SAVE_REJECTED_KEY, saved)
       }
     }
+
     // Refresh/generate today's missions after loading
     generateDailyMissions()
   }

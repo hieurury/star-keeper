@@ -603,3 +603,14 @@ export function activateHeatWave(ctx: GameContext, game: GameStore): void {
     }
   }
 }
+
+// ─── Particle Acceleration (Star Faster skill) ───────────────────────────────
+export function activateParticleAcceleration(ctx: GameContext, _game: GameStore): void {
+  if (!ctx.playerShip || !ctx.app) return
+  // 5 seconds at ~60fps: enemies and enemy bullets run at 30% speed,
+  // while Star Faster reaches peak fire rate.
+  ctx.starFasterSkillTimer = 300
+  ctx.starFasterEnemySlowFactor = 0.3
+  ctx.starFasterFireRateBoost = 2.4
+  screenFlash(ctx, 0x6b5cff, 0.38, 300)
+}

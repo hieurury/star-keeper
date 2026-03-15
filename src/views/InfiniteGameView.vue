@@ -31,6 +31,9 @@ function getCurrentShipSkillTourText(): string {
   if (game.selectedShip === 'star_holder') {
     return triggerText + '\n\nKích hoạt Thu Hoạch Linh Hồn khi đủ mảnh để bắn loạt tên lửa linh hồn. Mảnh rơi khi tiêu diệt kẻ địch.'
   }
+  if (game.selectedShip === 'star_faster') {
+    return triggerText + '\n\nKích hoạt Gia Tốc Hạt trong 5 giây: địch và đạn địch bị làm chậm 70%, còn tốc độ bắn của Star Faster tăng vọt. Hồi chiêu cơ bản 30 giây (giảm bởi Phục Hồi Kỹ Năng).'
+  }
   return triggerText + '\n\nGiải phóng Sóng Nhiệt hủy diệt toàn màn hình và phá sạch đạn kẻ địch. Hồi chiêu cơ bản 30 giây (giảm bởi Phục Hồi Kỹ Năng).'
 }
 

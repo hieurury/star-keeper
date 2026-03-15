@@ -116,6 +116,8 @@ export interface Enemy {
   // cnox_shield
   cnoxShields?: Graphics[]
   cnoxShieldAngle?: number
+  // Star Faster ultimate (Vết thương sâu)
+  starFasterWoundBonus?: number
   // cnox_spark
   cnoxLaserGfx?: Graphics
   cnoxWarnGfx?: Graphics

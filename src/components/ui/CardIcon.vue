@@ -5,7 +5,7 @@ import {
   PhArrowsClockwise, PhShieldPlus, PhMagnet, PhDrop,
   PhDiamondsFour, PhGhost, PhShootingStar, PhTrendUp,
   PhAtom, PhSpiral, PhWind, PhTarget, PhSparkle,
-  PhAirplaneTilt, PhPlanet, PhStar,
+  PhAirplaneTilt, PhPlanet, PhStar, PhCrosshair,
 } from '@phosphor-icons/vue'
 
 const ICON_MAP: Record<string, Component> = {
@@ -13,7 +13,7 @@ const ICON_MAP: Record<string, Component> = {
   PhArrowsClockwise, PhShieldPlus, PhMagnet, PhDrop,
   PhDiamondsFour, PhGhost, PhShootingStar, PhTrendUp,
   PhAtom, PhSpiral, PhWind, PhTarget, PhSparkle,
-  PhAirplaneTilt, PhPlanet, PhStar,
+  PhAirplaneTilt, PhPlanet, PhStar, PhCrosshair,
 }
 
 const COLOR_MAP: Record<string, string> = {
@@ -24,6 +24,7 @@ const COLOR_MAP: Record<string, string> = {
   PhWaveSine:       '#00e5ff',
   PhSword:          '#ff8080',
   PhFire:           '#ff6030',
+  PhCrosshair:      '#ff4d6d',
   PhTarget:         '#ff4444',
   // Support — blues & greens
   PhArrowsClockwise:'#26de81',
