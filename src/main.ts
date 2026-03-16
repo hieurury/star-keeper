@@ -4,6 +4,7 @@ import router from './router'
 import './style.css'
 import App from './App.vue'
 import { registerSW } from 'virtual:pwa-register'
+import { Capacitor } from '@capacitor/core'
 import { useUiStore } from './stores/uiStore'
 import { audioManager } from './game/systems/audio'
 
@@ -36,6 +37,8 @@ router.afterEach((to) => {
 	setTimeout(() => ui.hideLoading(), delay)
 })
 
-registerSW({ immediate: true })
+if (!Capacitor.isNativePlatform()) {
+	registerSW({ immediate: true })
+}
 
 app.mount('#app')

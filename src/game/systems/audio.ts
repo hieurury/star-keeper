@@ -24,33 +24,36 @@ type ShipAudioId = 'star_keeper' | 'star_holder' | 'star_shooter' | 'star_faster
 
 class AudioManager {
   private lobbyTrack: HTMLAudioElement | null = null
+  private gameTrack: HTMLAudioElement | null = null
   private bossTrack: HTMLAudioElement | null = null
   private unlockRetryArmed = false
   private transitionSeq = 0
-  private currentTrack: 'none' | 'lobby' | 'boss' = 'none'
-  private bossOutroPending = false
+  private currentTrack: 'none' | 'lobby' | 'game' | 'boss' = 'none'
+  private bossActive = false
   private lobbyGainFactor = 0
+  private gameGainFactor = 0
   private bossGainFactor = 0
   private lobbyLastIndex = -1
-  private bossLastIndex = -1
+  private lobbyOutroArmed = false
+  private lobbyGapSeq = 0
   private lobbyHandlersBound = false
+  private gameHandlersBound = false
   private bossHandlersBound = false
 
   private settings: AudioSettings = { ...DEFAULT_AUDIO_SETTINGS }
 
   private scene: AudioScene = 'none'
-  private bossActive = false
 
   private readonly LOBBY_PLAYLIST = ['/audio/backgrounds/bg_1.mp3', '/audio/backgrounds/bg_2.mp3']
-  private readonly BOSS_PLAYLIST = [
-    '/audio/bosses/boss_1.mp3',
-    '/audio/bosses/boss_2.mp3',
-    '/audio/bosses/boss_3.mp3',
-    '/audio/bosses/boss_4.mp3',
-  ]
+  private readonly GAME_STAGE_TRACK = '/audio/gameStage/sound_1.mp3'
+  private readonly BOSS_STAGE_TRACK = '/audio/bosses/boss_battle_mix.mp3'
 
   private readonly FADE_OUT_MS = 520
   private readonly FADE_IN_MS = 620
+  private readonly CROSSFADE_MS = 760
+  private readonly LOBBY_OUTRO_MS = 680
+  private readonly LOBBY_GAP_MS = 340
+  private readonly LOBBY_INTRO_MS = 620
 
   private canPlayMusic(): boolean {
     return this.settings.enabled && this.settings.musicEnabled
@@ -83,20 +86,27 @@ class AudioManager {
       this.lobbyTrack.muted = !this.canPlayMusic()
     }
 
+    if (this.gameTrack) {
+      this.gameTrack.volume = clamp01(base * this.gameGainFactor)
+      this.gameTrack.muted = !this.canPlayMusic()
+    }
+
     if (this.bossTrack) {
       this.bossTrack.volume = clamp01(base * this.bossGainFactor)
       this.bossTrack.muted = !this.canPlayMusic()
     }
   }
 
-  private setTrackFactor(trackId: 'none' | 'lobby' | 'boss', value: number) {
+  private setTrackFactor(trackId: 'none' | 'lobby' | 'game' | 'boss', value: number) {
     if (trackId === 'lobby') this.lobbyGainFactor = clamp01(value)
+    if (trackId === 'game') this.gameGainFactor = clamp01(value)
     if (trackId === 'boss') this.bossGainFactor = clamp01(value)
     this.applyGains()
   }
 
-  private getTrackFactor(trackId: 'none' | 'lobby' | 'boss'): number {
+  private getTrackFactor(trackId: 'none' | 'lobby' | 'game' | 'boss'): number {
     if (trackId === 'lobby') return this.lobbyGainFactor
+    if (trackId === 'game') return this.gameGainFactor
     if (trackId === 'boss') return this.bossGainFactor
     return 0
   }
@@ -110,35 +120,71 @@ class AudioManager {
     return next
   }
 
-  private chooseNextSrc(phase: 'lobby' | 'boss'): string {
+  private chooseNextSrc(phase: 'lobby' | 'game' | 'boss'): string {
     if (phase === 'lobby') {
       const idx = this.pickRandomIndex(this.LOBBY_PLAYLIST.length, this.lobbyLastIndex)
       this.lobbyLastIndex = idx
       return this.LOBBY_PLAYLIST[idx]!
     }
-    const idx = this.pickRandomIndex(this.BOSS_PLAYLIST.length, this.bossLastIndex)
-    this.bossLastIndex = idx
-    return this.BOSS_PLAYLIST[idx]!
+    if (phase === 'boss') return this.BOSS_STAGE_TRACK
+    return this.GAME_STAGE_TRACK
   }
 
-  private handlePhaseEnded(phase: 'lobby' | 'boss') {
+  private async wait(ms: number) {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, Math.max(0, ms))
+    })
+  }
+
+  private async handleLobbyEnded() {
     if (!this.canPlayMusic()) return
-    const desired = this.resolveDesiredTrack()
-    if (phase === 'lobby' && !(desired === 'lobby' && this.currentTrack === 'lobby')) return
-    if (phase === 'boss' && !(desired === 'boss' && this.currentTrack === 'boss')) return
-    if (phase === 'lobby') this.startLobbyTrack(true)
-    else this.startBossTrack(true)
+    if (this.resolveDesiredTrack() !== 'lobby' || this.currentTrack !== 'lobby') return
+
+    const gapSeq = ++this.lobbyGapSeq
+    this.setTrackFactor('lobby', 0)
+    await this.wait(this.LOBBY_GAP_MS)
+    if (gapSeq !== this.lobbyGapSeq) return
+    if (!this.canPlayMusic()) return
+    if (this.resolveDesiredTrack() !== 'lobby' || this.currentTrack !== 'lobby') return
+
+    const seq = this.transitionSeq
+    if (!this.startLobbyTrack(true)) return
+    this.setTrackFactor('lobby', 0)
+    await this.fadeTrack('lobby', 1, this.LOBBY_INTRO_MS, seq)
   }
 
-  private bindTrackEvents(track: HTMLAudioElement, phase: 'lobby' | 'boss') {
+  private armLobbyOutro() {
+    if (this.lobbyOutroArmed) return
+    const track = this.lobbyTrack
+    if (!track) return
+    if (!track.duration || !Number.isFinite(track.duration)) return
+
+    const remainingMs = Math.max(0, (track.duration - track.currentTime) * 1000)
+    if (remainingMs > this.LOBBY_OUTRO_MS) return
+    if (this.resolveDesiredTrack() !== 'lobby' || this.currentTrack !== 'lobby') return
+
+    this.lobbyOutroArmed = true
+    const seq = this.transitionSeq
+    void this.fadeTrack('lobby', 0, Math.min(this.LOBBY_OUTRO_MS, Math.max(120, remainingMs)), seq)
+  }
+
+  private bindTrackEvents(track: HTMLAudioElement, phase: 'lobby' | 'game' | 'boss') {
     if (phase === 'lobby') {
       if (this.lobbyHandlersBound) return
-      track.addEventListener('ended', () => this.handlePhaseEnded('lobby'))
+      track.addEventListener('ended', () => {
+        this.lobbyOutroArmed = false
+        void this.handleLobbyEnded()
+      })
+      track.addEventListener('timeupdate', () => this.armLobbyOutro())
       this.lobbyHandlersBound = true
       return
     }
+    if (phase === 'game') {
+      if (this.gameHandlersBound) return
+      this.gameHandlersBound = true
+      return
+    }
     if (this.bossHandlersBound) return
-    track.addEventListener('ended', () => this.handlePhaseEnded('boss'))
     this.bossHandlersBound = true
   }
 
@@ -158,6 +204,8 @@ class AudioManager {
   private startLobbyTrack(forceNext = false): boolean {
     const track = this.getLobbyTrack()
     if (!track) return false
+    this.lobbyGapSeq += 1
+    this.lobbyOutroArmed = false
 
     if (forceNext || !track.src) {
       track.src = this.chooseNextSrc('lobby')
@@ -180,24 +228,62 @@ class AudioManager {
     if (reset) this.lobbyTrack.currentTime = 0
   }
 
+  private getGameTrack(): HTMLAudioElement | null {
+    if (typeof Audio === 'undefined') return null
+    if (this.gameTrack) return this.gameTrack
+
+    const track = new Audio()
+    track.preload = 'auto'
+    track.loop = true
+    this.bindTrackEvents(track, 'game')
+    this.gameTrack = track
+    this.applyGains()
+    return this.gameTrack
+  }
+
+  private startGameTrack(_forceNext = false): boolean {
+    const track = this.getGameTrack()
+    if (!track) return false
+
+    if (!track.src) {
+      track.src = this.chooseNextSrc('game')
+      track.currentTime = 0
+    }
+
+    const playPromise = track.play()
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        if (this.scene !== 'game') return
+        this.armUnlockRetry()
+      })
+    }
+    return true
+  }
+
+  private pauseGameTrack(reset = false) {
+    if (!this.gameTrack) return
+    this.gameTrack.pause()
+    if (reset) this.gameTrack.currentTime = 0
+  }
+
   private getBossTrack(): HTMLAudioElement | null {
     if (typeof Audio === 'undefined') return null
     if (this.bossTrack) return this.bossTrack
 
     const track = new Audio()
     track.preload = 'auto'
-    track.loop = false
+    track.loop = true
     this.bindTrackEvents(track, 'boss')
     this.bossTrack = track
     this.applyGains()
     return this.bossTrack
   }
 
-  private startBossTrack(forceNext = false): boolean {
+  private startBossTrack(): boolean {
     const track = this.getBossTrack()
     if (!track) return false
 
-    if (forceNext || !track.src) {
+    if (!track.src) {
       track.src = this.chooseNextSrc('boss')
       track.currentTime = 0
     }
@@ -218,18 +304,20 @@ class AudioManager {
     if (reset) this.bossTrack.currentTime = 0
   }
 
-  private startTrack(trackId: 'none' | 'lobby' | 'boss'): boolean {
+  private startTrack(trackId: 'none' | 'lobby' | 'game' | 'boss'): boolean {
     if (trackId === 'lobby') return this.startLobbyTrack()
+    if (trackId === 'game') return this.startGameTrack()
     if (trackId === 'boss') return this.startBossTrack()
     return true
   }
 
-  private stopTrack(trackId: 'none' | 'lobby' | 'boss', reset = true) {
+  private stopTrack(trackId: 'none' | 'lobby' | 'game' | 'boss', reset = true) {
     if (trackId === 'lobby') this.pauseLobbyTrack(reset)
+    if (trackId === 'game') this.pauseGameTrack(reset)
     if (trackId === 'boss') this.pauseBossTrack(reset)
   }
 
-  private async fadeTrack(trackId: 'none' | 'lobby' | 'boss', to: number, durationMs: number, seq: number) {
+  private async fadeTrack(trackId: 'none' | 'lobby' | 'game' | 'boss', to: number, durationMs: number, seq: number) {
     if (trackId === 'none') return
     const from = this.getTrackFactor(trackId)
     if (durationMs <= 0 || Math.abs(to - from) < 0.001) {
@@ -262,17 +350,14 @@ class AudioManager {
     })
   }
 
-  private resolveDesiredTrack(): 'none' | 'lobby' | 'boss' {
+  private resolveDesiredTrack(): 'none' | 'lobby' | 'game' | 'boss' {
     if (!this.canPlayMusic()) return 'none'
     if (this.scene === 'lobby') return 'lobby'
-    if (this.scene === 'game') {
-      if (this.bossActive || this.bossOutroPending) return 'boss'
-      return 'none'
-    }
+    if (this.scene === 'game') return this.bossActive ? 'boss' : 'game'
     return 'none'
   }
 
-  private async transitionTo(desired: 'none' | 'lobby' | 'boss') {
+  private async transitionTo(desired: 'none' | 'lobby' | 'game' | 'boss') {
     const seq = ++this.transitionSeq
     const from = this.currentTrack
 
@@ -280,11 +365,30 @@ class AudioManager {
       this.startTrack(desired)
       if (desired !== 'none') this.setTrackFactor(desired, 1)
       if (desired !== 'lobby') this.setTrackFactor('lobby', 0)
+      if (desired !== 'game') this.setTrackFactor('game', 0)
       if (desired !== 'boss') this.setTrackFactor('boss', 0)
       return
     }
 
     if (from !== 'none') {
+      if (desired !== 'none') {
+        this.currentTrack = desired
+        this.setTrackFactor(desired, 0)
+        this.startTrack(desired)
+
+        await Promise.all([
+          this.fadeTrack(from, 0, this.CROSSFADE_MS, seq),
+          this.fadeTrack(desired, 1, this.CROSSFADE_MS, seq),
+        ])
+        if (seq !== this.transitionSeq) return
+
+        this.stopTrack(from, true)
+        if (desired !== 'lobby') this.setTrackFactor('lobby', 0)
+        if (desired !== 'game') this.setTrackFactor('game', 0)
+        if (desired !== 'boss') this.setTrackFactor('boss', 0)
+        return
+      }
+
       await this.fadeTrack(from, 0, this.FADE_OUT_MS, seq)
       if (seq !== this.transitionSeq) return
       this.stopTrack(from, true)
@@ -293,6 +397,7 @@ class AudioManager {
     if (desired === 'none') {
       this.currentTrack = 'none'
       this.setTrackFactor('lobby', 0)
+      this.setTrackFactor('game', 0)
       this.setTrackFactor('boss', 0)
       return
     }
@@ -327,26 +432,16 @@ class AudioManager {
 
   setScene(scene: AudioScene) {
     this.scene = scene
-    if (scene !== 'game') this.bossOutroPending = false
     this.syncSceneMusic()
   }
 
-  setBossActive(active: boolean) {
-    if (this.bossActive === active) return
-    this.bossActive = active
-    if (active) {
-      this.bossOutroPending = false
-    } else if (this.scene === 'game') {
-      // Keep boss track alive through the clear moment and stop it on stage start.
-      this.bossOutroPending = true
-    }
+  setBossActive(_active: boolean) {
+    if (this.bossActive === _active) return
+    this.bossActive = _active
     this.syncSceneMusic()
   }
 
   notifyStageStart() {
-    if (this.scene !== 'game') return
-    if (!this.bossOutroPending) return
-    this.bossOutroPending = false
     this.syncSceneMusic()
   }
 
