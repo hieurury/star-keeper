@@ -5,6 +5,7 @@ import './style.css'
 import App from './App.vue'
 import { registerSW } from 'virtual:pwa-register'
 import { useUiStore } from './stores/uiStore'
+import { audioManager } from './game/systems/audio'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -26,6 +27,10 @@ router.beforeEach((to, _from, next) => {
 })
 
 router.afterEach((to) => {
+	const isGameRoute = to.path === '/game' || to.path === '/test'
+	audioManager.setBossActive(false)
+	audioManager.setScene(isGameRoute ? 'game' : 'lobby')
+
 	const enteredGame = to.path === '/game'
 	const delay = enteredGame ? 2200 : 1400
 	setTimeout(() => ui.hideLoading(), delay)

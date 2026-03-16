@@ -23,139 +23,294 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 type ShipAudioId = 'star_keeper' | 'star_holder' | 'star_shooter' | 'star_faster'
 
 class AudioManager {
-  private ctx: AudioContext | null = null
-  private masterGain: GainNode | null = null
-  private musicGain: GainNode | null = null
-  private sfxGain: GainNode | null = null
+  private lobbyTrack: HTMLAudioElement | null = null
+  private bossTrack: HTMLAudioElement | null = null
+  private unlockRetryArmed = false
+  private transitionSeq = 0
+  private currentTrack: 'none' | 'lobby' | 'boss' = 'none'
+  private bossOutroPending = false
+  private lobbyGainFactor = 0
+  private bossGainFactor = 0
+  private lobbyLastIndex = -1
+  private bossLastIndex = -1
+  private lobbyHandlersBound = false
+  private bossHandlersBound = false
 
   private settings: AudioSettings = { ...DEFAULT_AUDIO_SETTINGS }
 
   private scene: AudioScene = 'none'
   private bossActive = false
 
-  private lobbyTimer: number | null = null
-  private gameTimer: number | null = null
-  private bossTimer: number | null = null
+  private readonly LOBBY_PLAYLIST = ['/audio/backgrounds/bg_1.mp3', '/audio/backgrounds/bg_2.mp3']
+  private readonly BOSS_PLAYLIST = [
+    '/audio/bosses/boss_1.mp3',
+    '/audio/bosses/boss_2.mp3',
+    '/audio/bosses/boss_3.mp3',
+    '/audio/bosses/boss_4.mp3',
+  ]
 
-  private lastKillSfxMs = 0
-  private lastHitSfxMs = 0
-  private lastShipShotSfxMs = 0
+  private readonly FADE_OUT_MS = 520
+  private readonly FADE_IN_MS = 620
 
-  private isSupported(): boolean {
-    return typeof window !== 'undefined' && !!(window.AudioContext || (window as any).webkitAudioContext)
+  private canPlayMusic(): boolean {
+    return this.settings.enabled && this.settings.musicEnabled
   }
 
-  private ensureContext(): boolean {
-    if (!this.isSupported()) return false
-    if (this.ctx) return true
+  private armUnlockRetry() {
+    if (typeof window === 'undefined' || this.unlockRetryArmed) return
+    this.unlockRetryArmed = true
 
-    const ACtor = window.AudioContext || (window as any).webkitAudioContext
-    this.ctx = new ACtor()
+    const retry = () => {
+      window.removeEventListener('pointerdown', retry)
+      window.removeEventListener('keydown', retry)
+      window.removeEventListener('touchstart', retry)
+      this.unlockRetryArmed = false
+      this.syncSceneMusic()
+    }
 
-    this.masterGain = this.ctx.createGain()
-    this.musicGain = this.ctx.createGain()
-    this.sfxGain = this.ctx.createGain()
-
-    this.musicGain.connect(this.masterGain)
-    this.sfxGain.connect(this.masterGain)
-    this.masterGain.connect(this.ctx.destination)
-
-    this.applyGains()
-    return true
+    window.addEventListener('pointerdown', retry, { once: true })
+    window.addEventListener('keydown', retry, { once: true })
+    window.addEventListener('touchstart', retry, { once: true, passive: true })
   }
 
   private applyGains() {
-    if (!this.masterGain || !this.musicGain || !this.sfxGain || !this.ctx) return
-    const now = this.ctx.currentTime
     const master = this.settings.enabled ? this.settings.masterVolume : 0
-    const music = this.settings.enabled && this.settings.musicEnabled ? this.settings.musicVolume : 0
-    const sfx = this.settings.enabled && this.settings.sfxEnabled ? this.settings.sfxVolume : 0
+    const music = this.canPlayMusic() ? this.settings.musicVolume : 0
+    const base = clamp01(master * music)
 
-    this.masterGain.gain.setTargetAtTime(clamp01(master), now, 0.02)
-    this.musicGain.gain.setTargetAtTime(clamp01(music), now, 0.02)
-    this.sfxGain.gain.setTargetAtTime(clamp01(sfx), now, 0.02)
+    if (this.lobbyTrack) {
+      this.lobbyTrack.volume = clamp01(base * this.lobbyGainFactor)
+      this.lobbyTrack.muted = !this.canPlayMusic()
+    }
+
+    if (this.bossTrack) {
+      this.bossTrack.volume = clamp01(base * this.bossGainFactor)
+      this.bossTrack.muted = !this.canPlayMusic()
+    }
   }
 
-  private clearTimer(id: number | null) {
-    if (id != null) window.clearInterval(id)
+  private setTrackFactor(trackId: 'none' | 'lobby' | 'boss', value: number) {
+    if (trackId === 'lobby') this.lobbyGainFactor = clamp01(value)
+    if (trackId === 'boss') this.bossGainFactor = clamp01(value)
+    this.applyGains()
   }
 
-  private stopAllLoops() {
-    this.clearTimer(this.lobbyTimer)
-    this.clearTimer(this.gameTimer)
-    this.clearTimer(this.bossTimer)
-    this.lobbyTimer = null
-    this.gameTimer = null
-    this.bossTimer = null
+  private getTrackFactor(trackId: 'none' | 'lobby' | 'boss'): number {
+    if (trackId === 'lobby') return this.lobbyGainFactor
+    if (trackId === 'boss') return this.bossGainFactor
+    return 0
   }
 
-  private note(freq: number, duration = 0.12, type: OscillatorType = 'triangle', gainMul = 1, target: 'music' | 'sfx' = 'music') {
-    if (!this.ctx || !this.masterGain || !this.musicGain || !this.sfxGain) return
-    if (freq <= 0) return
-
-    const node = this.ctx.createOscillator()
-    const gain = this.ctx.createGain()
-    const out = target === 'music' ? this.musicGain : this.sfxGain
-
-    node.type = type
-    node.frequency.value = freq
-    node.connect(gain)
-    gain.connect(out)
-
-    const now = this.ctx.currentTime
-    const peak = 0.25 * gainMul
-    gain.gain.setValueAtTime(0.0001, now)
-    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak), now + 0.012)
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration)
-
-    node.start(now)
-    node.stop(now + duration + 0.015)
+  private pickRandomIndex(length: number, lastIndex: number): number {
+    if (length <= 1) return 0
+    let next = Math.floor(Math.random() * length)
+    if (next === lastIndex) {
+      next = (next + 1 + Math.floor(Math.random() * (length - 1))) % length
+    }
+    return next
   }
 
-  private startLobbyLoop() {
-    if (this.lobbyTimer != null) return
-    const seq = [220, 277.18, 329.63, 392, 329.63, 277.18, 246.94, 329.63]
-    let step = 0
-    this.lobbyTimer = window.setInterval(() => {
-      if (!this.settings.enabled || !this.settings.musicEnabled) return
-      this.note(seq[step % seq.length]!, 0.32, 'sine', 0.38, 'music')
-      if (step % 2 === 0) this.note((seq[(step + 3) % seq.length] ?? 220) * 0.5, 0.22, 'triangle', 0.2, 'music')
-      step++
-    }, 420)
+  private chooseNextSrc(phase: 'lobby' | 'boss'): string {
+    if (phase === 'lobby') {
+      const idx = this.pickRandomIndex(this.LOBBY_PLAYLIST.length, this.lobbyLastIndex)
+      this.lobbyLastIndex = idx
+      return this.LOBBY_PLAYLIST[idx]!
+    }
+    const idx = this.pickRandomIndex(this.BOSS_PLAYLIST.length, this.bossLastIndex)
+    this.bossLastIndex = idx
+    return this.BOSS_PLAYLIST[idx]!
   }
 
-  private startGameLoop() {
-    if (this.gameTimer != null) return
-    const bass = [110, 110, 123.47, 98, 110, 130.81, 146.83, 123.47]
-    const lead = [440, 523.25, 659.25, 587.33, 698.46, 659.25, 523.25, 493.88]
-    let step = 0
-    this.gameTimer = window.setInterval(() => {
-      if (!this.settings.enabled || !this.settings.musicEnabled) return
-      const i = step % bass.length
-      this.note(bass[i]!, 0.22, 'square', 0.22, 'music')
-      this.note(lead[i]!, 0.14, 'sawtooth', 0.13, 'music')
-      if (step % 4 === 0) this.note(lead[(i + 2) % lead.length]!, 0.1, 'triangle', 0.09, 'music')
-      step++
-    }, 240)
+  private handlePhaseEnded(phase: 'lobby' | 'boss') {
+    if (!this.canPlayMusic()) return
+    const desired = this.resolveDesiredTrack()
+    if (phase === 'lobby' && !(desired === 'lobby' && this.currentTrack === 'lobby')) return
+    if (phase === 'boss' && !(desired === 'boss' && this.currentTrack === 'boss')) return
+    if (phase === 'lobby') this.startLobbyTrack(true)
+    else this.startBossTrack(true)
   }
 
-  private startBossOverlay() {
-    if (this.bossTimer != null) return
-    let step = 0
-    this.bossTimer = window.setInterval(() => {
-      if (!this.settings.enabled || !this.settings.musicEnabled || !this.bossActive) return
-      const freq = step % 2 === 0 ? 73.42 : 82.41
-      this.note(freq, 0.26, 'sawtooth', 0.16, 'music')
-      this.note(freq * 2, 0.12, 'triangle', 0.07, 'music')
-      step++
-    }, 360)
+  private bindTrackEvents(track: HTMLAudioElement, phase: 'lobby' | 'boss') {
+    if (phase === 'lobby') {
+      if (this.lobbyHandlersBound) return
+      track.addEventListener('ended', () => this.handlePhaseEnded('lobby'))
+      this.lobbyHandlersBound = true
+      return
+    }
+    if (this.bossHandlersBound) return
+    track.addEventListener('ended', () => this.handlePhaseEnded('boss'))
+    this.bossHandlersBound = true
+  }
+
+  private getLobbyTrack(): HTMLAudioElement | null {
+    if (typeof Audio === 'undefined') return null
+    if (this.lobbyTrack) return this.lobbyTrack
+
+    const track = new Audio()
+    track.preload = 'auto'
+    track.loop = false
+    this.bindTrackEvents(track, 'lobby')
+    this.lobbyTrack = track
+    this.applyGains()
+    return this.lobbyTrack
+  }
+
+  private startLobbyTrack(forceNext = false): boolean {
+    const track = this.getLobbyTrack()
+    if (!track) return false
+
+    if (forceNext || !track.src) {
+      track.src = this.chooseNextSrc('lobby')
+      track.currentTime = 0
+    }
+
+    const playPromise = track.play()
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        if (this.scene !== 'lobby') return
+        this.armUnlockRetry()
+      })
+    }
+    return true
+  }
+
+  private pauseLobbyTrack(reset = false) {
+    if (!this.lobbyTrack) return
+    this.lobbyTrack.pause()
+    if (reset) this.lobbyTrack.currentTime = 0
+  }
+
+  private getBossTrack(): HTMLAudioElement | null {
+    if (typeof Audio === 'undefined') return null
+    if (this.bossTrack) return this.bossTrack
+
+    const track = new Audio()
+    track.preload = 'auto'
+    track.loop = false
+    this.bindTrackEvents(track, 'boss')
+    this.bossTrack = track
+    this.applyGains()
+    return this.bossTrack
+  }
+
+  private startBossTrack(forceNext = false): boolean {
+    const track = this.getBossTrack()
+    if (!track) return false
+
+    if (forceNext || !track.src) {
+      track.src = this.chooseNextSrc('boss')
+      track.currentTime = 0
+    }
+
+    const playPromise = track.play()
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        if (this.scene !== 'game' || !this.bossActive) return
+        this.armUnlockRetry()
+      })
+    }
+    return true
+  }
+
+  private pauseBossTrack(reset = false) {
+    if (!this.bossTrack) return
+    this.bossTrack.pause()
+    if (reset) this.bossTrack.currentTime = 0
+  }
+
+  private startTrack(trackId: 'none' | 'lobby' | 'boss'): boolean {
+    if (trackId === 'lobby') return this.startLobbyTrack()
+    if (trackId === 'boss') return this.startBossTrack()
+    return true
+  }
+
+  private stopTrack(trackId: 'none' | 'lobby' | 'boss', reset = true) {
+    if (trackId === 'lobby') this.pauseLobbyTrack(reset)
+    if (trackId === 'boss') this.pauseBossTrack(reset)
+  }
+
+  private async fadeTrack(trackId: 'none' | 'lobby' | 'boss', to: number, durationMs: number, seq: number) {
+    if (trackId === 'none') return
+    const from = this.getTrackFactor(trackId)
+    if (durationMs <= 0 || Math.abs(to - from) < 0.001) {
+      this.setTrackFactor(trackId, to)
+      return
+    }
+
+    const start = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+
+    await new Promise<void>((resolve) => {
+      const tick = (nowRaw: number) => {
+        if (seq !== this.transitionSeq) {
+          resolve()
+          return
+        }
+
+        const now = typeof performance !== 'undefined' ? nowRaw : Date.now()
+        const t = clamp01((now - start) / durationMs)
+        const val = from + (to - from) * t
+        this.setTrackFactor(trackId, val)
+
+        if (t >= 1) {
+          resolve()
+          return
+        }
+        requestAnimationFrame(tick)
+      }
+
+      requestAnimationFrame(tick)
+    })
+  }
+
+  private resolveDesiredTrack(): 'none' | 'lobby' | 'boss' {
+    if (!this.canPlayMusic()) return 'none'
+    if (this.scene === 'lobby') return 'lobby'
+    if (this.scene === 'game') {
+      if (this.bossActive || this.bossOutroPending) return 'boss'
+      return 'none'
+    }
+    return 'none'
+  }
+
+  private async transitionTo(desired: 'none' | 'lobby' | 'boss') {
+    const seq = ++this.transitionSeq
+    const from = this.currentTrack
+
+    if (from === desired) {
+      this.startTrack(desired)
+      if (desired !== 'none') this.setTrackFactor(desired, 1)
+      if (desired !== 'lobby') this.setTrackFactor('lobby', 0)
+      if (desired !== 'boss') this.setTrackFactor('boss', 0)
+      return
+    }
+
+    if (from !== 'none') {
+      await this.fadeTrack(from, 0, this.FADE_OUT_MS, seq)
+      if (seq !== this.transitionSeq) return
+      this.stopTrack(from, true)
+    }
+
+    if (desired === 'none') {
+      this.currentTrack = 'none'
+      this.setTrackFactor('lobby', 0)
+      this.setTrackFactor('boss', 0)
+      return
+    }
+
+    this.currentTrack = desired
+    this.setTrackFactor(desired, 0)
+    this.startTrack(desired)
+    await this.fadeTrack(desired, 1, this.FADE_IN_MS, seq)
+  }
+
+  private syncSceneMusic() {
+    const desired = this.resolveDesiredTrack()
+    void this.transitionTo(desired)
   }
 
   ensureStarted() {
-    if (!this.ensureContext() || !this.ctx) return
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {})
-    }
+    this.applyGains()
+    this.syncSceneMusic()
   }
 
   setSettings(next: Partial<AudioSettings>) {
@@ -166,110 +321,48 @@ class AudioManager {
       musicVolume: clamp01(next.musicVolume ?? this.settings.musicVolume),
       sfxVolume: clamp01(next.sfxVolume ?? this.settings.sfxVolume),
     }
-    this.ensureContext()
     this.applyGains()
+    this.syncSceneMusic()
   }
 
   setScene(scene: AudioScene) {
     this.scene = scene
-    this.ensureStarted()
-    this.stopAllLoops()
-    if (scene === 'lobby') this.startLobbyLoop()
-    if (scene === 'game') this.startGameLoop()
-    if (scene === 'game' && this.bossActive) this.startBossOverlay()
+    if (scene !== 'game') this.bossOutroPending = false
+    this.syncSceneMusic()
   }
 
   setBossActive(active: boolean) {
     if (this.bossActive === active) return
     this.bossActive = active
-    if (this.scene !== 'game') return
     if (active) {
-      this.playBossAlert()
-      this.startBossOverlay()
-    } else {
-      this.clearTimer(this.bossTimer)
-      this.bossTimer = null
+      this.bossOutroPending = false
+    } else if (this.scene === 'game') {
+      // Keep boss track alive through the clear moment and stop it on stage start.
+      this.bossOutroPending = true
     }
+    this.syncSceneMusic()
   }
 
-  playUiClick() {
-    if (!this.settings.enabled || !this.settings.sfxEnabled) return
-    this.ensureStarted()
-    this.note(900, 0.05, 'square', 0.18, 'sfx')
-    this.note(1200, 0.04, 'triangle', 0.1, 'sfx')
+  notifyStageStart() {
+    if (this.scene !== 'game') return
+    if (!this.bossOutroPending) return
+    this.bossOutroPending = false
+    this.syncSceneMusic()
   }
 
-  playSkill() {
-    if (!this.settings.enabled || !this.settings.sfxEnabled) return
-    this.ensureStarted()
-    this.note(420, 0.12, 'sawtooth', 0.2, 'sfx')
-    this.note(620, 0.16, 'triangle', 0.18, 'sfx')
-    this.note(880, 0.2, 'sine', 0.14, 'sfx')
-  }
+  playUiClick() {}
 
-  playLevelUp() {
-    if (!this.settings.enabled || !this.settings.sfxEnabled) return
-    this.ensureStarted()
-    this.note(523.25, 0.08, 'triangle', 0.16, 'sfx')
-    setTimeout(() => this.note(659.25, 0.09, 'triangle', 0.16, 'sfx'), 60)
-    setTimeout(() => this.note(783.99, 0.11, 'triangle', 0.16, 'sfx'), 130)
-  }
+  playSkill() {}
 
-  playPlayerHit() {
-    if (!this.settings.enabled || !this.settings.sfxEnabled) return
-    const now = Date.now()
-    if (now - this.lastHitSfxMs < 90) return
-    this.lastHitSfxMs = now
-    this.ensureStarted()
-    this.note(160, 0.09, 'sawtooth', 0.22, 'sfx')
-    this.note(120, 0.11, 'square', 0.16, 'sfx')
-  }
+  playLevelUp() {}
 
-  playEnemyKill() {
-    if (!this.settings.enabled || !this.settings.sfxEnabled) return
-    const now = Date.now()
-    if (now - this.lastKillSfxMs < 40) return
-    this.lastKillSfxMs = now
-    this.ensureStarted()
-    this.note(260, 0.04, 'square', 0.12, 'sfx')
-    this.note(180, 0.06, 'triangle', 0.09, 'sfx')
-  }
+  playPlayerHit() {}
 
-  playBossAlert() {
-    if (!this.settings.enabled || !this.settings.sfxEnabled) return
-    this.ensureStarted()
-    this.note(140, 0.22, 'sawtooth', 0.22, 'sfx')
-    setTimeout(() => this.note(110, 0.25, 'sawtooth', 0.2, 'sfx'), 140)
-  }
+  playEnemyKill() {}
 
-  playShipShoot(shipId: ShipAudioId) {
-    if (!this.settings.enabled || !this.settings.sfxEnabled) return
+  playBossAlert() {}
 
-    const now = Date.now()
-    const minGap = shipId === 'star_faster' ? 38 : shipId === 'star_shooter' ? 90 : shipId === 'star_holder' ? 70 : 52
-    if (now - this.lastShipShotSfxMs < minGap) return
-    this.lastShipShotSfxMs = now
-
-    this.ensureStarted()
-    if (shipId === 'star_keeper') {
-      this.note(630, 0.04, 'square', 0.14, 'sfx')
-      this.note(420, 0.06, 'triangle', 0.11, 'sfx')
-      return
-    }
-    if (shipId === 'star_holder') {
-      this.note(170, 0.07, 'sawtooth', 0.2, 'sfx')
-      this.note(120, 0.09, 'square', 0.16, 'sfx')
-      return
-    }
-    if (shipId === 'star_shooter') {
-      this.note(300, 0.06, 'triangle', 0.17, 'sfx')
-      this.note(220, 0.08, 'sawtooth', 0.15, 'sfx')
-      this.note(140, 0.11, 'square', 0.1, 'sfx')
-      return
-    }
-    this.note(820, 0.03, 'square', 0.12, 'sfx')
-    this.note(620, 0.04, 'triangle', 0.09, 'sfx')
-  }
+  playShipShoot(_shipId: ShipAudioId) {}
 }
 
 export const audioManager = new AudioManager()

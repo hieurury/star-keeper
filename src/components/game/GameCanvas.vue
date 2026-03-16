@@ -1044,6 +1044,7 @@ function gameLoop(ticker: Ticker) {
       ctx.stageClearTimer = 0
       ctx.stageAnnouncePending = false
       game.currentStage++
+      audioManager.notifyStageStart()
       launchWave(ctx, game)
     }
   }

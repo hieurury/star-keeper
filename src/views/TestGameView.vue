@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/gameStore'
 import GameCanvas from '../components/game/GameCanvas.vue'
 import GameHUD from '../components/game/GameHUD.vue'
 import PixelButton from '../components/ui/PixelButton.vue'
+import { audioManager } from '../game/systems/audio'
 
 const router = useRouter()
 const game = useGameStore()
@@ -53,8 +54,16 @@ function goHome() {
 }
 
 onUnmounted(() => {
+  audioManager.setBossActive(false)
+  audioManager.setScene('none')
   game.testMode = null
   if (game.isPlaying) game.endGame()
+})
+
+onMounted(() => {
+  audioManager.ensureStarted()
+  audioManager.setScene('game')
+  audioManager.setBossActive(false)
 })
 </script>
 
