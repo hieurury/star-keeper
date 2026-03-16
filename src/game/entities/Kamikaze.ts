@@ -109,7 +109,7 @@ export function updateKamikaze(ctx: GameContext, game: GameStore, e: Enemy, i: n
       const tx = (e.targetX ?? GAME_W / 2) - e.container.x
       const ty = (e.targetY ?? GAME_H / 2) - e.container.y
       const mag = Math.sqrt(tx * tx + ty * ty) || 1
-      const speed = 9
+      const speed = 11.5
       e.vx = (tx / mag) * speed
       e.vy = (ty / mag) * speed
     }

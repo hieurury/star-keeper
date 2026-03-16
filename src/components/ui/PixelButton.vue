@@ -1,14 +1,23 @@
 <script setup lang="ts">
-defineProps<{
+import { audioManager } from '../../game/systems/audio'
+
+const props = defineProps<{
   label: string
   variant?: 'primary' | 'secondary' | 'danger'
   disabled?: boolean
   size?: 'sm' | 'md' | 'lg'
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   click: []
 }>()
+
+function onClick() {
+  if (props.disabled) return
+  audioManager.ensureStarted()
+  audioManager.playUiClick()
+  emit('click')
+}
 </script>
 
 <template>
@@ -16,7 +25,7 @@ defineEmits<{
     class="pixel-btn"
     :class="[`pixel-btn--${variant ?? 'primary'}`, `pixel-btn--${size ?? 'md'}`, { disabled }]"
     :disabled="disabled"
-    @click="$emit('click')"
+    @click="onClick"
   >
     {{ label }}
   </button>

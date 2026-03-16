@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, onBeforeRouteLeave } from 'vue-router'
-import { useGameStore } from '../stores/gameStore'
+import { useGameStore, SHIP_DEFS } from '../stores/gameStore'
 import GameCanvas from '../components/game/GameCanvas.vue'
 import GameHUD from '../components/game/GameHUD.vue'
 import PixelButton from '../components/ui/PixelButton.vue'
 import TourOverlay, { type TourStep } from '../components/ui/TourOverlay.vue'
+import { audioManager } from '../game/systems/audio'
 
 const router = useRouter()
 const game = useGameStore()
@@ -25,16 +26,12 @@ const isTouchDevice = 'ontouchstart' in window
 
 function getCurrentShipSkillTourText(): string {
   const triggerText = isTouchDevice ? 'Chạm đôi (2× TAP) màn hình để kích hoạt.' : 'Nhấn chuột phải (RMB) để kích hoạt.'
-  if (game.selectedShip === 'star_shooter') {
-    return triggerText + '\n\nTriệu hồi Hố Đen kéo kẻ địch và xóa đạn trong vùng. Hồi chiêu cơ bản 35 giây (giảm bởi Phục Hồi Kỹ Năng).'
+  const shipDef = SHIP_DEFS[game.selectedShip as keyof typeof SHIP_DEFS]
+  if (!shipDef) return triggerText
+  if (shipDef.skill.cooldownSec == null) {
+    return triggerText + `\n\n${shipDef.skill.description}`
   }
-  if (game.selectedShip === 'star_holder') {
-    return triggerText + '\n\nKích hoạt Thu Hoạch Linh Hồn khi đủ mảnh để bắn loạt tên lửa linh hồn. Mảnh rơi khi tiêu diệt kẻ địch.'
-  }
-  if (game.selectedShip === 'star_faster') {
-    return triggerText + '\n\nKích hoạt Gia Tốc Hạt trong 5 giây: địch và đạn địch bị làm chậm 70%, còn tốc độ bắn của Star Faster tăng vọt. Hồi chiêu cơ bản 30 giây (giảm bởi Phục Hồi Kỹ Năng).'
-  }
-  return triggerText + '\n\nGiải phóng Sóng Nhiệt hủy diệt toàn màn hình và phá sạch đạn kẻ địch. Hồi chiêu cơ bản 30 giây (giảm bởi Phục Hồi Kỹ Năng).'
+  return triggerText + `\n\n${shipDef.skill.description} Hồi chiêu cơ bản ${shipDef.skill.cooldownSec} giây (giảm bởi Phục Hồi Kỹ Năng).`
 }
 
 const GAME_TOUR_STEPS: TourStep[] = [
@@ -142,6 +139,9 @@ onBeforeRouteLeave(() => {
 
 onMounted(() => {
   window.addEventListener('beforeunload', handleBeforeUnload)
+  audioManager.ensureStarted()
+  audioManager.setScene('game')
+  audioManager.setBossActive(false)
   // Request fullscreen on mobile to hide browser bars
   if (isTouchDevice) {
     const el = document.documentElement as any
@@ -152,6 +152,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('beforeunload', handleBeforeUnload)
+  audioManager.setBossActive(false)
+  audioManager.setScene('none')
   // Exit fullscreen when leaving game
   const exit = (document as any).exitFullscreen ?? (document as any).webkitExitFullscreen
   if (exit && document.fullscreenElement) exit.call(document).catch(() => {})

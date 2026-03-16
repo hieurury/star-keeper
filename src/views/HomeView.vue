@@ -5,6 +5,9 @@ import {
   useGameStore,
   ALL_CARD_DEFS,
   ALL_ARTIFACT_DEFS,
+  SHIP_DEFS,
+  SHIP_BULLET_COUNT,
+  SHIP_UNLOCK_COST,
   SHIP_ARTIFACT_SLOTS,
   SHIP_DURABILITY_MAX,
   type CardDef,
@@ -22,10 +25,11 @@ import {
   PhClipboardText, PhPencilSimple, PhCheck, PhX,
   PhArrowLeft, PhCaretLeft, PhCaretRight, PhTimer,
   PhDownloadSimple, PhUploadSimple, PhWarning, PhWrench, PhLightning,
-  PhBell,
+  PhBell, PhSpeakerHigh, PhSpeakerSlash, PhMusicNotes,
   PhTreasureChest,
   PhBookOpen,
 } from '@phosphor-icons/vue'
+import { audioManager } from '../game/systems/audio'
 
 const router = useRouter()
 const game = useGameStore()
@@ -35,7 +39,7 @@ const AVATARS = ['PhRocketLaunch', 'PhAirplaneTilt', 'PhLightning', 'PhFire', 'P
 const showProfileSheet = ref(false)
 const showShipsPanel = ref(false)
 const shipIndex = ref(0)
-const SHIP_COUNT = 4
+const SHIP_COUNT = Object.keys(SHIP_DEFS).length
 
 function prevShip() { shipIndex.value = (shipIndex.value - 1 + SHIP_COUNT) % SHIP_COUNT }
 function nextShip() { shipIndex.value = (shipIndex.value + 1) % SHIP_COUNT }
@@ -63,6 +67,37 @@ const showTour = ref(false)
 const showSettingsPanel = ref(false)
 const importStatus = ref<'idle' | 'success' | 'error'>('idle')
 let importStatusTimer: ReturnType<typeof setTimeout> | null = null
+
+function setAudioEnabled(enabled: boolean) {
+  game.updateAudioSettings({ enabled })
+}
+
+function setMusicEnabled(musicEnabled: boolean) {
+  game.updateAudioSettings({ musicEnabled })
+}
+
+function setSfxEnabled(sfxEnabled: boolean) {
+  game.updateAudioSettings({ sfxEnabled })
+}
+
+function setMasterVolume(ev: Event) {
+  const value = Number((ev.target as HTMLInputElement).value)
+  game.updateAudioSettings({ masterVolume: value / 100 })
+}
+
+function setMusicVolume(ev: Event) {
+  const value = Number((ev.target as HTMLInputElement).value)
+  game.updateAudioSettings({ musicVolume: value / 100 })
+}
+
+function setSfxVolume(ev: Event) {
+  const value = Number((ev.target as HTMLInputElement).value)
+  game.updateAudioSettings({ sfxVolume: value / 100 })
+}
+
+function unlockAudioByGesture() {
+  audioManager.ensureStarted()
+}
 
 function onImportFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -256,13 +291,6 @@ interface ShipStatItem {
   color: string
 }
 
-const SHIP_NAME_MAP: Record<ShipId, string> = {
-  star_keeper: 'Star Keeper',
-  star_holder: 'Star Holder',
-  star_shooter: 'Star Shooter',
-  star_faster: 'Star Faster',
-}
-
 const SHIP_UPGRADE_LABEL_MAP: Record<ShipUpgradeKey, string> = {
   hp: 'HP',
   fireRate: 'Tốc bắn',
@@ -275,16 +303,17 @@ const SHIP_UPGRADE_COLOR_MAP: Record<ShipUpgradeKey, string> = {
   hp: '#44ff88',
 }
 
-const SHIP_BULLET_COUNT: Record<ShipId, { base: number, max: number }> = {
-  star_keeper: { base: 1, max: 3 },
-  star_holder: { base: 1, max: 3 },
-  star_shooter: { base: 1, max: 4 },
-  star_faster: { base: 2, max: 5 },
-}
-
 function toPercent(current: number, max: number): number {
   if (max <= 0) return 0
   return Math.max(0, Math.min(100, Math.round((current / max) * 100)))
+}
+
+function getShipDef(shipId: ShipId) {
+  return SHIP_DEFS[shipId]
+}
+
+function formatCoin(value: number): string {
+  return value.toLocaleString('en-US')
 }
 
 function formatShipStatValue(key: ShipUpgradeKey, current: number, max: number): string {
@@ -340,7 +369,7 @@ const starHolderStats = computed(() => buildShipStatItems('star_holder'))
 const starShooterStats = computed(() => buildShipStatItems('star_shooter'))
 const starFasterStats = computed(() => buildShipStatItems('star_faster'))
 
-const upgradeShipName = computed(() => SHIP_NAME_MAP[upgradeShipId.value])
+const upgradeShipName = computed(() => getShipDef(upgradeShipId.value).name)
 const upgradeStatItems = computed(() => buildShipStatItems(upgradeShipId.value))
 const upgradeRows = computed(() => {
   return (['hp', 'fireRate', 'damage'] as ShipUpgradeKey[]).map((key) => ({
@@ -361,8 +390,8 @@ function buyShipUpgrade(key: ShipUpgradeKey) {
   game.buyShipUpgrade(upgradeShipId.value, key)
 }
 
-function buyShip(id: string, cost: number) {
-  game.buyShip(id, cost)
+function buyShip(id: ShipId) {
+  game.buyShip(id, SHIP_UNLOCK_COST[id])
 }
 function selectShip(id: string) {
   game.selectShip(id)
@@ -372,6 +401,10 @@ let regenInterval: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   game.loadProgress()
+  audioManager.setScene('lobby')
+  audioManager.setBossActive(false)
+  window.addEventListener('pointerdown', unlockAudioByGesture, { once: true })
+  window.addEventListener('keydown', unlockAudioByGesture, { once: true })
   if (!localStorage.getItem('hasTakenTour')) {
     showTourPrompt.value = true
   }
@@ -390,6 +423,8 @@ onMounted(() => {
 onUnmounted(() => {
   if (regenInterval) clearInterval(regenInterval)
   document.removeEventListener('keydown', onAdminKeyDown)
+  window.removeEventListener('pointerdown', unlockAudioByGesture)
+  window.removeEventListener('keydown', unlockAudioByGesture)
 })
 
 function startGame() {
@@ -775,9 +810,9 @@ function onShipNameKey(e: KeyboardEvent) {
                       <rect x="-6" y="12" width="12" height="9" fill="#ff6600" opacity="0.85"/>
                     </svg>
                     <div class="ship-card__info">
-                      <div class="ship-card__name">STAR KEEPER</div>
+                      <div class="ship-card__name">{{ getShipDef('star_keeper').name.toUpperCase() }}</div>
                       <div class="ship-card__tag">⭐ Phi cơ cơ bản · Miễn phí</div>
-                      <div class="ship-card__desc">Chiến cơ mức trung bình, cân bằng giữa tốc độ và sức mạnh. Lựa chọn đầu tiên cho mọi phi công.</div>
+                      <div class="ship-card__desc">{{ getShipDef('star_keeper').description }}</div>
                     </div>
                   </div>
                   <div class="ship-stats">
@@ -791,9 +826,9 @@ function onShipNameKey(e: KeyboardEvent) {
                     </div>
                   </div>
                   <div class="ship-skill">
-                    <div class="ship-skill__name"><PhCrown weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>SÓNG TẦM NHIỆT HỦY DIỆT</div>
-                    <div class="ship-skill__cd"><PhTimer :size="11" style="vertical-align:middle;margin-right:4px"/>Hồi chiêu: 30 giây</div>
-                    <div class="ship-skill__desc">Tỏa ra sóng nhiệt tốc độ cao, gây sát thương lên tất cả kẻ địch trên màn hình và hủy toàn bộ đường đạn của đối phương.</div>
+                    <div class="ship-skill__name"><PhCrown weight="fill" :size="14" style="vertical-align:middle;margin-right:4px"/>{{ getShipDef('star_keeper').skill.name }}</div>
+                    <div class="ship-skill__cd"><PhTimer :size="11" style="vertical-align:middle;margin-right:4px"/>Hồi chiêu: {{ getShipDef('star_keeper').skill.cooldownSec }} giây</div>
+                    <div class="ship-skill__desc">{{ getShipDef('star_keeper').skill.description }}</div>
                   </div>
                   <div class="ship-card__actions">
                     <button v-if="game.selectedShip !== 'star_keeper'" class="ship-btn ship-btn--select" @click="selectShip('star_keeper')"><PhCheck :size="11" style="vertical-align:middle;margin-right:4px"/>Chọn phi cơ này</button>
@@ -817,11 +852,11 @@ function onShipNameKey(e: KeyboardEvent) {
                       <rect x="-3" y="18" width="6" height="6" fill="#ffcc00" opacity="0.85"/>
                     </svg>
                     <div class="ship-card__info">
-                      <div class="ship-card__name">STAR HOLDER</div>
+                      <div class="ship-card__name">{{ getShipDef('star_holder').name.toUpperCase() }}</div>
                       <div class="ship-card__tag" :class="game.ownedShips.includes('star_holder') ? 'tag--owned' : 'tag--locked'">
-                        {{ game.ownedShips.includes('star_holder') ? '✅ Đã sở hữu' : '🔒 Cần mở khoá · 5,000 🪙' }}
+                        {{ game.ownedShips.includes('star_holder') ? '✅ Đã sở hữu' : `🔒 Cần mở khoá · ${formatCoin(getShipDef('star_holder').unlockCost)} 🪙` }}
                       </div>
-                      <div class="ship-card__desc">Chiến cơ tấn công cao, thân tàu mạnh mẽ. Linh hồn kẻ địch trở thành vũ khí hủy diệt.</div>
+                      <div class="ship-card__desc">{{ getShipDef('star_holder').description }}</div>
                     </div>
                   </div>
                   <div class="ship-stats">
@@ -835,14 +870,14 @@ function onShipNameKey(e: KeyboardEvent) {
                     </div>
                   </div>
                   <div class="ship-skill ship-skill--orange">
-                    <div class="ship-skill__name">🔥 THU THẬP LINH HỒN</div>
-                    <div class="ship-skill__cd">⬡ Cần: 10 mảnh linh hồn (tối đa 50)</div>
-                    <div class="ship-skill__desc">Kẻ địch bị hạ có 75% cơ hội rơi mảnh linh hồn. Thu thập đủ 10 mảnh rồi kích hoạt để bắn tất cả thành tên lửa tự dẫn, bám sát kẻ địch gần nhất.</div>
+                    <div class="ship-skill__name">🔥 {{ getShipDef('star_holder').skill.name }}</div>
+                    <div class="ship-skill__cd">{{ getShipDef('star_holder').skill.requirementText }}</div>
+                    <div class="ship-skill__desc">{{ getShipDef('star_holder').skill.description }}</div>
                   </div>
                   <div class="ship-card__actions">
                     <template v-if="!game.ownedShips.includes('star_holder')">
-                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < 5000" @click="buyShip('star_holder', 5000)">
-                        {{ game.playerCoins >= 5000 ? 'Mua — 5,000 🪙' : 'Không đủ vàng' }}
+                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < getShipDef('star_holder').unlockCost" @click="buyShip('star_holder')">
+                        {{ game.playerCoins >= getShipDef('star_holder').unlockCost ? `Mua — ${formatCoin(getShipDef('star_holder').unlockCost)} 🪙` : 'Không đủ vàng' }}
                       </button>
                     </template>
                     <template v-else>
@@ -877,11 +912,11 @@ function onShipNameKey(e: KeyboardEvent) {
                       <rect x="-3" y="22" width="6" height="5" fill="#ffcc22" opacity="0.95"/>
                     </svg>
                     <div class="ship-card__info">
-                      <div class="ship-card__name">STAR SHOOTER</div>
+                      <div class="ship-card__name">{{ getShipDef('star_shooter').name.toUpperCase() }}</div>
                       <div class="ship-card__tag" :class="game.ownedShips.includes('star_shooter') ? 'tag--owned' : 'tag--locked'">
-                        {{ game.ownedShips.includes('star_shooter') ? '✅ Đã sở hữu' : '🔒 Cần mở khoá · 15,000 🪙' }}
+                        {{ game.ownedShips.includes('star_shooter') ? '✅ Đã sở hữu' : `🔒 Cần mở khoá · ${formatCoin(getShipDef('star_shooter').unlockCost)} 🪙` }}
                       </div>
-                      <div class="ship-card__desc">Chiến cơ 4 cánh với pod tên lửa hạng nặng. Tên lửa tự dẫn bám sát đối thủ, kỹ năng hố đen hấp thụ kẻ địch.</div>
+                      <div class="ship-card__desc">{{ getShipDef('star_shooter').description }}</div>
                     </div>
                   </div>
                   <div class="ship-stats">
@@ -895,14 +930,14 @@ function onShipNameKey(e: KeyboardEvent) {
                     </div>
                   </div>
                   <div class="ship-skill ship-skill--purple">
-                    <div class="ship-skill__name">🌑 HỐ ĐEN HẤP DẪN</div>
-                    <div class="ship-skill__cd"><PhTimer :size="11" style="vertical-align:middle;margin-right:4px"/>Hồi chiêu: 35 giây</div>
-                    <div class="ship-skill__desc">Triệu hồi hố đen trong 5 giây — hút kẻ địch thường lại gần, gây 10% HP/s sát thương liên tục (trùm 2%) và hấp thụ toàn bộ đạn kẻ địch.</div>
+                    <div class="ship-skill__name">🌑 {{ getShipDef('star_shooter').skill.name }}</div>
+                    <div class="ship-skill__cd"><PhTimer :size="11" style="vertical-align:middle;margin-right:4px"/>Hồi chiêu: {{ getShipDef('star_shooter').skill.cooldownSec }} giây</div>
+                    <div class="ship-skill__desc">{{ getShipDef('star_shooter').skill.description }}</div>
                   </div>
                   <div class="ship-card__actions">
                     <template v-if="!game.ownedShips.includes('star_shooter')">
-                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < 15000" @click="buyShip('star_shooter', 15000)">
-                        {{ game.playerCoins >= 15000 ? 'Mua — 15,000 🪙' : 'Không đủ vàng' }}
+                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < getShipDef('star_shooter').unlockCost" @click="buyShip('star_shooter')">
+                        {{ game.playerCoins >= getShipDef('star_shooter').unlockCost ? `Mua — ${formatCoin(getShipDef('star_shooter').unlockCost)} 🪙` : 'Không đủ vàng' }}
                       </button>
                     </template>
                     <template v-else>
@@ -952,11 +987,11 @@ function onShipNameKey(e: KeyboardEvent) {
                       <circle cx="0" cy="16" r="2.2" fill="#66ffff"/>
                     </svg>
                     <div class="ship-card__info">
-                      <div class="ship-card__name">STAR FASTER</div>
+                      <div class="ship-card__name">{{ getShipDef('star_faster').name.toUpperCase() }}</div>
                       <div class="ship-card__tag" :class="game.ownedShips.includes('star_faster') ? 'tag--owned' : 'tag--locked'">
-                        {{ game.ownedShips.includes('star_faster') ? '✅ Đã sở hữu' : '🔒 Cần mở khoá · 5,000 🪙' }}
+                        {{ game.ownedShips.includes('star_faster') ? '✅ Đã sở hữu' : `🔒 Cần mở khoá · ${formatCoin(getShipDef('star_faster').unlockCost)} 🪙` }}
                       </div>
-                      <div class="ship-card__desc">Chiến cơ tiểu liên với tốc độ xả đạn cực nhanh. Đạn nhỏ mảnh nhưng chính xác cao, độ lệch bắn cực thấp khi xả liên thanh.</div>
+                      <div class="ship-card__desc">{{ getShipDef('star_faster').description }}</div>
                     </div>
                   </div>
                   <div class="ship-stats">
@@ -970,14 +1005,14 @@ function onShipNameKey(e: KeyboardEvent) {
                     </div>
                   </div>
                   <div class="ship-skill ship-skill--cyan">
-                    <div class="ship-skill__name">⚡ GIA TỐC HẠT</div>
-                    <div class="ship-skill__cd"><PhTimer :size="11" style="vertical-align:middle;margin-right:4px"/>Hồi chiêu: 30 giây</div>
-                    <div class="ship-skill__desc">Kích hoạt tốc độ tối đa làm không gian xung quanh như chậm lại. Trong 5 giây, kẻ địch và đạn của chúng giảm tốc 70%, tốc độ bắn của phi cơ đạt đỉnh.</div>
+                    <div class="ship-skill__name">⚡ {{ getShipDef('star_faster').skill.name }}</div>
+                    <div class="ship-skill__cd"><PhTimer :size="11" style="vertical-align:middle;margin-right:4px"/>Hồi chiêu: {{ getShipDef('star_faster').skill.cooldownSec }} giây</div>
+                    <div class="ship-skill__desc">{{ getShipDef('star_faster').skill.description }}</div>
                   </div>
                   <div class="ship-card__actions">
                     <template v-if="!game.ownedShips.includes('star_faster')">
-                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < 5000" @click="buyShip('star_faster', 5000)">
-                        {{ game.playerCoins >= 5000 ? 'Mua — 5,000 🪙' : 'Không đủ vàng' }}
+                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < getShipDef('star_faster').unlockCost" @click="buyShip('star_faster')">
+                        {{ game.playerCoins >= getShipDef('star_faster').unlockCost ? `Mua — ${formatCoin(getShipDef('star_faster').unlockCost)} 🪙` : 'Không đủ vàng' }}
                       </button>
                     </template>
                     <template v-else>
@@ -1288,6 +1323,39 @@ function onShipNameKey(e: KeyboardEvent) {
             <button class="sheet-close" @click="showSettingsPanel = false"><PhX :size="14" /></button>
           </div>
           <div class="ships-scroll" style="padding: 20px 16px 32px;">
+            <div class="settings-section-label">ÂM THANH</div>
+            <div class="settings-desc">Điều chỉnh nhạc nền và hiệu ứng theo ý bạn. Cài đặt sẽ được lưu tự động.</div>
+
+            <div class="audio-row">
+              <label class="audio-toggle" for="audio-enabled">
+                <span class="audio-toggle__label"><PhSpeakerHigh :size="13" weight="bold" /> Bật âm thanh</span>
+                <input id="audio-enabled" type="checkbox" :checked="game.audioSettings.enabled" @change="setAudioEnabled(($event.target as HTMLInputElement).checked)" />
+              </label>
+
+              <label class="audio-toggle" for="audio-music">
+                <span class="audio-toggle__label"><PhMusicNotes :size="13" weight="bold" /> Nhạc nền</span>
+                <input id="audio-music" type="checkbox" :checked="game.audioSettings.musicEnabled" :disabled="!game.audioSettings.enabled" @change="setMusicEnabled(($event.target as HTMLInputElement).checked)" />
+              </label>
+
+              <label class="audio-toggle" for="audio-sfx">
+                <span class="audio-toggle__label"><PhSpeakerSlash :size="13" weight="bold" /> Hiệu ứng</span>
+                <input id="audio-sfx" type="checkbox" :checked="game.audioSettings.sfxEnabled" :disabled="!game.audioSettings.enabled" @change="setSfxEnabled(($event.target as HTMLInputElement).checked)" />
+              </label>
+            </div>
+
+            <div class="audio-slider-wrap" :class="{ 'audio-slider-wrap--disabled': !game.audioSettings.enabled }">
+              <label class="audio-slider-label" for="audio-master">Âm lượng tổng: {{ Math.round(game.audioSettings.masterVolume * 100) }}%</label>
+              <input id="audio-master" class="audio-slider" type="range" min="0" max="100" step="1" :value="Math.round(game.audioSettings.masterVolume * 100)" :disabled="!game.audioSettings.enabled" @input="setMasterVolume" />
+
+              <label class="audio-slider-label" for="audio-music-volume">Âm lượng nhạc nền: {{ Math.round(game.audioSettings.musicVolume * 100) }}%</label>
+              <input id="audio-music-volume" class="audio-slider" type="range" min="0" max="100" step="1" :value="Math.round(game.audioSettings.musicVolume * 100)" :disabled="!game.audioSettings.enabled || !game.audioSettings.musicEnabled" @input="setMusicVolume" />
+
+              <label class="audio-slider-label" for="audio-sfx-volume">Âm lượng hiệu ứng: {{ Math.round(game.audioSettings.sfxVolume * 100) }}%</label>
+              <input id="audio-sfx-volume" class="audio-slider" type="range" min="0" max="100" step="1" :value="Math.round(game.audioSettings.sfxVolume * 100)" :disabled="!game.audioSettings.enabled || !game.audioSettings.sfxEnabled" @input="setSfxVolume" />
+            </div>
+
+            <div class="settings-divider"></div>
+
             <!-- Save data section -->
             <div class="settings-section-label">DỮ LIỆU GAME</div>
             <div class="settings-desc">Xuất file lưu để bảo quản tiến trình, hoặc nạp lại từ file đã xuất trước đó.</div>
@@ -3098,6 +3166,59 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   color: var(--color-text-dim);
   line-height: 1.8;
   margin-bottom: 14px;
+}
+.settings-divider {
+  margin: 14px 0 16px;
+  border-top: 2px dashed rgba(255, 255, 255, 0.1);
+}
+.audio-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.audio-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text);
+  background: rgba(0, 0, 0, 0.18);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  padding: 8px 10px;
+}
+.audio-toggle__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.audio-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+}
+.audio-slider-wrap {
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  padding: 10px;
+  margin-bottom: 12px;
+}
+.audio-slider-wrap--disabled {
+  opacity: 0.55;
+}
+.audio-slider-label {
+  display: block;
+  font-family: var(--font-pixel);
+  font-size: 7.5px;
+  color: var(--color-text-dim);
+  margin-bottom: 6px;
+}
+.audio-slider {
+  width: 100%;
+  margin-bottom: 10px;
+}
+.audio-slider:last-child {
+  margin-bottom: 0;
 }
 .settings-btn {
   display: block;

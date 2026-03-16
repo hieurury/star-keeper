@@ -141,7 +141,7 @@ export function spawnBossTinhVan(ctx: GameContext, game: GameStore): void {
     bossTargetY: GAME_H * 0.20,
     bossPhase: 1,
     attack1Timer: 360,    // first black hole after 6s
-    attack2Timer: 2100,   // phase 2 summon cooldown: 35s
+    attack2Timer: 1800,   // phase 2 summon cooldown: 30s
     bossDriftTimer: 0,
     tinhVanGuns: guns,
     blackHoles: [],

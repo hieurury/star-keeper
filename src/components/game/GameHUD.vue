@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useGameStore, ALL_CARD_DEFS, ALL_ARTIFACT_DEFS } from '../../stores/gameStore'
+import { useGameStore, ALL_CARD_DEFS, ALL_ARTIFACT_DEFS, SHIP_DEFS } from '../../stores/gameStore'
 import type { CardDef, CardType } from '../../stores/gameStore'
-import { PhHouse, PhLightning, PhPlay, PhQuestion } from '@phosphor-icons/vue'
+import { PhCrosshair, PhHouse, PhLightning, PhPlay, PhQuestion, PhSpiral } from '@phosphor-icons/vue'
 import ArtifactIcon from '../ui/ArtifactIcon.vue'
 import CardIcon from '../ui/CardIcon.vue'
 
@@ -104,6 +104,10 @@ watch(() => game.isSkillReady, (ready) => {
     skillJustReady.value = true
     setTimeout(() => { skillJustReady.value = false }, 900)
   }
+})
+
+const skillLabelHtml = computed(() => {
+  return SHIP_DEFS[game.selectedShip as keyof typeof SHIP_DEFS]?.skill.hudLabelHtml ?? 'SÓNG<br/>NHIỆT'
 })
 </script>
 
@@ -280,6 +284,7 @@ watch(() => game.isSkillReady, (ready) => {
           'hud__skill-btn--flash': skillJustReady,
           'hud__skill-btn--orange': game.selectedShip === 'star_holder',
           'hud__skill-btn--purple': game.selectedShip === 'star_shooter',
+          'hud__skill-btn--cyan': game.selectedShip === 'star_faster',
         }"
       >
         <!-- Star Holder: fragment counter -->
@@ -288,11 +293,15 @@ watch(() => game.isSkillReady, (ready) => {
         </template>
         <!-- Star Keeper: default cooldown / ready -->
         <template v-else>
-          <span v-if="game.isSkillReady" class="hud__skill-icon"><PhLightning weight="fill" :size="24" /></span>
+          <span v-if="game.isSkillReady" class="hud__skill-icon">
+            <PhSpiral v-if="game.selectedShip === 'star_shooter'" weight="fill" :size="24" />
+            <PhCrosshair v-else-if="game.selectedShip === 'star_faster'" weight="fill" :size="24" />
+            <PhLightning v-else weight="fill" :size="24" />
+          </span>
           <span v-else class="hud__skill-cd">{{ Math.ceil(game.skillCooldown) }}</span>
         </template>
       </div>
-      <div class="hud__skill-label" v-html="game.selectedShip === 'star_holder' ? 'LINH<br/>HỒN' : (game.selectedShip === 'star_shooter' ? 'HỐ<br/>ĐEN' : 'SÓNG<br/>NHIỆT')"></div>
+      <div class="hud__skill-label" v-html="skillLabelHtml"></div>
       <div class="hud__skill-hint">{{ isTouchDevice ? '2× TAP' : 'RMB' }}</div>
     </div>
     <!-- Artifact progress bars (active artifacts only) -->
@@ -832,6 +841,13 @@ watch(() => game.isSkillReady, (ready) => {
 .hud__skill-btn--purple.hud__skill-btn--ready {
   border-color: #aa44ff;
   box-shadow: 0 0 12px rgba(160, 60, 255, 0.7), inset 0 0 8px rgba(140, 40, 255, 0.18);
+}
+.hud__skill-btn--cyan {
+  border-color: #006b88;
+}
+.hud__skill-btn--cyan.hud__skill-btn--ready {
+  border-color: #33d4ff;
+  box-shadow: 0 0 12px rgba(60, 210, 255, 0.7), inset 0 0 8px rgba(50, 170, 220, 0.2);
 }
 .hud__skill-frags {
   font-size: 16px;

@@ -217,6 +217,7 @@ export function spawnBossCnoxSun(ctx: GameContext, game: GameStore): void {
     sunCrystalSpawnCd: 70,
     sunAttackQueue: [],
     sunActiveStars: [],
+    sunDiamondCooldownPicks: 4,
     sunLinkGfx: linkGfx,
     sunCoreLaserGfx: coreLaserGfx,
     sunCoreSpin: 0,

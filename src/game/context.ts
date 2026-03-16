@@ -100,6 +100,9 @@ export interface GameContext {
   touchX: number
   touchY: number
   shootTimer: number
+
+  // Prevent laser beams from applying damage every single frame.
+  playerLaserDamageCd: number
 }
 
 export function createGameContext(): GameContext {
@@ -171,5 +174,6 @@ export function createGameContext(): GameContext {
     touchX: 0,
     touchY: 0,
     shootTimer: 0,
+    playerLaserDamageCd: 0,
   }
 }

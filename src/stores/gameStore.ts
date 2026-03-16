@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { UPDATE_NOTICES } from '../content/updateNotices'
 import type { EnemyKind } from '../game/types'
+import { audioManager, DEFAULT_AUDIO_SETTINGS, type AudioSettings } from '../game/systems/audio'
+import { queueMirrorSave, readMirrorSave } from '../game/systems/saveFileMirror'
 
 export const ALL_ENEMY_KINDS: EnemyKind[] = [
   'pioneer',
@@ -367,7 +369,7 @@ export const ALL_ACHIEVEMENTS: AchievementDef[] = [
   { id: 'survive_10m', name: '🏆 Chiến Thần',           desc: 'Sống sót 10 phút liên tục' },
   { id: 'kill_boss',   name: '💥 Kẻ Diệt Trùm',        desc: 'Hạ gục boss Star Destroyer' },
   { id: 'level_10',    name: '⚡ Đỉnh Chiến',           desc: 'Đạt cấp 10 trong 1 ván' },
-  { id: 'skill_use',   name: '🌊 Sóng Nhiệt',           desc: 'Sử dụng kỹ năng Sóng Tầm Nhiệt lần đầu' },
+  { id: 'skill_use',   name: '⚡ Kích Hoạt Kỹ Năng',    desc: 'Sử dụng kỹ năng phi cơ lần đầu' },
   { id: 'earn_1000g',  name: '🪙 Phú Hào',              desc: 'Tích lũy 1,000 vàng' },
   { id: 'earn_5000g',  name: '💰 Đại Phú',              desc: 'Tích lũy 5,000 vàng' },
 ]
@@ -405,12 +407,122 @@ export const ALL_ARTIFACT_DEFS: ArtifactDef[] = [
   { id: 'mana_core',    name: 'Lõi Mana',      icon: '💠', cost: 3500, desc: '+1 đạn (vượt giới hạn); mỗi 10 tiêu diệt → nổ diện rộng' },
 ]
 
-export const SHIP_ARTIFACT_SLOTS: Record<string, number> = { star_keeper: 1, star_holder: 1, star_shooter: 1, star_faster: 1 }
-export const SHIP_DURABILITY_MAX: Record<string, number> = { star_keeper: 100, star_holder: 90, star_shooter: 95, star_faster: 100 }
-
 export type ShipId = 'star_keeper' | 'star_holder' | 'star_shooter' | 'star_faster'
 export type ShipUpgradeKey = 'hp' | 'fireRate' | 'damage'
 export interface ShipUpgradeLevels { hp: number, fireRate: number, damage: number }
+
+export interface ShipDefinition {
+  id: ShipId
+  name: string
+  description: string
+  unlockCost: number
+  durabilityMax: number
+  artifactSlots: number
+  bulletCount: { base: number, max: number }
+  skill: {
+    name: string
+    cooldownSec: number | null
+    requirementText?: string
+    description: string
+    hudLabelHtml: string
+  }
+  stats: {
+    base: { hp: number, damage: number, fireRate: number, speed: number }
+    max: { hp: number, damage: number, fireRate: number, speed: number }
+  }
+}
+
+export const SHIP_DEFS: Record<ShipId, ShipDefinition> = {
+  star_keeper: {
+    id: 'star_keeper',
+    name: 'Star Keeper',
+    description: 'Chiến cơ mức trung bình, cân bằng giữa tốc độ và sức mạnh. Lựa chọn đầu tiên cho mọi phi công.',
+    unlockCost: 0,
+    durabilityMax: 100,
+    artifactSlots: 1,
+    bulletCount: { base: 1, max: 3 },
+    skill: {
+      name: 'SÓNG TẦM NHIỆT HỦY DIỆT',
+      cooldownSec: 30,
+      description: 'Tỏa ra sóng nhiệt tốc độ cao, gây sát thương lên tất cả kẻ địch trên màn hình và hủy toàn bộ đường đạn của đối phương.',
+      hudLabelHtml: 'SÓNG<br/>NHIỆT',
+    },
+    stats: {
+      base: { hp: 100, damage: 15, fireRate: 0.8, speed: 1.0 },
+      max: { hp: 300, damage: 100, fireRate: 1.25, speed: 1.5 },
+    },
+  },
+  star_holder: {
+    id: 'star_holder',
+    name: 'Star Holder',
+    description: 'Chiến cơ tấn công cao, thân tàu mạnh mẽ. Linh hồn kẻ địch trở thành vũ khí hủy diệt.',
+    unlockCost: 5000,
+    durabilityMax: 90,
+    artifactSlots: 1,
+    bulletCount: { base: 1, max: 3 },
+    skill: {
+      name: 'THU HOẠCH LINH HỒN',
+      cooldownSec: null,
+      requirementText: '⬡ Cần: 10 mảnh linh hồn (tối đa 50)',
+      description: 'Kẻ địch bị hạ có 75% cơ hội rơi mảnh linh hồn. Thu thập đủ 10 mảnh rồi kích hoạt để bắn tất cả thành tên lửa tự dẫn, bám sát kẻ địch gần nhất.',
+      hudLabelHtml: 'THU<br/>HOẠCH',
+    },
+    stats: {
+      base: { hp: 180, damage: 25, fireRate: 1.0, speed: 1.2 },
+      max: { hp: 300, damage: 150, fireRate: 1.5, speed: 1.75 },
+    },
+  },
+  star_shooter: {
+    id: 'star_shooter',
+    name: 'Star Shooter',
+    description: 'Chiến cơ 4 cánh với pod tên lửa hạng nặng. Tên lửa tự dẫn bám sát đối thủ, kỹ năng hố đen hấp thụ kẻ địch.',
+    unlockCost: 15000,
+    durabilityMax: 95,
+    artifactSlots: 1,
+    bulletCount: { base: 1, max: 4 },
+    skill: {
+      name: 'HỐ ĐEN HẤP DẪN',
+      cooldownSec: 35,
+      description: 'Triệu hồi hố đen trong 5 giây — hút kẻ địch thường lại gần, gây 10% HP/s sát thương liên tục (trùm 2%) và hấp thụ toàn bộ đạn kẻ địch.',
+      hudLabelHtml: 'HỐ<br/>ĐEN',
+    },
+    stats: {
+      base: { hp: 220, damage: 40, fireRate: 0.38, speed: 1.0 },
+      max: { hp: 400, damage: 200, fireRate: 1.25, speed: 1.6 },
+    },
+  },
+  star_faster: {
+    id: 'star_faster',
+    name: 'Star Faster',
+    description: 'Chiến cơ tiểu liên với tốc độ xả đạn cực nhanh. Đạn nhỏ mảnh nhưng chính xác cao, độ lệch bắn cực thấp khi xả liên thanh.',
+    unlockCost: 5000,
+    durabilityMax: 100,
+    artifactSlots: 1,
+    bulletCount: { base: 2, max: 5 },
+    skill: {
+      name: 'GIA TỐC HẠT',
+      cooldownSec: 30,
+      description: 'Kích hoạt tốc độ tối đa làm không gian xung quanh như chậm lại. Trong 5 giây, kẻ địch và đạn của chúng giảm tốc 70%, tốc độ bắn của phi cơ đạt đỉnh.',
+      hudLabelHtml: 'GIA<br/>TỐC',
+    },
+    stats: {
+      base: { hp: 100, damage: 12, fireRate: 1.2, speed: 1.25 },
+      max: { hp: 310, damage: 65, fireRate: 2.0, speed: 2.0 },
+    },
+  },
+}
+
+export const SHIP_ARTIFACT_SLOTS: Record<string, number> = Object.fromEntries(
+  Object.entries(SHIP_DEFS).map(([id, def]) => [id, def.artifactSlots]),
+) as Record<string, number>
+
+export const SHIP_DURABILITY_MAX: Record<string, number> = Object.fromEntries(
+  Object.entries(SHIP_DEFS).map(([id, def]) => [id, def.durabilityMax]),
+) as Record<string, number>
+
+export const SHIP_BULLET_COUNT: Record<ShipId, { base: number, max: number }> = Object.fromEntries(
+  Object.entries(SHIP_DEFS).map(([id, def]) => [id, def.bulletCount]),
+) as Record<ShipId, { base: number, max: number }>
 
 export const SHIP_UPGRADE_MAX_LEVEL = 5
 export const SHIP_UPGRADE_COSTS: Record<ShipUpgradeKey, number[]> = {
@@ -419,32 +531,23 @@ export const SHIP_UPGRADE_COSTS: Record<ShipUpgradeKey, number[]> = {
   damage: [420, 820, 1380, 2180, 3200],
 }
 
-const SHIP_BASE_STATS: Record<ShipId, { hp: number, damage: number, fireRate: number, speed: number }> = {
-  star_keeper: { hp: 100, damage: 15, fireRate: 1.0, speed: 1.0 },
-  star_holder: { hp: 180, damage: 25, fireRate: 1.2, speed: 1.2 },
-  star_shooter: { hp: 220, damage: 40, fireRate: 0.38, speed: 1.0 },
-  star_faster: { hp: 100, damage: 10, fireRate: 1.5, speed: 1.25 },
-}
+const SHIP_BASE_STATS: Record<ShipId, { hp: number, damage: number, fireRate: number, speed: number }> = Object.fromEntries(
+  Object.entries(SHIP_DEFS).map(([id, def]) => [id, def.stats.base]),
+) as Record<ShipId, { hp: number, damage: number, fireRate: number, speed: number }>
 
-const SHIP_MAX_STATS: Record<ShipId, { hp: number, damage: number, fireRate: number, speed: number }> = {
-  star_keeper: { hp: 300, damage: 100, fireRate: 1.5, speed: 1.5 },
-  star_holder: { hp: 300, damage: 150, fireRate: 1.8, speed: 1.75 },
-  star_shooter: { hp: 400, damage: 200, fireRate: 1.25, speed: 1.6 },
-  star_faster: { hp: 310, damage: 65, fireRate: 2.0, speed: 2.0 },
-}
+const SHIP_MAX_STATS: Record<ShipId, { hp: number, damage: number, fireRate: number, speed: number }> = Object.fromEntries(
+  Object.entries(SHIP_DEFS).map(([id, def]) => [id, def.stats.max]),
+) as Record<ShipId, { hp: number, damage: number, fireRate: number, speed: number }>
 
 const SHIP_UPGRADE_STEP_FACTOR: Record<ShipUpgradeKey, number> = {
-  hp: 0.10,
-  fireRate: 0.10,
-  damage: 0.10,
+  hp: 0.08,
+  fireRate: 0.07,
+  damage: 0.07,
 }
 
-export const SHIP_UNLOCK_COST: Record<ShipId, number> = {
-  star_keeper: 0,
-  star_holder: 5000,
-  star_shooter: 15000,
-  star_faster: 5000,
-}
+export const SHIP_UNLOCK_COST: Record<ShipId, number> = Object.fromEntries(
+  Object.entries(SHIP_DEFS).map(([id, def]) => [id, def.unlockCost]),
+) as Record<ShipId, number>
 
 function getShipUpgradeCostMultiplierByUnlockCost(shipId: ShipId): number {
   const unlockCost = SHIP_UNLOCK_COST[shipId] ?? 0
@@ -676,6 +779,8 @@ export const useGameStore = defineStore('game', () => {
   const avatarId = ref(0)
   const shipName = ref('Chiến Cơ Alpha')
   const updateNoticeSeenIds = ref<string[]>([])
+  const audioSettings = ref<AudioSettings>({ ...DEFAULT_AUDIO_SETTINGS })
+  audioManager.setSettings(audioSettings.value)
 
   // Tiến trình tài khoản (persistent, không reset giữa các ván)
   const accountLevel = ref(1)
@@ -1195,8 +1300,21 @@ export const useGameStore = defineStore('game', () => {
     }
     levelUpCardChoices.value = buildCardChoices()
     if (levelUpCardChoices.value.length === 0) return  // all cards maxed, skip
+    audioManager.playLevelUp()
     isLevelUpPending.value = true
     isPaused.value = true
+  }
+
+  function updateAudioSettings(next: Partial<AudioSettings>) {
+    audioSettings.value = {
+      ...audioSettings.value,
+      ...next,
+      masterVolume: Math.max(0, Math.min(1, next.masterVolume ?? audioSettings.value.masterVolume)),
+      musicVolume: Math.max(0, Math.min(1, next.musicVolume ?? audioSettings.value.musicVolume)),
+      sfxVolume: Math.max(0, Math.min(1, next.sfxVolume ?? audioSettings.value.sfxVolume)),
+    }
+    audioManager.setSettings(audioSettings.value)
+    saveProgress()
   }
 
   // ─── Shield helpers ─────────────────────────────────────────────────────────
@@ -1292,6 +1410,7 @@ export const useGameStore = defineStore('game', () => {
     if (isGameOverSequence.value) return
     const reduction = artifactStats.value.damageTakenReduction
     const actualDmg = reduction > 0 ? Math.max(1, Math.round(amount * (1 - reduction))) : amount
+    if (actualDmg > 0) audioManager.playPlayerHit()
     playerHp.value = Math.max(0, playerHp.value - actualDmg)
     if (playerHp.value <= 0) {
       playerHp.value = 0
@@ -1392,11 +1511,13 @@ export const useGameStore = defineStore('game', () => {
       if (fragmentCount.value < 10) return
       unlockAchievement('skill_use')
       skillActivationPending.value = true
+      audioManager.playSkill()
       // fragmentCount sẽ được reset bởi GameCanvas sau khi bắn hết tên lửa
     } else {
       if (skillCooldown.value > 0) return
       unlockAchievement('skill_use')
       skillActivationPending.value = true
+      audioManager.playSkill()
       const baseCd = selectedShip.value === 'star_shooter' ? 35 : 30
       skillCooldown.value = baseCd * (1 - cardStats.value.cdReductionPct)
     }
@@ -1771,11 +1892,14 @@ export const useGameStore = defineStore('game', () => {
       dailyDate: dailyDate.value,
       milestone3Claimed: milestone3Claimed.value,
       milestone5Claimed: milestone5Claimed.value,
+      audioSettings: audioSettings.value,
     }
     const envelope = buildSaveEnvelope(data as Record<string, unknown>)
     const prev = localStorage.getItem(SAVE_KEY)
     if (prev) localStorage.setItem(SAVE_BACKUP_KEY, prev)
-    localStorage.setItem(SAVE_KEY, JSON.stringify(envelope))
+    const serialized = JSON.stringify(envelope)
+    localStorage.setItem(SAVE_KEY, serialized)
+    queueMirrorSave(serialized)
   }
 
   function _applyDataToStore(data: Record<string, unknown>) {
@@ -1842,6 +1966,17 @@ export const useGameStore = defineStore('game', () => {
     dailyMissions.value     = (data.dailyMissions as DailyMission[]) ?? []
     milestone3Claimed.value = (data.milestone3Claimed as boolean) ?? false
     milestone5Claimed.value = (data.milestone5Claimed as boolean) ?? false
+
+    const loadedAudio = (data.audioSettings as Partial<AudioSettings>) ?? {}
+    audioSettings.value = {
+      enabled: typeof loadedAudio.enabled === 'boolean' ? loadedAudio.enabled : DEFAULT_AUDIO_SETTINGS.enabled,
+      musicEnabled: typeof loadedAudio.musicEnabled === 'boolean' ? loadedAudio.musicEnabled : DEFAULT_AUDIO_SETTINGS.musicEnabled,
+      sfxEnabled: typeof loadedAudio.sfxEnabled === 'boolean' ? loadedAudio.sfxEnabled : DEFAULT_AUDIO_SETTINGS.sfxEnabled,
+      masterVolume: Math.max(0, Math.min(1, Number(loadedAudio.masterVolume ?? DEFAULT_AUDIO_SETTINGS.masterVolume))),
+      musicVolume: Math.max(0, Math.min(1, Number(loadedAudio.musicVolume ?? DEFAULT_AUDIO_SETTINGS.musicVolume))),
+      sfxVolume: Math.max(0, Math.min(1, Number(loadedAudio.sfxVolume ?? DEFAULT_AUDIO_SETTINGS.sfxVolume))),
+    }
+    audioManager.setSettings(audioSettings.value)
   }
 
   // Migration stubs — thêm case mới khi cấu trúc save thay đổi.
@@ -1851,46 +1986,72 @@ export const useGameStore = defineStore('game', () => {
     return { ...d, version: 1 }
   }
 
+  function tryLoadSerializedSave(saved: string): boolean {
+    try {
+      const parsed = JSON.parse(saved) as unknown
+      let data: Record<string, unknown> | null = null
+      let verifyMode: SaveVerifyMode = 'ok'
+
+      if (isSaveEnvelope(parsed)) {
+        verifyMode = getSaveVerificationMode(parsed)
+        if (!isAdminMode.value && verifyMode === 'invalid') {
+          localStorage.setItem(SAVE_REJECTED_KEY, saved)
+          return false
+        }
+        data = parsed.payload
+      } else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        // Legacy plain-object save. Load once then re-save in signed format.
+        data = parsed as Record<string, unknown>
+      }
+
+      if (!data) return false
+
+      // -- Migration chain -------------------------------------------------
+      const ver = typeof data.version === 'number' ? data.version : 0
+      if (ver < 1) data = _migrateV0toV1(data)
+      // -------------------------------------------------------------------
+      _applyDataToStore(data)
+      if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
+      // Re-save if migrated, legacy format, or verified by legacy signature.
+      if (ver < SAVE_VERSION || !isSaveEnvelope(parsed) || verifyMode === 'legacy-ok') saveProgress()
+      return true
+    } catch {
+      localStorage.setItem(SAVE_REJECTED_KEY, saved)
+      return false
+    }
+  }
+
+  async function tryRecoverFromMirrorFile(): Promise<boolean> {
+    const mirrored = await readMirrorSave()
+    if (!mirrored) return false
+    const ok = tryLoadSerializedSave(mirrored)
+    if (!ok) return false
+    // Keep localStorage synchronized after a successful mirror recovery.
+    saveProgress()
+    return true
+  }
+
   function loadProgress() {
     const saveCandidates = [
       localStorage.getItem(SAVE_KEY),
       localStorage.getItem(SAVE_BACKUP_KEY),
     ]
 
+    let loaded = false
+
     for (const saved of saveCandidates) {
       if (!saved) continue
-      try {
-        const parsed = JSON.parse(saved) as unknown
-        let data: Record<string, unknown> | null = null
-        let verifyMode: SaveVerifyMode = 'ok'
-
-        if (isSaveEnvelope(parsed)) {
-          verifyMode = getSaveVerificationMode(parsed)
-          if (!isAdminMode.value && verifyMode === 'invalid') {
-            localStorage.setItem(SAVE_REJECTED_KEY, saved)
-            continue
-          }
-          data = parsed.payload
-        } else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          // Legacy plain-object save. Load once then re-save in signed format.
-          data = parsed as Record<string, unknown>
-        }
-
-        if (!data) continue
-
-        // ── Migration chain ──────────────────────────────────────────────────
-        const ver = typeof data.version === 'number' ? data.version : 0
-        if (ver < 1) data = _migrateV0toV1(data)
-        // (thêm các bước migrate tiếp theo ở đây khi cần)
-        // ────────────────────────────────────────────────────────────────────
-        _applyDataToStore(data)
-        if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
-        // Lưu lại với version mới nhất hoặc khi vừa đọc từ định dạng cũ/chữ ký cũ.
-        if (ver < SAVE_VERSION || !isSaveEnvelope(parsed) || verifyMode === 'legacy-ok') saveProgress()
+      if (tryLoadSerializedSave(saved)) {
+        loaded = true
         break
-      } catch {
-        localStorage.setItem(SAVE_REJECTED_KEY, saved)
       }
+    }
+
+    if (!loaded) {
+      void tryRecoverFromMirrorFile().finally(() => {
+        generateDailyMissions()
+      })
+      return
     }
 
     // Refresh/generate today's missions after loading
@@ -1923,12 +2084,16 @@ export const useGameStore = defineStore('game', () => {
       const raw = JSON.parse(jsonStr) as unknown
       if (isSaveEnvelope(raw)) {
         if (!isAdminMode.value && getSaveVerificationMode(raw) === 'invalid') return false
-        localStorage.setItem(SAVE_KEY, JSON.stringify(raw))
+        const serialized = JSON.stringify(raw)
+        localStorage.setItem(SAVE_KEY, serialized)
+        queueMirrorSave(serialized)
       } else {
         // Chỉ admin mới được import save dạng không ký.
         if (!isAdminMode.value) return false
         if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return false
-        localStorage.setItem(SAVE_KEY, JSON.stringify(raw))
+        const serialized = JSON.stringify(raw)
+        localStorage.setItem(SAVE_KEY, serialized)
+        queueMirrorSave(serialized)
       }
       loadProgress()
       return true
@@ -1972,6 +2137,7 @@ export const useGameStore = defineStore('game', () => {
     avatarId,
     shipName,
     updateNoticeSeenIds,
+    audioSettings,
     // Account
     accountLevel,
     accountExp,
@@ -2060,6 +2226,7 @@ export const useGameStore = defineStore('game', () => {
     // Save management
     exportSave,
     importSave,
+    updateAudioSettings,
     // Test mode
     testMode,
   }

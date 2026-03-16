@@ -100,14 +100,17 @@ export function updateSniper(ctx: GameContext, game: GameStore, e: Enemy, i: num
     if (ctx.playerShip) {
       const tx = ctx.playerShip.x - e.container.x
       const ty = ctx.playerShip.y - e.container.y
-      const mag = Math.sqrt(tx * tx + ty * ty) || 1
+      const baseAngle = Math.atan2(ty, tx)
       const spd = 3.5
-      const bg = new Graphics()
-      drawEnemyBullet(bg)
-      bg.x = e.container.x
-      bg.y = e.container.y + 10
-      ctx.gameLayer.addChild(bg)
-      ctx.enemyBullets.push({ gfx: bg, vx: (tx / mag) * spd, vy: (ty / mag) * spd })
+      for (const spread of [-0.07, 0.07]) {
+        const bg = new Graphics()
+        drawEnemyBullet(bg)
+        bg.x = e.container.x
+        bg.y = e.container.y + 10
+        ctx.gameLayer.addChild(bg)
+        const a = baseAngle + spread
+        ctx.enemyBullets.push({ gfx: bg, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd })
+      }
     }
   }
 
@@ -122,7 +125,7 @@ export function updateSniper(ctx: GameContext, game: GameStore, e: Enemy, i: num
   if (e.dodgeCooldown <= 0 && e.dodgeTarget === undefined) {
     for (const b of ctx.bullets) {
       if (dist2(b.gfx.x, b.gfx.y, e.container.x, e.container.y) < 55 * 55) {
-        if (Math.random() < 0.05) {
+        if (Math.random() < 0.10) {
           const dir = Math.random() < 0.5 ? -1 : 1
           e.dodgeTarget = Math.max(30, Math.min(GAME_W - 30, e.container.x + dir * 50))
           e.dodgeCooldown = 100

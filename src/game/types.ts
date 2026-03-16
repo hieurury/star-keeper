@@ -146,7 +146,7 @@ export interface Enemy {
   sunCrystalSpawnCd?: number
   sunAttackQueue?: Array<'triangle' | 'circle' | 'diamond' | 'pentagon'>
   sunActiveStars?: Array<'triangle' | 'circle' | 'diamond' | 'pentagon'>
-  sunDiamondCycleSkip?: boolean
+  sunDiamondCooldownPicks?: number
   sunLinkGfx?: Graphics
   sunCoreLaserGfx?: Graphics
   sunCoreSpin?: number

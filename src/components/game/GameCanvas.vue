@@ -16,6 +16,7 @@ import { spawnExplosion, screenFlash, spawnDamageText, spawnHealText, hitFlash, 
 import { createStar } from '../../game/systems/background'
 import { updateMissileLaunchers, updatePeriodicAbilities, activateHeatWave, activateBlackHole, activateParticleAcceleration } from '../../game/systems/abilities'
 import { drawArtifactGfx, initArtifactGfx, activateNeutronVacuum, activateManaCoreOverload, activateSoulHarvest } from '../../game/systems/artifacts'
+import { audioManager } from '../../game/systems/audio'
 import { launchWave } from '../../game/systems/wave'
 import { killEnemy } from '../../game/entities/kill'
 import { spawnKamikazeAt } from '../../game/entities/Kamikaze'
@@ -33,6 +34,8 @@ let starFasterAuraGfx: Graphics | null = null
 let autoPaused = false   // tracks pauses triggered by visibility/blur
 const ctx = createGameContext()
 const enemyWallStuckState = new WeakMap<Enemy, { x: number, y: number, stuckFrames: number }>()
+const INTRO_SHIP_START_Y = GAME_H + 70
+const INTRO_SHIP_END_Y = GAME_H * 0.67
 
 // Zoom indicator (shows when boss zoom is changing)
 let zoomIndicatorText: Text | null = null
@@ -136,6 +139,32 @@ function getCollisionDamageToEnemy(gameDamage: number, e: Enemy): number {
   if (e.kind.startsWith('boss_')) return Math.max(6, Math.round(base * 0.35))
   if (e.kind === 'cnox_shield') return Math.max(8, Math.round(base * 0.75))
   return base
+}
+
+function applyLaserHitToPlayer(dmg: number, opts?: {
+  cooldownFrames?: number
+  flashColor?: number
+  flashAlpha?: number
+  flashMs?: number
+  shieldOuterColor?: number
+  shieldInnerColor?: number
+  force?: boolean
+}) {
+  if (!ctx.playerShip) return false
+  if (!opts?.force && ctx.playerLaserDamageCd > 0) return false
+
+  if (!game.absorbShieldHit()) {
+    game.takeDamage(dmg)
+    if (opts?.flashColor !== undefined) screenFlash(ctx, opts.flashColor, opts.flashAlpha ?? 0.24, opts.flashMs ?? 120)
+    else screenFlash(ctx)
+    spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+  } else {
+    spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 9, opts?.shieldOuterColor ?? 0x44aaff, opts?.shieldInnerColor ?? 0xffffff)
+    if (opts?.flashColor !== undefined) screenFlash(ctx, opts.flashColor, Math.min(0.45, (opts.flashAlpha ?? 0.24) + 0.06), Math.max(120, opts.flashMs ?? 120))
+  }
+
+  if (!opts?.force) ctx.playerLaserDamageCd = opts?.cooldownFrames ?? 8
+  return true
 }
 
 function clampEnemyInsideHorizontalView(e: Enemy, padding = 18): void {
@@ -265,9 +294,9 @@ function clearTransientCombatGraphics() {
 }
 
 function updateCnoxGreedyEvolution(e: Enemy): void {
-  const stolen = Math.min(200, e.cnoxStolenExp ?? 0)
-  const powerMult = 1 + Math.min(4, stolen / 50)
-  const sizeMult = 1 + Math.min(2, stolen / 100)
+  const stolen = Math.min(300, e.cnoxStolenExp ?? 0)
+  const powerMult = 1 + Math.min(7, stolen / 40)
+  const sizeMult = 1 + Math.min(2.8, stolen / 90)
   const baseMaxHp = e.cnoxBaseMaxHp ?? e.maxHp
   const nextMaxHp = Math.round(baseMaxHp * powerMult)
   const hpDelta = nextMaxHp - e.maxHp
@@ -301,6 +330,9 @@ function drawCnoxCone(g: Graphics, ox: number, oy: number, angle: number, spread
 function gameLoop(ticker: Ticker) {
   if (!app || !game.isPlaying || game.isGameOverSequence) return
   const dt = ticker.deltaTime
+  const hasActiveBoss = ctx.enemies.some((e) => e.kind.startsWith('boss_') && !e.isDyingMeteor)
+  audioManager.setBossActive(hasActiveBoss)
+  ctx.playerLaserDamageCd = Math.max(0, ctx.playerLaserDamageCd - dt)
 
   // Stars always scroll
   for (const s of ctx.stars) {
@@ -313,10 +345,8 @@ function gameLoop(ticker: Ticker) {
     ctx.introTimer += dt
     const progress = Math.min(ctx.introTimer / INTRO_FRAMES, 1)
     const eased = 1 - Math.pow(1 - progress, 3)
-    const startY = GAME_H + 60
-    const endY = GAME_H * 0.67
     if (ctx.playerShip) {
-      ctx.playerShip.y = startY + (endY - startY) * eased
+      ctx.playerShip.y = INTRO_SHIP_START_Y + (INTRO_SHIP_END_Y - INTRO_SHIP_START_Y) * eased
     }
     if (progress >= 1) {
       ctx.gamePhase = 'stageTitle'
@@ -715,6 +745,7 @@ function gameLoop(ticker: Ticker) {
     ctx.shootTimer = 0
     const cnt = isShooter ? effectiveMissileCount : effectiveBulletCount
     if (isHolder && ctx.playerShip) {
+      audioManager.playShipShoot('star_holder')
       const laserDmg = Math.round(
         game.upgrades.damage
         * (1 + game.cardStats.arsenalDamagePct / 100)
@@ -738,6 +769,7 @@ function gameLoop(ticker: Ticker) {
         ...crystalTargets.map(c => ({ x: c.x, y: c.y, enemy: undefined as Enemy | undefined })),
       ].sort((a, b) => dist2(ctx.playerShip!.x, ctx.playerShip!.y, a.x, a.y) - dist2(ctx.playerShip!.x, ctx.playerShip!.y, b.x, b.y))
       if (sortedTargets.length > 0) {
+        audioManager.playShipShoot('star_shooter')
         for (let i = 0; i < cnt; i++) {
           const offX = (i - (cnt - 1) / 2) * 14
           const mg = new Graphics()
@@ -761,6 +793,7 @@ function gameLoop(ticker: Ticker) {
         }
       }
     } else {
+      audioManager.playShipShoot(isFaster ? 'star_faster' : 'star_keeper')
       const perShotSpreadDeg = isFaster ? 1.35 : 3
       const maxHalfAngle = Math.min(Math.PI * 12 / 180, (cnt - 1) * Math.PI * perShotSpreadDeg / 180)
       const bulletSpeedMul = isFaster ? 1.45 : 1.15
@@ -1297,7 +1330,7 @@ function gameLoop(ticker: Ticker) {
           const tx = (e.targetX ?? GAME_W / 2) - e.container.x
           const ty = (e.targetY ?? GAME_H / 2) - e.container.y
           const mag = Math.sqrt(tx * tx + ty * ty) || 1
-          e.vx = (tx / mag) * 9; e.vy = (ty / mag) * 9
+          e.vx = (tx / mag) * 11.5; e.vy = (ty / mag) * 11.5
         }
       }
       else if (e.kamiState === 'charge') {
@@ -1359,12 +1392,15 @@ function gameLoop(ticker: Ticker) {
         if (ctx.playerShip) {
           const tx = ctx.playerShip.x - e.container.x
           const ty = ctx.playerShip.y - e.container.y
-          const mag = Math.sqrt(tx * tx + ty * ty) || 1
-          const bg = new Graphics()
-          drawEnemyBullet(bg)
-          bg.x = e.container.x; bg.y = e.container.y + 10
-          ctx.gameLayer.addChild(bg)
-          ctx.enemyBullets.push({ gfx: bg, vx: (tx / mag) * 3.5, vy: (ty / mag) * 3.5 })
+          const baseAngle = Math.atan2(ty, tx)
+          for (const spread of [-0.07, 0.07]) {
+            const bg = new Graphics()
+            drawEnemyBullet(bg)
+            bg.x = e.container.x; bg.y = e.container.y + 10
+            ctx.gameLayer.addChild(bg)
+            const a = baseAngle + spread
+            ctx.enemyBullets.push({ gfx: bg, vx: Math.cos(a) * 3.5, vy: Math.sin(a) * 3.5 })
+          }
         }
       }
       if (e.dodgeTarget !== undefined) {
@@ -1377,7 +1413,7 @@ function gameLoop(ticker: Ticker) {
       if (e.dodgeCooldown <= 0 && e.dodgeTarget === undefined) {
         for (const b of ctx.bullets) {
           if (dist2(b.gfx.x, b.gfx.y, e.container.x, e.container.y) < 55 * 55) {
-            if (Math.random() < 0.05) {
+            if (Math.random() < 0.10) {
               const dir = Math.random() < 0.5 ? -1 : 1
               e.dodgeTarget = Math.max(30, Math.min(GAME_W - 30, e.container.x + dir * 50))
               e.dodgeCooldown = 100
@@ -1585,15 +1621,19 @@ function gameLoop(ticker: Ticker) {
           e.container.y += (dy / dist) * speed * dt
         }
       } else {
+        const stolenNow = Math.max(0, Math.min(300, e.cnoxStolenExp ?? 0))
+        const canStealMore = stolenNow < 300
         let targetOrb = null as typeof ctx.expOrbs[number] | null
         let bestOrbD2 = 330 * 330
         const stealPower = Math.max(1, e.cnoxPowerMult ?? 1)
         const orbPullSpeed = 3.8 + (stealPower - 1) * 2.4
-        for (const orb of ctx.expOrbs) {
-          const d2 = dist2(orb.x, orb.y, e.container.x, e.container.y)
-          if (d2 < bestOrbD2) {
-            bestOrbD2 = d2
-            targetOrb = orb
+        if (canStealMore) {
+          for (const orb of ctx.expOrbs) {
+            const d2 = dist2(orb.x, orb.y, e.container.x, e.container.y)
+            if (d2 < bestOrbD2) {
+              bestOrbD2 = d2
+              targetOrb = orb
+            }
           }
         }
         if (targetOrb) {
@@ -1605,13 +1645,21 @@ function gameLoop(ticker: Ticker) {
           targetOrb.gfx.x = targetOrb.x
           targetOrb.gfx.y = targetOrb.y
           if (od < 20) {
-            const gained = Math.min(200 - (e.cnoxStolenExp ?? 0), targetOrb.amount)
-            e.cnoxStolenExp = Math.min(200, (e.cnoxStolenExp ?? 0) + gained)
-            spawnExpCollectEffect(ctx, targetOrb.x, targetOrb.y, e.container.x, e.container.y, Math.max(1, gained), getExpTierColor(targetOrb.tier))
-            if (!targetOrb.gfx.destroyed) ctx.gameLayer.removeChild(targetOrb.gfx)
-            const orbIdx = ctx.expOrbs.indexOf(targetOrb)
-            if (orbIdx >= 0) ctx.expOrbs.splice(orbIdx, 1)
-            updateCnoxGreedyEvolution(e)
+            const capLeft = Math.max(0, 300 - (e.cnoxStolenExp ?? 0))
+            if (capLeft > 0) {
+              const gained = Math.min(capLeft, Math.max(0, targetOrb.amount))
+              if (gained > 0) {
+                e.cnoxStolenExp = Math.min(300, (e.cnoxStolenExp ?? 0) + gained)
+                spawnExpCollectEffect(ctx, targetOrb.x, targetOrb.y, e.container.x, e.container.y, Math.max(1, gained), getExpTierColor(targetOrb.tier))
+                targetOrb.amount = Math.max(0, targetOrb.amount - gained)
+                if (targetOrb.amount <= 0) {
+                  if (!targetOrb.gfx.destroyed) ctx.gameLayer.removeChild(targetOrb.gfx)
+                  const orbIdx = ctx.expOrbs.indexOf(targetOrb)
+                  if (orbIdx >= 0) ctx.expOrbs.splice(orbIdx, 1)
+                }
+                updateCnoxGreedyEvolution(e)
+              }
+            }
           }
         } else if (ctx.playerShip) {
           const shields = ctx.enemies.filter(other => other.kind === 'cnox_shield')
@@ -1687,7 +1735,8 @@ function gameLoop(ticker: Ticker) {
         e.formTargetX = targetX
         e.formTargetY = targetY
       }
-      e.cnoxShieldAngle = (e.cnoxShieldAngle ?? 0) + 0.05 * dt
+      const shieldSpinSpeed = starFasterSkillActive ? 0.05 * enemyTimeScale : 0.05
+      e.cnoxShieldAngle = (e.cnoxShieldAngle ?? 0) + shieldSpinSpeed * dt
       if (e.cnoxShields?.length) {
         const radius = 22
         const shieldCount = Math.max(1, e.cnoxShields.length)
@@ -1765,17 +1814,11 @@ function gameLoop(ticker: Ticker) {
         e.cnoxLaserGfx.clear()
         drawCnoxRay(e.cnoxLaserGfx, 0, 0, angle, 10, 0xff88ff, al * 0.85, false)
         drawCnoxRay(e.cnoxLaserGfx, 0, 0, angle, 3, 0xffffff, al * 0.95, false)
-        if ((e.cnoxLaserTimer ?? 0) >= 17 && ctx.playerShip) {
+        if (ctx.playerShip) {
           const hit = pointDistanceToRay(ctx.playerShip.x, ctx.playerShip.y, e.container.x, e.container.y, angle)
           if (hit.perp < 18 && hit.dot > 0) {
-            if (!game.absorbShieldHit()) {
-              const dmg = 15 + game.currentStage * 2
-              game.takeDamage(dmg)
-              screenFlash(ctx, 0xff88ff, 0.3, 160)
-              spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
-            } else {
-              spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 9, 0xff88ff, 0xffffff)
-            }
+            const dmg = 15 + game.currentStage * 2
+            applyLaserHitToPlayer(dmg, { flashColor: 0xff88ff, flashAlpha: 0.3, flashMs: 160, shieldOuterColor: 0xff88ff, shieldInnerColor: 0xffffff })
           }
         }
         if (e.cnoxLaserTimer <= 0) {
@@ -1817,17 +1860,11 @@ function gameLoop(ticker: Ticker) {
           e.cnoxLaserGfx.moveTo(0, 0).lineTo(tx, ty).stroke({ color: 0xffffff, width: 2, alpha: 0.9 })
           const pulseT = (Date.now() * 0.0011 + sparkIdx * 0.27) % 1
           e.cnoxLaserGfx.circle(tx * pulseT, ty * pulseT, 3.2).fill({ color: 0xffd5ff, alpha: 0.9 })
-          if (ctx.playerShip && Math.floor(e.cnoxLaserTimer ?? 0) % 8 === 0) {
+          if (ctx.playerShip) {
             const d = pointDistanceToSegment(ctx.playerShip.x, ctx.playerShip.y, e.container.x, e.container.y, nextSpark.container.x, nextSpark.container.y)
             if (d < 16) {
-              if (!game.absorbShieldHit()) {
-                const dmg = 8 + game.currentStage
-                game.takeDamage(dmg)
-                screenFlash(ctx, 0xff66ff, 0.2, 100)
-                spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
-              } else {
-                spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 7, 0xff88ff, 0xffffff)
-              }
+              const dmg = 8 + game.currentStage
+              applyLaserHitToPlayer(dmg, { flashColor: 0xff66ff, flashAlpha: 0.2, flashMs: 100, shieldOuterColor: 0xff88ff, shieldInnerColor: 0xffffff })
             }
           }
         } else {
@@ -1835,17 +1872,11 @@ function gameLoop(ticker: Ticker) {
           const angle = (e.cnoxLaserAngle ?? 0) + sweepSpan * p
           drawCnoxRay(e.cnoxLaserGfx, 0, 0, angle, 20, 0xff66ff, 0.28, false)
           drawCnoxRay(e.cnoxLaserGfx, 0, 0, angle, 7, 0xffffff, 0.9, false)
-          if (ctx.playerShip && Math.floor(e.cnoxLaserTimer ?? 0) % 6 === 0) {
+          if (ctx.playerShip) {
             const hit = pointDistanceToRay(ctx.playerShip.x, ctx.playerShip.y, e.container.x, e.container.y, angle)
             if (hit.perp < 16 && hit.dot > 0) {
-              if (!game.absorbShieldHit()) {
-                const dmg = 10 + game.currentStage * 2
-                game.takeDamage(dmg)
-                screenFlash(ctx, 0xff88ff, 0.26, 120)
-                spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
-              } else {
-                spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 9, 0xff88ff, 0xffffff)
-              }
+              const dmg = 10 + game.currentStage * 2
+              applyLaserHitToPlayer(dmg, { flashColor: 0xff88ff, flashAlpha: 0.26, flashMs: 120, shieldOuterColor: 0xff88ff, shieldInnerColor: 0xffffff })
             }
           }
         }
@@ -1961,12 +1992,10 @@ function gameLoop(ticker: Ticker) {
 
       e.sunActiveStars = e.sunActiveStars ?? []
       e.sunAttackQueue = e.sunAttackQueue ?? []
-      e.sunDiamondCycleSkip = e.sunDiamondCycleSkip ?? false
+      e.sunDiamondCooldownPicks = Math.max(0, e.sunDiamondCooldownPicks ?? 4)
       const desiredActive = (e.bossPhase ?? 1) === 1 ? 1 : 2
       if (e.sunAttackQueue.length === 0) {
-        const seq: SunWeaponStar['kind'][] = ['triangle', 'circle', 'pentagon']
-        if (!e.sunDiamondCycleSkip) seq.push('diamond')
-        e.sunDiamondCycleSkip = !e.sunDiamondCycleSkip
+        const seq: SunWeaponStar['kind'][] = ['triangle', 'circle', 'pentagon', 'diamond']
         for (let qi = seq.length - 1; qi > 0; qi--) {
           const qj = Math.floor(Math.random() * (qi + 1))
           const tmp = seq[qi]!
@@ -1979,6 +2008,7 @@ function gameLoop(ticker: Ticker) {
         let picked: SunWeaponStar['kind'] | undefined
         for (let qi = 0; qi < e.sunAttackQueue.length; qi++) {
           const cand = e.sunAttackQueue[qi]!
+          if (cand === 'diamond' && (e.sunDiamondCooldownPicks ?? 0) > 0) continue
           if (!e.sunActiveStars.includes(cand)) {
             picked = cand
             e.sunAttackQueue.splice(qi, 1)
@@ -1987,6 +2017,12 @@ function gameLoop(ticker: Ticker) {
         }
         if (!picked) break
         e.sunActiveStars.push(picked)
+        if (picked === 'diamond') {
+          // Strongly throttle crystal-heal pattern so it cannot chain too often.
+          e.sunDiamondCooldownPicks = (e.bossPhase ?? 1) === 1 ? 7 : 5
+        } else if ((e.sunDiamondCooldownPicks ?? 0) > 0) {
+          e.sunDiamondCooldownPicks!--
+        }
         const star = stars.find(s => s.kind === picked)
         if (!star) continue
         star.state = 'warning'
@@ -2021,7 +2057,6 @@ function gameLoop(ticker: Ticker) {
 
       const finishStar = (kind: SunWeaponStar['kind']) => {
         e.sunActiveStars = (e.sunActiveStars ?? []).filter(k => k !== kind)
-        if (kind === 'diamond') return
         e.sunAttackQueue = e.sunAttackQueue ?? []
         if (!e.sunAttackQueue.includes(kind)) e.sunAttackQueue.push(kind)
       }
@@ -2079,7 +2114,8 @@ function gameLoop(ticker: Ticker) {
             if ((st.burstLeft ?? 0) > 0) {
               st.timer = 180
             } else {
-              e.sunCrystalSpawnCd = (e.bossPhase ?? 1) === 1 ? 220 : 170
+              // Longer lockout after a diamond cycle to prevent near-continuous healing.
+              e.sunCrystalSpawnCd = (e.bossPhase ?? 1) === 1 ? 560 : 430
               st.warningGfx.clear()
               st.missileTargets = undefined
               st.missileIndex = undefined
@@ -2191,16 +2227,12 @@ function gameLoop(ticker: Ticker) {
             }
             drawCnoxRay(st.beamGfx, wx, wy, ang, (e.bossPhase ?? 1) === 1 ? 10 : 12, 0x8fd9ff, 0.35, false)
             drawCnoxRay(st.beamGfx, wx, wy, ang, (e.bossPhase ?? 1) === 1 ? 4 : 5, 0xffffff, 0.9, false)
-            if (ctx.playerShip && Math.floor(st.timer ?? 0) % 6 === 0) {
+            if (ctx.playerShip) {
               const hit = pointDistanceToRay(ctx.playerShip.x, ctx.playerShip.y, wx, wy, ang)
               const hitR = (e.bossPhase ?? 1) === 1 ? 12 : 14
               if (hit.perp < hitR && hit.dot > 0) {
-                if (!game.absorbShieldHit()) {
-                  const dmg = 16 + game.currentStage * 2
-                  game.takeDamage(dmg)
-                  screenFlash(ctx, 0x88ddff, 0.24, 120)
-                  spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
-                }
+                const dmg = 16 + game.currentStage * 2
+                applyLaserHitToPlayer(dmg, { flashColor: 0x88ddff, flashAlpha: 0.24, flashMs: 120, shieldOuterColor: 0x88ddff, shieldInnerColor: 0xffffff })
               }
             }
             if (st.timer <= 0) {
@@ -2300,15 +2332,11 @@ function gameLoop(ticker: Ticker) {
             const a = base + ri * (Math.PI * 2 / 3)
             drawCnoxRay(e.sunCoreLaserGfx, e.container.x, e.container.y, a, 11, 0xffb852, 0.28, false)
             drawCnoxRay(e.sunCoreLaserGfx, e.container.x, e.container.y, a, 4, 0xffffff, 0.9, false)
-            if (ctx.playerShip && Math.floor(e.sunCoreLaserTimer ?? 0) % 6 === 0) {
+            if (ctx.playerShip) {
               const hit = pointDistanceToRay(ctx.playerShip.x, ctx.playerShip.y, e.container.x, e.container.y, a)
               if (hit.perp < 13 && hit.dot > 0) {
-                if (!game.absorbShieldHit()) {
-                  const dmg = 12 + game.currentStage * 2
-                  game.takeDamage(dmg)
-                  screenFlash(ctx, 0xffbb55, 0.2, 90)
-                  spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
-                }
+                const dmg = 12 + game.currentStage * 2
+                applyLaserHitToPlayer(dmg, { flashColor: 0xffbb55, flashAlpha: 0.2, flashMs: 90, shieldOuterColor: 0xffbb55, shieldInnerColor: 0xffffff })
               }
             }
           }
@@ -2422,7 +2450,7 @@ function gameLoop(ticker: Ticker) {
               drawBossMissile(smg, true)
               smg.x = e.container.x + mox; smg.y = e.container.y + 20
               ctx.gameLayer.addChild(smg)
-              ctx.enemyBullets.push({ gfx: smg, vx: (mdx / mmag) * 4.2, vy: (mdy / mmag) * 4.2, homing: true, homingLife: 240, homingSpeed: 4.2 })
+              ctx.enemyBullets.push({ gfx: smg, vx: (mdx / mmag) * 5.4, vy: (mdy / mmag) * 5.4, homing: true, homingLife: 240, homingSpeed: 5.4 })
               e.pendingMissiles!--; e.missileFireTimer = 4
             }
           }
@@ -2512,22 +2540,6 @@ function gameLoop(ticker: Ticker) {
                   if (t.laserWarnTimer <= 0) {
                     t.laserState = 'firing'; t.laserWarnTimer = 18
                     screenFlash(ctx, 0x2255ff, 0.18, 180)
-                    if (ctx.playerShip) {
-                      const px = ctx.playerShip.x - wx; const py = ctx.playerShip.y - wy
-                      const lx = Math.cos(t.laserAngle); const ly = Math.sin(t.laserAngle)
-                      const dot = px * lx + py * ly
-                      const perpX = px - dot * lx; const perpY = py - dot * ly
-                      if (Math.sqrt(perpX * perpX + perpY * perpY) < 22 && dot > 0) {
-                        if (!game.absorbShieldHit()) {
-                          const dmg = 18 + game.currentStage * 2
-                          game.takeDamage(dmg); screenFlash(ctx)
-                          spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
-                        } else {
-                          spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 9, 0x44aaff, 0x88ddff)
-                          screenFlash(ctx, 0x4488ff, 0.28, 200)
-                        }
-                      }
-                    }
                   }
                 } else {
                   t.laserWarnTimer -= dt
@@ -2535,6 +2547,13 @@ function gameLoop(ticker: Ticker) {
                   const alpha = Math.max(0, t.laserWarnTimer / 18) * 0.85
                   t.laserGfx.clear()
                   t.laserGfx.moveTo(wx, wy).lineTo(wx + Math.cos(t.laserAngle) * len, wy + Math.sin(t.laserAngle) * len).stroke({ color: 0x44aaff, width: 5, alpha })
+                  if (ctx.playerShip) {
+                    const hit = pointDistanceToRay(ctx.playerShip.x, ctx.playerShip.y, wx, wy, t.laserAngle)
+                    if (hit.perp < 22 && hit.dot > 0) {
+                      const dmg = 18 + game.currentStage * 2
+                      applyLaserHitToPlayer(dmg, { shieldOuterColor: 0x44aaff, shieldInnerColor: 0x88ddff })
+                    }
+                  }
                   if (t.laserWarnTimer <= 0) {
                     t.laserState = 'idle'; t.laserTimer = 200 + Math.random() * 120; t.laserGfx.clear()
                   }
@@ -2833,7 +2852,7 @@ function gameLoop(ticker: Ticker) {
         // -- Phase 2: Nebula portal summon (30s cooldown) ---------------------
         if ((e.bossPhase ?? 1) === 2) {
           if ((e.pendingMissiles ?? 0) === 0) {
-            e.attack2Timer = (e.attack2Timer ?? 2100) - dt
+            e.attack2Timer = (e.attack2Timer ?? 1800) - dt
             if ((e.attack2Timer ?? 0) <= 0) {
               e.pendingMissiles = 4   // 4 spawn calls ? ~7 Bnox enemies
               e.missileFireTimer = 50
@@ -2895,7 +2914,7 @@ function gameLoop(ticker: Ticker) {
                     }
                   }
                 }
-                e.attack2Timer = 2100  // 35s cooldown
+                e.attack2Timer = 1800  // 30s cooldown
               }
             }
           }
@@ -3063,20 +3082,14 @@ function gameLoop(ticker: Ticker) {
               const al = Math.max(0, laser.timer / 18) * 0.9
               laser.gfx.clear()
               laser.gfx.moveTo(wx, wy).lineTo(wx + Math.cos(laser.angle) * len, wy + Math.sin(laser.angle) * len).stroke({ color: 0xcc44ff, width: 6, alpha: al })
-              if (laser.timer >= 17 && ctx.playerShip) {
+              if (ctx.playerShip) {
                 const px = ctx.playerShip.x - wx; const py = ctx.playerShip.y - wy
                 const lx = Math.cos(laser.angle); const ly = Math.sin(laser.angle)
                 const dot = px * lx + py * ly
                 const perpX = px - dot * lx; const perpY = py - dot * ly
                 if (Math.sqrt(perpX * perpX + perpY * perpY) < 20 && dot > 0) {
-                  if (!game.absorbShieldHit()) {
-                    const dmg = 16 + game.currentStage * 2
-                    game.takeDamage(dmg); screenFlash(ctx)
-                    spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
-                  } else {
-                    spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 9, 0x8844ff, 0xcc88ff)
-                    screenFlash(ctx, 0x8844ff, 0.28, 200)
-                  }
+                  const dmg = 16 + game.currentStage * 2
+                  applyLaserHitToPlayer(dmg, { flashColor: 0x8844ff, flashAlpha: 0.28, flashMs: 200, shieldOuterColor: 0x8844ff, shieldInnerColor: 0xcc88ff })
                 }
               }
               if (laser.timer <= 0) { laser.state = 'idle'; laser.timer = 70 + Math.random() * 50; laser.gfx.clear() }
@@ -3120,27 +3133,26 @@ function gameLoop(ticker: Ticker) {
             e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0x6600cc, width: 54, alpha: al * 0.28 })
             e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0xee88ff, width: 18, alpha: al * 0.95 })
             e.trumSoPhase2LaserGfx.moveTo(bx, by).lineTo(bx + Math.cos(angle) * len, by + Math.sin(angle) * len).stroke({ color: 0xffffff, width: 4, alpha: al * 0.85 })
-            // Check hit only on first frame of firing
-            if ((e.trumSoContinuousDmgTimer ?? 0) >= 21 && ctx.playerShip) {
+            if (ctx.playerShip) {
               const lx = Math.cos(angle); const ly = Math.sin(angle)
               const px = ctx.playerShip.x - bx; const py = ctx.playerShip.y - by
               const dot = px * lx + py * ly
               const perpX = px - dot * lx; const perpY = py - dot * ly
               if (Math.sqrt(perpX * perpX + perpY * perpY) < 22 && dot > 0) {
-                if (!game.absorbShieldHit()) {
-                  game.takeDamage(game.playerMaxHp)
-                  screenFlash(ctx)
-                  spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, game.playerMaxHp)
-                } else {
-                  spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 14, 0x8800ff, 0xee66ff)
-                  screenFlash(ctx, 0x8800ff, 0.45, 300)
-                }
+                applyLaserHitToPlayer(game.playerMaxHp, {
+                  force: true,
+                  flashColor: 0x8800ff,
+                  flashAlpha: 0.45,
+                  flashMs: 300,
+                  shieldOuterColor: 0x8800ff,
+                  shieldInnerColor: 0xee66ff,
+                })
               }
             }
             if ((e.trumSoContinuousDmgTimer ?? 0) <= 0) {
               e.trumSoPhase2LaserGfx.clear()
               e.trumSoPhase2LaserState = 'idle'
-              e.trumSoContinuousDmgTimer = 350 + Math.random() * 150
+              e.trumSoContinuousDmgTimer = 140 + Math.random() * 70
             }
           }
         }
@@ -3743,7 +3755,7 @@ async function initPixi() {
 
   ctx.playerShip = new Graphics()
   drawShip(ctx.playerShip, game.selectedShip)
-  ctx.playerShip.x = GAME_W / 2; ctx.playerShip.y = GAME_H + 60
+  ctx.playerShip.x = GAME_W / 2; ctx.playerShip.y = INTRO_SHIP_START_Y
   ctx.gameLayer.addChild(ctx.playerShip)
 
   initArtifactGfx(ctx, game)
@@ -3850,6 +3862,7 @@ function destroyPixi() {
     app.destroy(true, { children: true })
     app = null; ctx.app = null
   }
+  audioManager.setBossActive(false)
   ctx.bullets = []; ctx.allyDrones = []; ctx.enemies = []; ctx.enemyBullets = []; ctx.stars = []
   ctx.damageTexts = []; ctx.expOrbs = []; ctx.expCollectParticles = []; ctx.fragmentOrbs = []; ctx.fragmentMissiles = []
   ctx.soulMissileQueue = 0; ctx.soulMissileFireTimer = 0
@@ -3908,11 +3921,11 @@ watch(() => game.isPlaying, (val, old) => {
     ctx.starFasterSkillTimer = 0
     ctx.starFasterEnemySlowFactor = 1
     ctx.starFasterFireRateBoost = 1
-    ctx.shootTimer = 0; ctx.bossAttackLockTimer = 0; ctx.waveQueue = []; ctx.waveDispatchTimer = 0
+    ctx.shootTimer = 0; ctx.playerLaserDamageCd = 0; ctx.bossAttackLockTimer = 0; ctx.waveQueue = []; ctx.waveDispatchTimer = 0
     ctx.waveIsClearing = false; ctx.stageClearTimer = 0; ctx.stageAnnouncePending = false
     ctx.gamePhase = 'intro'; ctx.introTimer = 0
     if (ctx.playerShip) {
-      ctx.playerShip.x = GAME_W / 2; ctx.playerShip.y = GAME_H + 60; ctx.playerShip.visible = true
+      ctx.playerShip.x = GAME_W / 2; ctx.playerShip.y = INTRO_SHIP_START_Y; ctx.playerShip.visible = true
       drawShip(ctx.playerShip, game.selectedShip)
     }
     initArtifactGfx(ctx, game)

@@ -8,6 +8,7 @@ import { cleanupBossTinhVan } from './BossTinhVan'
 import { cleanupBossTrumSo } from './BossTrumSo'
 import { cleanupBossCnoxSun } from './BossCnoxSun'
 import { drawThuatSiMeteor } from './ThuatSi'
+import { audioManager } from '../systems/audio'
 
 type GameStore = ReturnType<typeof useGameStore>
 
@@ -106,6 +107,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
       }
       if (game.cardStats.vampireKillHeal > 0) game.healPlayer(game.cardStats.vampireKillHeal)
       game.addKill()
+      audioManager.playEnemyKill()
       if (game.artifactStats.manaCoreActive) {
         ctx.manaCoreKillCount++
         game.manaCorePct = ctx.manaCoreKillCount / 10
@@ -135,6 +137,11 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
         spawnExpOrb(ctx, e.container.x, e.container.y, 'white')
         remaining -= 10
       }
+      if (remaining > 0) {
+        spawnExpOrb(ctx, e.container.x, e.container.y, 'white')
+        const last = ctx.expOrbs[ctx.expOrbs.length - 1]
+        if (last) last.amount = remaining
+      }
     }
     const pts = e.kind === 'sniper'    ? 20 + game.currentStage * 7
              : e.kind === 'kamikaze'  ? 15 + game.currentStage * 6
@@ -156,6 +163,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
   ctx.gameLayer.removeChild(e.container)
   ctx.enemies.splice(i, 1)
   game.addKill()
+  audioManager.playEnemyKill()
 
   // Mana Core: track kills; DO NOT call activateManaCoreOverload here (avoids circular dep)
   if (game.artifactStats.manaCoreActive) {
