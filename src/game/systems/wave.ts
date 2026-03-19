@@ -9,6 +9,7 @@ import { spawnBossInvader } from '../entities/BossInvader'
 import { spawnBossTinhVan } from '../entities/BossTinhVan'
 import { spawnBossTrumSo } from '../entities/BossTrumSo'
 import { spawnBossCnoxSun } from '../entities/BossCnoxSun'
+
 import { spawnDaiLienPair } from '../entities/DaiLien'
 import { spawnThuHoSwarm } from '../entities/ThuHo'
 import { spawnThuatSi } from '../entities/ThuatSi'

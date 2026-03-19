@@ -21,10 +21,75 @@ const statRows: Array<{ key: keyof EnemyCodexEntry['stats'], label: string, colo
   { key: 'threat', label: 'Đe doạ', color: '#ffc26a' },
 ]
 
-const entries = computed(() => ENEMY_CODEX.filter(e => e.tab === activeTab.value))
+interface EnemyGroup {
+  type: string
+  entries: EnemyCodexEntry[]
+}
+
+const enemyTypeByKind: Record<EnemyKind, 'Anox' | 'Bnox' | 'Cnox'> = {
+  pioneer: 'Anox',
+  kamikaze: 'Anox',
+  sniper: 'Anox',
+  boss_stardestroyer: 'Anox',
+  boss_invader: 'Anox',
+  dai_lien: 'Bnox',
+  thu_ho: 'Bnox',
+  thuat_si: 'Bnox',
+  boss_tinhvan: 'Bnox',
+  boss_trumso: 'Bnox',
+  cnox_greedy: 'Cnox',
+  cnox_shield: 'Cnox',
+  cnox_spark: 'Cnox',
+  boss_cnox_sun: 'Cnox',
+}
+
+const enemyOrderByKind: Record<EnemyKind, number> = {
+  pioneer: 1,
+  kamikaze: 2,
+  sniper: 3,
+  boss_stardestroyer: 1,
+  boss_invader: 2,
+  thu_ho: 1,
+  dai_lien: 2,
+  thuat_si: 3,
+  boss_trumso: 1,
+  boss_tinhvan: 2,
+  cnox_greedy: 1,
+  cnox_shield: 2,
+  cnox_spark: 3,
+  boss_cnox_sun: 1,
+}
+
+const typeOrder: Array<'Anox' | 'Bnox' | 'Cnox'> = ['Anox', 'Bnox', 'Cnox']
+
+const entries = computed(() => ENEMY_CODEX.filter((e) => e.tab === activeTab.value))
+const groupedEntries = computed<EnemyGroup[]>(() => {
+  const groups = new Map<string, EnemyCodexEntry[]>()
+
+  for (const entry of entries.value) {
+    const type = enemyTypeByKind[entry.kind]
+    const list = groups.get(type)
+    if (list) {
+      list.push(entry)
+    } else {
+      groups.set(type, [entry])
+    }
+  }
+
+  return typeOrder
+    .filter(type => groups.has(type))
+    .map((type) => ({
+      type,
+      entries: (groups.get(type) ?? []).slice().sort((a, b) => {
+        return enemyOrderByKind[a.kind] - enemyOrderByKind[b.kind]
+      }),
+    }))
+})
+
+const orderedEntries = computed(() => groupedEntries.value.flatMap(group => group.entries))
 const discoveredSet = computed(() => new Set(game.encounteredEnemyKinds as EnemyKind[]))
 const discoveredCount = computed(() => entries.value.filter(e => discoveredSet.value.has(e.kind)).length)
-const selectedEntry = computed(() => entries.value.find(e => e.kind === selectedKind.value) ?? entries.value[0] ?? null)
+const selectedEntry = computed(() => orderedEntries.value.find(e => e.kind === selectedKind.value) ?? orderedEntries.value[0] ?? null)
 
 // Calculate max values for each stat across all enemies
 const statsMaxValues = computed(() => {
@@ -43,7 +108,7 @@ const statsMaxValues = computed(() => {
   return max
 })
 
-watch(entries, (list) => {
+watch(orderedEntries, (list) => {
   if (list.length === 0) {
     selectedKind.value = null
     return
@@ -94,20 +159,25 @@ function goHome() {
       <div class="codex__progress">Đã khám phá: {{ discoveredCount }}/{{ entries.length }}</div>
     </div>
 
-    <div class="portrait-list">
-      <button
-        v-for="entry in entries"
-        :key="entry.kind"
-        class="portrait-item"
-        :class="{
-          'portrait-item--locked': !isDiscovered(entry.kind),
-          'portrait-item--active': selectedKind === entry.kind,
-        }"
-        @click="selectedKind = entry.kind; showModal = true"
-        :title="isDiscovered(entry.kind) ? entry.name : '???'"
-      >
-        <EnemyCodexArt :kind="entry.kind" :locked="!isDiscovered(entry.kind)" :size="84" />
-      </button>
+    <div class="portrait-groups">
+      <section v-for="group in groupedEntries" :key="group.type" class="portrait-group">
+        <h2 class="portrait-group__title">{{ group.type }}</h2>
+        <div class="portrait-list">
+          <button
+            v-for="entry in group.entries"
+            :key="entry.kind"
+            class="portrait-item"
+            :class="{
+              'portrait-item--locked': !isDiscovered(entry.kind),
+              'portrait-item--active': selectedKind === entry.kind,
+            }"
+            @click="selectedKind = entry.kind; showModal = true"
+            :title="isDiscovered(entry.kind) ? entry.name : '???'"
+          >
+            <EnemyCodexArt :kind="entry.kind" :locked="!isDiscovered(entry.kind)" :size="84" />
+          </button>
+        </div>
+      </section>
     </div>
 
     <!-- Modal Overlay -->
@@ -240,11 +310,31 @@ function goHome() {
   color: var(--color-text-dim);
 }
 
+.portrait-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.portrait-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.portrait-group__title {
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #ffd37b;
+}
+
 .portrait-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
   gap: 8px;
-  margin-bottom: 12px;
 }
 
 .portrait-item {

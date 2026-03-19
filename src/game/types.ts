@@ -155,6 +155,7 @@ export interface Enemy {
   sunCoreLaserAngle?: number
   sunCoreLaserStartAngle?: number
   sunCoreLaserSweepSpan?: number
+
 }
 
 export interface SunWeaponStar {
@@ -183,6 +184,7 @@ export interface SunEnergyCrystal {
   maxHp: number
   contactDamageCd?: number
 }
+
 
 export interface TrumSoGun {
   gfx: Graphics

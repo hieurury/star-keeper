@@ -54,8 +54,8 @@ export interface CardStats {
   shieldLives: number
   shieldHealOnBreak: number
   expRangeBonus: number
-  vampireHitHeal: number
-  vampireKillHeal: number
+  regenPctPerSec: number
+  staticFieldLifesteal: boolean
   plasmaBolt: boolean
   plasmaBoltDmgMult: number
   plasmaBoltIntervalFrames: number
@@ -219,13 +219,13 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'hp_vampire', name: 'Hút Máu', type: 'support', icon: 'PhDrop', maxLevel: 5,
+    id: 'hp_regen', name: 'Hồi Máu', type: 'support', icon: 'PhPlusCircle', maxLevel: 5,
     levels: [
-      { desc: 'Đánh trúng kẻ địch hồi 1 HP.' },
-      { desc: 'Tiêu diệt kẻ địch bổ sung hồi +3 HP.' },
-      { desc: 'Tiêu diệt kẻ địch bổ sung hồi +3 HP (tổng +6 HP khi tiêu diệt).' },
-      { desc: 'Đánh trúng kẻ địch hồi 2 HP.' },
-      { desc: 'Tiêu diệt kẻ địch bổ sung hồi +5 HP (tổng 7 HP khi tiêu diệt).' },
+      { desc: 'Hồi 1% HP tối đa của phi cơ mỗi giây.' },
+      { desc: 'Hồi 2% HP tối đa của phi cơ mỗi giây.' },
+      { desc: 'Hồi 3% HP tối đa của phi cơ mỗi giây.' },
+      { desc: 'Hồi 4% HP tối đa của phi cơ mỗi giây.' },
+      { desc: 'Hồi 5% HP tối đa của phi cơ mỗi giây.' },
     ],
   },
   {
@@ -302,15 +302,15 @@ export const ALL_CARD_DEFS: CardDef[] = [
     requiresAttackId: 'plasma_bolt',
     requiresSupportId: 'energy_shield',
     levels: [
-      { desc: 'Tia plasma tiêu diệt tất cả đạn kẻ địch trên đường đi.' },
+      { desc: 'Tia plasma tăng 50% sát thương và tiêu diệt tất cả đạn kẻ địch trên đường đi.' },
     ],
   },
   {
-    id: 'static_field_ult', name: 'Từ Trường Tĩnh Điện', type: 'ultimate', icon: 'PhSpiral', maxLevel: 1,
+    id: 'static_field_ult', name: 'Sinh Lực Hấp Thụ', type: 'ultimate', icon: 'PhSpiral', maxLevel: 1,
     requiresAttackId: 'laser_sweep',
     requiresSupportId: 'exp_magnet',
     levels: [
-      { desc: 'Thay thế quét laser bằng vùng tĩnh điện bao quanh phi cơ, gây sát thương mỗi 0.5s cho kẻ địch bên trong.' },
+      { desc: 'Thay thế quét laser bằng vùng tĩnh điện bao quanh phi cơ, gây sát thương mỗi 0.5s cho kẻ địch bên trong. Cứ mỗi lần gây sát thương cho địch, ta hồi 1 HP.' },
     ],
   },
   // ── Hỗ trợ (tốc độ & tốc bắn) ───────────────────────────────────────────────
@@ -867,8 +867,8 @@ export const useGameStore = defineStore('game', () => {
       shieldLives: 0,
       shieldHealOnBreak: 0,
       expRangeBonus: 0,
-      vampireHitHeal: 0,
-      vampireKillHeal: 0,
+      regenPctPerSec: 0,
+      staticFieldLifesteal: false,
       plasmaBolt: false,
       plasmaBoltDmgMult: 1,
       plasmaBoltIntervalFrames: 360,
@@ -957,12 +957,14 @@ export const useGameStore = defineStore('game', () => {
     // exp_magnet
     stats.expRangeBonus = (c['exp_magnet'] ?? 0) * 40
 
-    // hp_vampire (nerfed: hit heal thấp hơn, kill heal hợp lý hơn)
-    const hvLv = c['hp_vampire'] ?? 0
-    if (hvLv >= 1) stats.vampireHitHeal = 1
-    if (hvLv >= 2) stats.vampireKillHeal = 3
-    if (hvLv >= 4) stats.vampireHitHeal = 2
-    if (hvLv >= 5) stats.vampireKillHeal = 5
+    // hp_regen
+    const hrLv = c['hp_regen'] ?? 0
+    if (hrLv >= 1) stats.regenPctPerSec = hrLv
+
+    // hp_vampire cleanup (in case it was loaded from old save)
+    if (c['hp_vampire']) {
+      stats.regenPctPerSec = Math.max(stats.regenPctPerSec, c['hp_vampire'])
+    }
 
     // armor_plating
     stats.armorPlatingHpPct = (c['armor_plating'] ?? 0) * 15

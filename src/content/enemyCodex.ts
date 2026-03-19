@@ -31,7 +31,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'pioneer',
     tab: 'minion',
-    name: 'Pioneer',
+    name: 'Anox - Tiên phong',
     icon: 'PhAirplaneTilt',
     info: 'Đơn vị trinh sát cơ bản, thường xuất hiện theo đội hình và đổi hướng liên tục.',
     attackPattern: 'Lao xuống theo cụm, giữ cự ly rồi đảo đội hình để ép góc di chuyển của phi cơ.',
@@ -51,7 +51,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'kamikaze',
     tab: 'minion',
-    name: 'Kamikaze',
+    name: 'Anox - Cảm tử',
     icon: 'PhRocketLaunch',
     info: 'Đơn vị cảm tử với nhịp khóa mục tiêu rồi tăng tốc đột biến.',
     attackPattern: 'Ngắm mục tiêu, kẻ cảnh báo, sau đó lao thẳng vào vị trí đã khóa.',
@@ -71,7 +71,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'sniper',
     tab: 'minion',
-    name: 'Sniper',
+    name: 'Anox - Thiện xạ',
     icon: 'PhTarget',
     info: 'Xạ thủ tầm xa, bắn chính xác và thường đổi vị trí để giữ khoảng cách.',
     attackPattern: 'Canh góc bắn, nổ phát đạn mạnh theo nhịp rồi lùi/né.',
@@ -90,7 +90,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'dai_lien',
     tab: 'minion',
-    name: 'Đại Liên',
+    name: 'Bnox - Đại liên',
     icon: 'PhLightning',
     info: 'Đơn vị hoả lực liên thanh tạo vùng đạn dày ở trung tâm màn hình.',
     attackPattern: 'Xả chùm đạn tốc độ cao theo nhịp burst ngắn.',
@@ -109,7 +109,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'thu_ho',
     tab: 'minion',
-    name: 'Thủ Hộ',
+    name: 'Bnox - Thủ hộ',
     icon: 'PhShieldPlus',
     info: 'Đơn vị phòng thủ có trạng thái phản đòn theo chu kỳ nhóm.',
     attackPattern: 'Vừa bám đội hình vừa phản xạ sát thương trong cửa sổ kích hoạt.',
@@ -128,7 +128,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'thuat_si',
     tab: 'minion',
-    name: 'Thuật Sĩ',
+    name: 'Bnox - Thuật sĩ',
     icon: 'PhMagicWand',
     info: 'Hỗ trợ hồi máu cho đồng minh và có thể hóa thiên thạch khi bị hạ.',
     attackPattern: 'Khóa mục tiêu đồng minh để hồi máu theo tia nối.',
@@ -147,7 +147,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'cnox_greedy',
     tab: 'minion',
-    name: 'Cnox Greedy',
+    name: 'Cnox - Tham lam',
     icon: 'PhMagnet',
     info: 'Đơn vị tham lam hấp thu EXP rơi để tự tăng sức mạnh theo thời gian.',
     attackPattern: 'Di chuyển hút orb và tăng chỉ số theo lượng EXP đã nuốt.',
@@ -166,7 +166,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'cnox_shield',
     tab: 'minion',
-    name: 'Cnox Shield',
+    name: 'Cnox - Lá chắn',
     icon: 'PhShieldPlus',
     info: 'Đơn vị khiên với đội hình hàng ngang dày, gây cản trở góc bắn.',
     attackPattern: 'Giữ hàng và đẩy tường chắn, ép người chơi đổi lane liên tục.',
@@ -185,7 +185,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'cnox_spark',
     tab: 'minion',
-    name: 'Cnox Spark',
+    name: 'Cnox - Tia lửa',
     icon: 'PhLightning',
     info: 'Đơn vị laser có các trạng thái cảnh báo, quét tia và liên kết đồng đội.',
     attackPattern: 'Đổi giữa tia quét cá nhân và laser liên kết nhiều điểm.',
@@ -205,7 +205,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'boss_stardestroyer',
     tab: 'boss',
-    name: 'Boss Star Destroyer',
+    name: 'Anox - Kẻ diệt sao',
     icon: 'PhRocketLaunch',
     info: 'Boss phá hủy hạng nặng với pháo chính, laser khóa và mưa tên lửa.',
     attackPattern: 'Luân phiên bắn pháo nặng, khóa tia và phóng salvo tên lửa.',
@@ -225,7 +225,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'boss_invader',
     tab: 'boss',
-    name: 'Boss Invader',
+    name: 'Anox - Kẻ xâm lăng',
     icon: 'PhAtom',
     info: 'Boss tàu mẹ có tháp pháo phụ, kỹ năng khu vực và áp lực nhiều nguồn.',
     attackPattern: 'Tháp pháo bắn độc lập, xen kẽ đạn diện rộng và đòn ép vị trí.',
@@ -245,7 +245,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'boss_tinhvan',
     tab: 'boss',
-    name: 'Boss Tinh Vân',
+    name: 'Bnox - Tinh vân hắc ám',
     icon: 'PhSpiral',
     info: 'Boss không gian điều khiển hố đen, cổng triệu hồi và áp lực vùng.',
     attackPattern: 'Tạo vùng hút, triệu hồi cổng và bắn từ nhiều mấu súng quỹ đạo.',
@@ -265,7 +265,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'boss_trumso',
     tab: 'boss',
-    name: 'Boss Trùm Số',
+    name: 'Bnox - Trùm sò',
     icon: 'PhCrown',
     info: 'Boss cơ giới đa chế độ: súng máy, tên lửa, lao thẳng lane và laser pha 2.',
     attackPattern: 'Đổi mode liên tục giữa burst súng máy, missile, charge và sweep laser.',
@@ -285,7 +285,7 @@ export const ENEMY_CODEX: EnemyCodexEntry[] = [
   {
     kind: 'boss_cnox_sun',
     tab: 'boss',
-    name: 'Boss Cnox Sun',
+    name: 'Cnox - Mặt trời tối thượng',
     icon: 'PhStar',
     info: 'Boss thiên thể với sao vũ khí quỹ đạo, tinh thể hồi máu và core laser quét.',
     attackPattern: 'Kích hoạt sao tấn công theo mẫu hình, dựng tinh thể hồi máu, quét core laser.',

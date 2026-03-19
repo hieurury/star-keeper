@@ -159,7 +159,7 @@ export function spawnHolderLaser(
       hitFlash(e.body)
       spawnDamageText(ctx, e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 60 : 16), damage)
       redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
-      if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
+
       if (e.hp <= 0) killEnemy(ctx, game, e, i, true)
     }
   }

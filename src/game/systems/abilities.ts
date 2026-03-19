@@ -245,6 +245,7 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
             }
           }
         } else {
+
           e.hp = Math.max(0, e.hp - m.damage)
           hitFlash(e.body)
           spawnDamageText(ctx, e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' ? 60 : 16), m.damage)
@@ -272,19 +273,12 @@ export function spawnPlasmaBeam(ctx: GameContext, game: GameStore, x: number, da
     const e = ctx.enemies[i]
     if (Math.abs(e.container.x - x) < beamW + 10) {
       const isBoss = e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader'
-      if (isDevastation && !isBoss) {
-        hitFlash(e.body)
-        spawnDamageText(ctx, e.container.x, e.container.y - 16, e.maxHp)
-        redrawHpBar(e.hpBarBg, e.hpBar, 0, e.barW)
-        e.hp = 0
-        killEnemy(ctx, game, e, i)
-      } else {
-        e.hp = Math.max(0, e.hp - damage)
-        hitFlash(e.body)
-        spawnDamageText(ctx, e.container.x, e.container.y - (isBoss ? 60 : 16), damage)
-        redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
-        if (e.hp <= 0) killEnemy(ctx, game, e, i)
-      }
+      const finalDmg = isDevastation ? Math.round(damage * 1.5) : damage
+      e.hp = Math.max(0, e.hp - finalDmg)
+      hitFlash(e.body)
+      spawnDamageText(ctx, e.container.x, e.container.y - (isBoss ? 60 : 16), finalDmg)
+      redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+      if (e.hp <= 0) killEnemy(ctx, game, e, i)
     }
   }
   for (const boss of ctx.enemies) {
@@ -459,6 +453,7 @@ export function updateStaticField(ctx: GameContext, game: GameStore, dt: number)
       const e = ctx.enemies[i]
       if (dist2(ctx.playerShip.x, ctx.playerShip.y, e.container.x, e.container.y) < r2) {
         e.hp = Math.max(0, e.hp - cs.staticFieldDmgPerTick)
+        if (cs.staticFieldLifesteal) game.healPlayer(1)
         hitFlash(e.body)
         spawnDamageText(ctx, e.container.x, e.container.y - 14, cs.staticFieldDmgPerTick)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
@@ -489,6 +484,15 @@ export function updatePeriodicAbilities(ctx: GameContext, game: GameStore, dt: n
   if (!ctx.playerShip) return
   const cs = game.cardStats
   const cooldownFactor = Math.max(0.35, 1 - cs.cdReductionPct)
+  
+  if (cs.regenPctPerSec > 0) {
+    ctx.regenTimer -= dt
+    if (ctx.regenTimer <= 0) {
+      ctx.regenTimer = 60
+      const healAmount = Math.max(1, Math.floor(game.playerMaxHp * (cs.regenPctPerSec / 100)))
+      game.healPlayer(healAmount)
+    }
+  }
 
   if (cs.plasmaBolt) {
     ctx.pbTimer -= dt

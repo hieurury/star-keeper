@@ -12,6 +12,7 @@ import { drawCnoxGreedy } from '../../game/entities/CnoxGreedy'
 import { drawCnoxShieldBody } from '../../game/entities/CnoxShield'
 import { drawCnoxSpark } from '../../game/entities/CnoxSpark'
 import { drawSunBossBody } from '../../game/entities/BossCnoxSun'
+
 import { drawBossInvader } from '../../game/entities/BossInvader'
 import { drawStarDestroyer } from '../../game/entities/BossStarDestroyer'
 import { drawBossTinhVan } from '../../game/entities/BossTinhVan'
@@ -42,6 +43,7 @@ const drawFunctions: Record<string, (g: Graphics, size: number) => void> = {
   'cnox_shield': drawCnoxShieldBody,
   'cnox_spark': drawCnoxSpark,
   'boss_cnox_sun': drawSunBossBody,
+
   'boss_invader': drawBossInvader,
   'boss_stardestroyer': drawStarDestroyer,
   'boss_tinhvan': drawBossTinhVan,

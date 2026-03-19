@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { Application, Graphics, Container, Text, TextStyle, Ticker } from 'pixi.js'
 import { useGameStore } from '../../stores/gameStore'
@@ -3271,7 +3271,7 @@ function gameLoop(ticker: Ticker) {
             const effectiveDmg = Math.round(bulletBaseDmg * (bullet.pierceDmgMult ?? 1))
             t.hp = Math.max(0, t.hp - effectiveDmg)
             spawnDamageText(ctx, wx, wy - 16, effectiveDmg)
-            if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
+
             redrawHpBar(t.hpBarBg, t.hpBar, t.hp / t.maxHp, 24)
             // Bosses cannot be pierced
             if (!bullet.gfx.destroyed) ctx.gameLayer.removeChild(bullet.gfx)
@@ -3404,7 +3404,7 @@ function gameLoop(ticker: Ticker) {
         spawnDamageText(ctx, e.container.x, e.container.y - dmgOffY, effectiveDmg)
         hitFlash(e.body)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
-        if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
+
         if (game.cardStats.bulletPierceOnKill && !isBoss) {
           bullet.pierceDmgMult = (bullet.pierceDmgMult ?? 1) * 0.75
           bullet.pierceLeft = Math.max(0, (bullet.pierceLeft ?? 2) - 1)
@@ -3624,7 +3624,7 @@ function gameLoop(ticker: Ticker) {
             ae.hp = Math.max(0, ae.hp - m.damage); hitFlash(ae.body)
             spawnDamageText(ctx, ae.container.x, ae.container.y - 14, m.damage)
             redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
-            if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
+
             if (ae.hp <= 0) {
               if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)
               killEnemy(ctx, game, ae, k)
@@ -3643,7 +3643,7 @@ function gameLoop(ticker: Ticker) {
           e.hp = Math.max(0, e.hp - m.damage); hitFlash(e.body)
           spawnDamageText(ctx, e.container.x, e.container.y - 14, m.damage)
           redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
-          if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
+
           if (e.hp <= 0) {
             if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)
             killEnemy(ctx, game, e, nearestIdx)
@@ -3676,7 +3676,7 @@ function gameLoop(ticker: Ticker) {
               ae.hp = Math.max(0, ae.hp - m.damage); hitFlash(ae.body)
               spawnDamageText(ctx, ae.container.x, ae.container.y - 14, m.damage)
               redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
-              if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
+
               if (ae.hp <= 0) {
                 if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)
                 killEnemy(ctx, game, ae, k)
@@ -3687,7 +3687,7 @@ function gameLoop(ticker: Ticker) {
           e.hp = Math.max(0, e.hp - m.damage); hitFlash(e.body)
           spawnDamageText(ctx, e.container.x, e.container.y - 14, m.damage)
           redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
-          if (game.cardStats.vampireHitHeal > 0) game.healPlayer(game.cardStats.vampireHitHeal)
+
           spawnExplosion(ctx, m.gfx.x, m.gfx.y, 14, 0xff4400, 0xffaa00)
           if (e.hp <= 0) {
             if (game.cardStats.shooterMissileKillCdReduce > 0) game.reduceSkillCooldown(game.cardStats.shooterMissileKillCdReduce)

@@ -105,7 +105,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
         const dropChance = (laserKill && game.cardStats.laserKillDropsSoul) ? 1.0 : 0.75
         if (Math.random() < dropChance) spawnFragmentOrb(ctx, e.container.x, e.container.y)
       }
-      if (game.cardStats.vampireKillHeal > 0) game.healPlayer(game.cardStats.vampireKillHeal)
+
       game.addKill()
       audioManager.playEnemyKill()
       if (game.artifactStats.manaCoreActive) {
@@ -159,7 +159,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
     }
   }
 
-  if (game.cardStats.vampireKillHeal > 0) game.healPlayer(game.cardStats.vampireKillHeal)
+
   ctx.gameLayer.removeChild(e.container)
   ctx.enemies.splice(i, 1)
   game.addKill()

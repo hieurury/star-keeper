@@ -7,13 +7,14 @@ export function dist2(ax: number, ay: number, bx: number, by: number): number {
   return dx * dx + dy * dy
 }
 
-export function redrawHpBar(hpBarBg: Graphics, hpBar: Graphics, pct: number, w: number): void {
+export function redrawHpBar(hpBarBg: Graphics, hpBar: Graphics, pct: number, w: number, forceColor?: number, customH?: number): void {
+  const h = customH ?? 4
   hpBarBg.clear()
-  hpBarBg.rect(-w / 2, 0, w, 4).fill(0x222222)
+  hpBarBg.rect(-w / 2, 0, w, h).fill(0x222222)
   hpBar.clear()
   if (pct > 0) {
-    const color = pct > 0.5 ? 0x22dd44 : pct > 0.25 ? 0xffaa00 : 0xff2222
-    hpBar.rect(-w / 2, 0, w * pct, 4).fill(color)
+    const color = forceColor ?? (pct > 0.5 ? 0x22dd44 : pct > 0.25 ? 0xffaa00 : 0xff2222)
+    hpBar.rect(-w / 2, 0, w * pct, h).fill(color)
   }
 }
 

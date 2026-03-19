@@ -36,6 +36,7 @@ export interface GameContext {
   lsTimer: number
   sfDmgTimer: number
   sfGfx: Graphics | null
+  regenTimer: number
 
   // Artifact state
   neutronVacuumTimer: number
@@ -130,6 +131,7 @@ export function createGameContext(): GameContext {
     lsTimer: 0,
     sfDmgTimer: 0,
     sfGfx: null,
+    regenTimer: 0,
     neutronVacuumTimer: 0,
     manaCoreKillCount: 0,
     manaCoreOverloadPending: false,
