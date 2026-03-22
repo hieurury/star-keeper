@@ -3209,7 +3209,6 @@ function gameLoop(ticker: Ticker) {
         }
       }
     }
-
     if (!e.kind.startsWith('boss_') && !e.isDyingMeteor && e.kind !== 'kamikaze') {
       clampEnemyInsideHorizontalView(e)
       resolveEnemyWallStuck(e)

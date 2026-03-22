@@ -308,7 +308,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
   {
     id: 'static_field_ult', name: 'Sinh Lực Hấp Thụ', type: 'ultimate', icon: 'PhSpiral', maxLevel: 1,
     requiresAttackId: 'laser_sweep',
-    requiresSupportId: 'exp_magnet',
+    requiresSupportId: 'hp_regen',
     levels: [
       { desc: 'Thay thế quét laser bằng vùng tĩnh điện bao quanh phi cơ, gây sát thương mỗi 0.5s cho kẻ địch bên trong. Cứ mỗi lần gây sát thương cho địch, ta hồi 1 HP.' },
     ],
@@ -1027,8 +1027,9 @@ export const useGameStore = defineStore('game', () => {
     if ((c['static_field_ult'] ?? 0) >= 1) {
       stats.staticField = true
       stats.laserSweep = false   // no more horizontal sweep
-      stats.staticFieldRadius = 100 + (c['exp_magnet'] ?? 0) * 20
-      stats.staticFieldDmgPerTick = Math.round(50 * stats.laserSweepDmgMult)
+      stats.staticFieldLifesteal = true
+      stats.staticFieldRadius = Math.round((100 + (c['exp_magnet'] ?? 0) * 20) * 1.3)
+      stats.staticFieldDmgPerTick = Math.max(1, Math.round(50 * stats.laserSweepDmgMult))
     }
 
     // wing_boost (support)

@@ -26,7 +26,7 @@ interface EnemyGroup {
   entries: EnemyCodexEntry[]
 }
 
-const enemyTypeByKind: Record<EnemyKind, 'Anox' | 'Bnox' | 'Cnox'> = {
+const enemyTypeByKind: Record<string, 'Anox' | 'Bnox' | 'Cnox'> = {
   pioneer: 'Anox',
   kamikaze: 'Anox',
   sniper: 'Anox',
@@ -43,7 +43,7 @@ const enemyTypeByKind: Record<EnemyKind, 'Anox' | 'Bnox' | 'Cnox'> = {
   boss_cnox_sun: 'Cnox',
 }
 
-const enemyOrderByKind: Record<EnemyKind, number> = {
+const enemyOrderByKind: Record<string, number> = {
   pioneer: 1,
   kamikaze: 2,
   sniper: 3,

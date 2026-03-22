@@ -20,7 +20,7 @@ export interface AllyDrone {
 
 export type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'
   | 'dai_lien' | 'thu_ho' | 'thuat_si' | 'boss_tinhvan' | 'boss_trumso'
-  | 'cnox_greedy' | 'cnox_shield' | 'cnox_spark' | 'boss_cnox_sun'
+  | 'cnox_greedy' | 'cnox_shield' | 'cnox_spark' | 'boss_cnox_sun' | 'boss_cnox_moon'
 export type KamiState = 'descend' | 'aim' | 'charge' | 'prexplode' | 'dead'
 export type BossAttack2State = 'ready' | 'locking'
 export type PioneerPhase = 'enter' | 'patrol' | 'approach'
@@ -156,6 +156,14 @@ export interface Enemy {
   sunCoreLaserStartAngle?: number
   sunCoreLaserSweepSpan?: number
 
+  // boss_cnox_moon
+  moonEnergy?: number
+  moonMaxEnergy?: number
+  moonRecoveryMode?: boolean
+  moonWeapons?: MoonWeapon[]
+  moonAttackQueue?: Array<'sword' | 'shield' | 'staff' | 'bow'>
+  moonActiveWeapon?: 'sword' | 'shield' | 'staff' | 'bow' | null
+
 }
 
 export interface SunWeaponStar {
@@ -183,6 +191,20 @@ export interface SunEnergyCrystal {
   hp: number
   maxHp: number
   contactDamageCd?: number
+}
+
+export interface MoonWeapon {
+  kind: 'sword' | 'shield' | 'staff' | 'bow'
+  gfx: Graphics
+  state: 'idle' | 'attack_charge' | 'attack_strike' | 'return' | 'broken'
+  hp: number
+  maxHp: number
+  baseOffset: { x: number, y: number }
+  timer: number
+  attackType?: 'stab' | 'slash'
+  targetX?: number
+  targetY?: number
+  warningGfx: Graphics
 }
 
 

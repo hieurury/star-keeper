@@ -2,7 +2,7 @@
 import type { Component } from 'vue'
 import {
   PhRocketLaunch, PhLightning, PhBomb, PhWaveSine, PhSword, PhFire,
-  PhArrowsClockwise, PhShieldPlus, PhMagnet, PhDrop,
+  PhArrowsClockwise, PhShieldPlus, PhMagnet, PhDrop, PhPlusCircle,
   PhDiamondsFour, PhGhost, PhShootingStar, PhTrendUp,
   PhAtom, PhSpiral, PhWind, PhTarget, PhSparkle,
   PhAirplaneTilt, PhPlanet, PhStar, PhCrosshair,
@@ -10,7 +10,7 @@ import {
 
 const ICON_MAP: Record<string, Component> = {
   PhRocketLaunch, PhLightning, PhBomb, PhWaveSine, PhSword, PhFire,
-  PhArrowsClockwise, PhShieldPlus, PhMagnet, PhDrop,
+  PhArrowsClockwise, PhShieldPlus, PhMagnet, PhDrop, PhPlusCircle,
   PhDiamondsFour, PhGhost, PhShootingStar, PhTrendUp,
   PhAtom, PhSpiral, PhWind, PhTarget, PhSparkle,
   PhAirplaneTilt, PhPlanet, PhStar, PhCrosshair,
@@ -30,6 +30,7 @@ const COLOR_MAP: Record<string, string> = {
   PhArrowsClockwise:'#26de81',
   PhShieldPlus:     '#45aaf2',
   PhMagnet:         '#a29bfe',
+  PhPlusCircle:     '#5dff7a',
   PhDrop:           '#ff5e7a',
   PhTrendUp:        '#00cec9',
   PhWind:           '#74b9ff',
