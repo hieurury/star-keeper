@@ -8,6 +8,9 @@ import { cleanupBossTinhVan } from './BossTinhVan'
 import { cleanupBossTrumSo } from './BossTrumSo'
 import { cleanupBossCnoxSun } from './BossCnoxSun'
 import { drawThuatSiMeteor } from './ThuatSi'
+import { cleanupDnoxFire } from './DnoxFire'
+import { cleanupDnoxIce } from './DnoxIce'
+import { cleanupDnoxSoil, getDnoxSoilCoreKind, removeDnoxSoilBonus } from './DnoxSoil'
 import { audioManager } from '../systems/audio'
 
 type GameStore = ReturnType<typeof useGameStore>
@@ -79,6 +82,22 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
       spawnExplosion(ctx, e.container.x, e.container.y, 18, 0x55aaff, 0xe8fbff)
     } else if (e.kind === 'cnox_spark') {
       spawnExplosion(ctx, e.container.x, e.container.y, 16, 0xaa66ff, 0xffffff)
+    } else if (e.kind === 'dnox_fire') {
+      spawnExplosion(ctx, e.container.x, e.container.y, 20, 0xff5500, 0xffcc44)
+      cleanupDnoxFire(e, ctx)
+    } else if (e.kind === 'dnox_ice') {
+      spawnExplosion(ctx, e.container.x, e.container.y, 18, 0x55ccff, 0xe0f8ff)
+      cleanupDnoxIce(e)
+    } else if (e.kind === 'dnox_soil') {
+      spawnExplosion(ctx, e.container.x, e.container.y, 16, 0x8b5c2a, 0xffd700)
+      // Remove parasite bonuses from host
+      const host = e.healTarget
+      if (host && ctx.enemies.includes(host)) {
+        removeDnoxSoilBonus(host, getDnoxSoilCoreKind(e))
+        // Strip the parasite visual off the host
+        host.container.removeChild(e.body)
+      }
+      cleanupDnoxSoil(e)
     }
     // Thuật Sĩ (healer) transforms into a meteorite instead of instantly dying
     if (e.kind === 'thuat_si' && !e.isDyingMeteor) {
@@ -143,14 +162,17 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
         if (last) last.amount = remaining
       }
     }
-    const pts = e.kind === 'sniper'    ? 20 + game.currentStage * 7
-             : e.kind === 'kamikaze'  ? 15 + game.currentStage * 6
-             : e.kind === 'dai_lien'  ? 12 + game.currentStage * 5
-             : e.kind === 'thu_ho'    ? 18 + game.currentStage * 8
+    const pts = e.kind === 'sniper'     ? 20 + game.currentStage * 7
+             : e.kind === 'kamikaze'   ? 15 + game.currentStage * 6
+             : e.kind === 'dai_lien'   ? 12 + game.currentStage * 5
+             : e.kind === 'thu_ho'     ? 18 + game.currentStage * 8
              : e.kind === 'cnox_greedy' ? 24 + game.currentStage * 8 + Math.round((e.cnoxStolenExp ?? 0) * 0.35)
              : e.kind === 'cnox_shield' ? 20 + game.currentStage * 7
-             : e.kind === 'cnox_spark' ? 22 + game.currentStage * 8
-             :                         10 + game.currentStage * 5
+             : e.kind === 'cnox_spark'  ? 22 + game.currentStage * 8
+             : e.kind === 'dnox_fire'   ? 20 + game.currentStage * 7
+             : e.kind === 'dnox_ice'    ? 28 + game.currentStage * 10
+             : e.kind === 'dnox_soil'   ? 22 + game.currentStage * 8
+             :                          10 + game.currentStage * 5
     game.addScore(pts)
     // Star Holder: soul fragment drop
     if (game.selectedShip === 'star_holder') {

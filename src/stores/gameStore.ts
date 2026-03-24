@@ -20,6 +20,9 @@ export const ALL_ENEMY_KINDS: EnemyKind[] = [
   'boss_tinhvan',
   'boss_trumso',
   'boss_cnox_sun',
+  'dnox_fire',
+  'dnox_ice',
+  'dnox_soil',
 ]
 
 // ─── Card System ──────────────────────────────────────────────────────────────
@@ -787,7 +790,7 @@ export const useGameStore = defineStore('game', () => {
   const accountExp = ref(0)
 
   // Test mode (không ảnh hưởng save / kết quả thật)
-  const testMode = ref<{ type: 'faction'; faction: 'anox' | 'bnox' | 'cnox' } | { type: 'boss'; bossKind: string } | null>(null)
+  const testMode = ref<{ type: 'faction'; faction: 'anox' | 'bnox' | 'cnox' | 'dnox' } | { type: 'boss'; bossKind: string } | null>(null)
 
   // Phi cơ sở hữu
   const ownedShips = ref<string[]>(['star_keeper'])

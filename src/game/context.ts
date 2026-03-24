@@ -56,8 +56,8 @@ export interface GameContext {
   thuHoReflectGlow: number
 
   // Faction system (rotates every 5 stages, no same faction twice in a row)
-  activeFaction: 'anox' | 'bnox' | 'cnox'
-  lastFaction: 'anox' | 'bnox' | 'cnox'
+  activeFaction: 'anox' | 'bnox' | 'cnox' | 'dnox'
+  lastFaction: 'anox' | 'bnox' | 'cnox' | 'dnox'
   factionBlock: number
 
   // Boss zoom (smooth scale-out when Tinh Vân boss is active)
@@ -143,7 +143,7 @@ export function createGameContext(): GameContext {
     thuHoReflecting: false,
     thuHoReflectGlow: 0,
     ...(() => {
-      const factions: Array<'anox' | 'bnox' | 'cnox'> = ['anox', 'bnox', 'cnox']
+      const factions: Array<'anox' | 'bnox' | 'cnox' | 'dnox'> = ['anox', 'bnox', 'cnox', 'dnox']
       const f = factions[Math.floor(Math.random() * factions.length)]!
       const last = factions.find(x => x !== f) ?? 'anox'
       return { activeFaction: f, lastFaction: last, factionBlock: 0 }

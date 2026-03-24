@@ -24,6 +24,9 @@ import { drawDaiLienBullet, spawnDaiLienPair } from '../../game/entities/DaiLien
 import { drawThuHo, spawnThuHoSwarm } from '../../game/entities/ThuHo'
 import { drawHealBeam, spawnThuatSi } from '../../game/entities/ThuatSi'
 import { drawCnoxGreedy } from '../../game/entities/CnoxGreedy'
+import { drawDnoxFire, updateDnoxFireHeat } from '../../game/entities/DnoxFire'
+import { drawDnoxIce, FREEZE_DURATION, FREEZE_TAP_BREAK } from '../../game/entities/DnoxIce'
+import { drawDnoxSoil, getDnoxSoilCoreKind, applyDnoxSoilBonus } from '../../game/entities/DnoxSoil'
 import type { AllyDrone, Enemy, SunWeaponStar } from '../../game/types'
 
 const canvasWrapper = ref<HTMLDivElement>()
@@ -34,6 +37,11 @@ let starFasterAuraGfx: Graphics | null = null
 let autoPaused = false   // tracks pauses triggered by visibility/blur
 const ctx = createGameContext()
 const enemyWallStuckState = new WeakMap<Enemy, { x: number, y: number, stuckFrames: number }>()
+// Dnox - Băng lam: player frost state
+let playerFrostStacks = 0     // 0 = clear, 1 = tê cóng, 2 = frozen
+let playerFreezeTimer = 0      // frames until thaw
+let playerFreezeTapCount = 0   // taps received while frozen
+let freezeOverlayGfx: Graphics | null = null
 const INTRO_SHIP_START_Y = GAME_H + 70
 const INTRO_SHIP_END_Y = GAME_H * 0.67
 
@@ -499,6 +507,37 @@ function gameLoop(ticker: Ticker) {
   game.tickShield(dt / 60)
   if (ctx.bossAttackLockTimer > 0) ctx.bossAttackLockTimer = Math.max(0, ctx.bossAttackLockTimer - dt)
 
+  // Frost & Freeze logic (Dnox Băng lam)
+  if (playerFrostStacks >= 2) {
+    playerFreezeTimer -= dt
+    if (playerFreezeTimer <= 0) {
+      playerFrostStacks = 0
+      if (freezeOverlayGfx) freezeOverlayGfx.visible = false
+    } else {
+      if (!freezeOverlayGfx && ctx.gameLayer) {
+        freezeOverlayGfx = new Graphics()
+        ctx.gameLayer.addChild(freezeOverlayGfx)
+      }
+      if (freezeOverlayGfx && ctx.playerShip) {
+        freezeOverlayGfx.visible = true
+        freezeOverlayGfx.x = ctx.playerShip.x
+        freezeOverlayGfx.y = ctx.playerShip.y
+        freezeOverlayGfx.clear()
+        freezeOverlayGfx.rect(-24, -24, 48, 48).fill({ color: 0x88eeff, alpha: 0.55 })
+        freezeOverlayGfx.rect(-20, -20, 40, 40).fill({ color: 0xccffff, alpha: 0.75 })
+        if (playerFreezeTapCount > 0) {
+          const crackRatio = playerFreezeTapCount / FREEZE_TAP_BREAK
+          freezeOverlayGfx.moveTo(-18, -18).lineTo(-18 + 36 * crackRatio, -18 + 36 * crackRatio).stroke({ color: 0xffffff, width: 2 })
+          freezeOverlayGfx.moveTo(18, -18).lineTo(18 - 36 * crackRatio, -18 + 36 * crackRatio).stroke({ color: 0xffffff, width: 2 })
+        }
+      }
+    }
+  } else {
+    if (freezeOverlayGfx) freezeOverlayGfx.visible = false
+  }
+
+  const isFrozen = playerFrostStacks >= 2
+
   if (ctx.starFasterSkillTimer > 0) {
     ctx.starFasterSkillTimer = Math.max(0, ctx.starFasterSkillTimer - dt)
     if (ctx.starFasterSkillTimer <= 0) {
@@ -709,8 +748,8 @@ function gameLoop(ticker: Ticker) {
     }
   }
 
-  // Player movement (disabled during boss intro â€” ship auto-returns to home)
-  if (!isBossIntro && ctx.isDragging && ctx.playerShip) {
+  // Player movement (disabled during boss intro or frozen)
+  if (!isBossIntro && !isFrozen && ctx.isDragging && ctx.playerShip) {
     const _bz2 = ctx.bossZoom
     const _blx2 = GAME_W * (1 - _bz2) / 2; const _bly2 = GAME_H * (1 - _bz2) / 2
     const dx = (ctx.touchX - _blx2) / _bz2 - ctx.playerShip.x
@@ -741,7 +780,7 @@ function gameLoop(ticker: Ticker) {
   const baseShootInterval = isHolder ? 60 : (isShooter ? 160 : (isFaster ? 12 : 18))
   const shootCount = isShooter ? effectiveMissileCount : effectiveBulletCount
   const shootInterval = (baseShootInterval / Math.sqrt(shootCount)) / ((1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100) * game.selectedShipFireRateMult * starFasterFireBoost)
-  if (!isBossIntro && ctx.shootTimer >= shootInterval) {
+  if (!isBossIntro && !isFrozen && ctx.shootTimer >= shootInterval) {
     ctx.shootTimer = 0
     const cnt = isShooter ? effectiveMissileCount : effectiveBulletCount
     if (isHolder && ctx.playerShip) {
@@ -1891,6 +1930,248 @@ function gameLoop(ticker: Ticker) {
       if (e.container.y > GAME_H + 50) {
         e.cnoxWarnGfx?.clear()
         e.cnoxLaserGfx?.clear()
+        if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
+        ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
+      }
+    }
+
+    // ─── Dnox - Hoả chủng ────────────────────────────────────────────────────
+    else if (e.kind === 'dnox_fire') {
+      if (e.pioneerPhase === 'enter') {
+        const dx = (e.enterTargetX ?? e.container.x) - e.container.x
+        const dy = (e.enterTargetY ?? e.container.y) - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const speed = 1.6
+        if (dist < speed * dt * 2) {
+          e.container.x = e.enterTargetX ?? e.container.x
+          e.container.y = e.enterTargetY ?? e.container.y
+          e.pioneerPhase = 'patrol'
+        } else {
+          e.container.x += (dx / dist) * speed * dt
+          e.container.y += (dy / dist) * speed * dt
+        }
+      } else {
+        // Patrol: drift side-to-side slowly in lower/mid zone
+        const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.009
+        e.container.x += Math.sin(t * 0.85) * 0.45 * dt
+        e.container.x = Math.max(22, Math.min(GAME_W - 22, e.container.x))
+      }
+      // Aura pulse redraw (heat stored in cnoxLaserAngle)
+      if (e.cnoxLaserState !== 'firing') {
+        const heat = e.cnoxLaserAngle ?? 0
+        drawDnoxFire(e.body, 13, heat)
+      }
+      if (e.container.y > GAME_H + 50) {
+        if (e.cnoxLaserGfx) { e.cnoxLaserGfx.clear(); if (e.cnoxLaserGfx.parent) e.cnoxLaserGfx.parent.removeChild(e.cnoxLaserGfx) }
+        if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
+        ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
+      }
+    }
+
+    // ─── Dnox - Băng lam ────────────────────────────────────────────────────
+    else if (e.kind === 'dnox_ice') {
+      if (e.pioneerPhase === 'enter') {
+        const dx = (e.enterTargetX ?? e.container.x) - e.container.x
+        const dy = (e.enterTargetY ?? e.container.y) - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const speed = 2.0
+        if (dist < speed * dt * 2) {
+          e.container.x = e.enterTargetX ?? e.container.x
+          e.container.y = e.enterTargetY ?? e.container.y
+          e.pioneerPhase = 'patrol'
+        } else {
+          e.container.x += (dx / dist) * speed * dt
+          e.container.y += (dy / dist) * speed * dt
+        }
+      } else {
+        // Patrol: gentle drift, hide behind Hoả chủng if possible
+        const fireTank = ctx.enemies.find(other => other.kind === 'dnox_fire')
+        if (fireTank && ctx.playerShip) {
+          const hx = fireTank.container.x - ctx.playerShip.x
+          const hy = fireTank.container.y - ctx.playerShip.y
+          const hm = Math.sqrt(hx * hx + hy * hy) || 1
+          const hideX = fireTank.container.x + (hx / hm) * 60
+          const hideY = fireTank.container.y + (hy / hm) * 110
+          const ddx = hideX - e.container.x
+          const ddy = hideY - e.container.y
+          const dd = Math.sqrt(ddx * ddx + ddy * ddy) || 1
+          const step = Math.min(2.2 * dt, dd)
+          e.container.x += (ddx / dd) * step
+          e.container.y += (ddy / dd) * step
+          e.container.x = Math.max(18, Math.min(GAME_W - 18, e.container.x))
+          e.container.y = Math.max(18, Math.min(GAME_H - 80, e.container.y))
+        } else {
+          const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.011
+          e.container.x += Math.sin(t * 1.1) * 0.52 * dt
+          e.container.x = Math.max(20, Math.min(GAME_W - 20, e.container.x))
+        }
+      }
+      // Spin ice orbs
+      const iceSpinSpeed = 0.038
+      e.cnoxShieldAngle = (e.cnoxShieldAngle ?? 0) + iceSpinSpeed * dt
+      if (e.cnoxShields?.length) {
+        const radius = 20
+        for (let si = 0; si < e.cnoxShields.length; si++) {
+          const angle = (e.cnoxShieldAngle ?? 0) + si * Math.PI
+          e.cnoxShields[si].x = Math.cos(angle) * radius
+          e.cnoxShields[si].y = Math.sin(angle) * radius
+          e.cnoxShields[si].rotation = angle + Math.PI / 4
+        }
+      }
+      // Shoot frost projectile
+      e.cnoxLaserTimer = (e.cnoxLaserTimer ?? 140) - dt
+      if ((e.cnoxLaserTimer ?? 0) <= 0 && ctx.playerShip && e.pioneerPhase === 'patrol') {
+        e.cnoxLaserTimer = 150 + Math.random() * 80
+        const bg = new Graphics()
+        drawDnoxIce(bg, 7)
+        bg.x = e.container.x
+        bg.y = e.container.y + 8
+        ctx.gameLayer.addChild(bg)
+        const tx = ctx.playerShip.x - e.container.x
+        const ty = ctx.playerShip.y - e.container.y
+        const mag = Math.sqrt(tx * tx + ty * ty) || 1
+        const spd = 4.2 + game.currentStage * 0.1
+        const isFrosted = playerFrostStacks >= 1
+        ctx.enemyBullets.push({
+          gfx: bg,
+          vx: (tx / mag) * spd,
+          vy: (ty / mag) * spd,
+          damage: 10 + game.currentStage * 2,
+          onHitPlayer: () => {
+            if (isFrosted) {
+              // Second hit while frost = freeze
+              playerFrostStacks = 2
+              playerFreezeTimer = FREEZE_DURATION
+              playerFreezeTapCount = 0
+              // Freeze overlay
+              if (!freezeOverlayGfx) {
+                freezeOverlayGfx = new Graphics()
+                ctx.uiLayer.addChild(freezeOverlayGfx)
+              }
+            } else {
+              // First hit = tê cóng
+              playerFrostStacks = 1
+            }
+          },
+        })
+      }
+      if (e.container.y > GAME_H + 50) {
+        if (e.cnoxWarnGfx) { e.cnoxWarnGfx.clear(); if (e.cnoxWarnGfx.parent) e.cnoxWarnGfx.parent.removeChild(e.cnoxWarnGfx) }
+        if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
+        ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
+      }
+    }
+
+    // ─── Dnox - Thổ nhưỡng (ký sinh) ────────────────────────────────────────
+    else if (e.kind === 'dnox_soil') {
+      if (e.pioneerPhase === 'enter') {
+        const dx = (e.enterTargetX ?? e.container.x) - e.container.x
+        const dy = (e.enterTargetY ?? e.container.y) - e.container.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const speed = 1.8
+        if (dist < speed * dt * 2) {
+          e.container.x = e.enterTargetX ?? e.container.x
+          e.container.y = e.enterTargetY ?? e.container.y
+          e.pioneerPhase = 'patrol'
+          e.cnoxLaserTimer = 90 + Math.random() * 60  // delay before seeking
+        } else {
+          e.container.x += (dx / dist) * speed * dt
+          e.container.y += (dy / dist) * speed * dt
+        }
+      } else if (e.cnoxLaserState === 'idle') {
+        // Drift gently, wait to find a host
+        e.cnoxLaserTimer = (e.cnoxLaserTimer ?? 90) - dt
+        const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.008
+        e.container.x += Math.sin(t * 0.7) * 0.3 * dt
+        e.container.x = Math.max(18, Math.min(GAME_W - 18, e.container.x))
+
+        if ((e.cnoxLaserTimer ?? 0) <= 0) {
+          // Find a valid host: any non-dnox enemy within range
+          let bestHost: Enemy | null = null
+          let bestD2 = 200 * 200
+          for (const other of ctx.enemies) {
+            if (other === e || other.kind.startsWith('dnox_') || other.kind.startsWith('boss_')) continue
+            if (other.healTarget !== null && other.healTarget !== undefined) continue // already parasitised
+            const d2 = dist2(e.container.x, e.container.y, other.container.x, other.container.y)
+            if (d2 < bestD2) { bestD2 = d2; bestHost = other }
+          }
+          if (bestHost) {
+            e.healTarget = bestHost
+            e.cnoxLaserState = 'link_warning'
+            e.cnoxLaserTimer = 90  // 1.5s link beam
+          } else {
+            e.cnoxLaserTimer = 120 + Math.random() * 60
+          }
+        }
+      } else if (e.cnoxLaserState === 'link_warning') {
+        // Draw gold energy link beam toward host, move closer
+        e.cnoxLaserTimer = (e.cnoxLaserTimer ?? 90) - dt
+        const host = e.healTarget
+        if (!host || !ctx.enemies.includes(host)) {
+          // Host gone, reset
+          e.healTarget = null; e.cnoxLaserState = 'idle'; e.cnoxLaserTimer = 60
+        } else {
+          // Move toward host
+          const ddx = host.container.x - e.container.x
+          const ddy = host.container.y - e.container.y
+          const dd = Math.sqrt(ddx * ddx + ddy * ddy) || 1
+          const step = Math.min(3.6 * dt, dd)
+          e.container.x += (ddx / dd) * step
+          e.container.y += (ddy / dd) * step
+          // Draw link beam (gold) in healBeamGfx (absolute coords)
+          if (e.healBeamGfx) {
+            const t2 = (Date.now() * 0.0012) % 1
+            const al = 0.55 + Math.abs(Math.sin(Date.now() * 0.012)) * 0.35
+            e.healBeamGfx.clear()
+            e.healBeamGfx.moveTo(e.container.x, e.container.y)
+              .lineTo(host.container.x, host.container.y)
+              .stroke({ color: 0xffd700, width: 3, alpha: al })
+            // Traveling dot
+            const bx = e.container.x + (host.container.x - e.container.x) * t2
+            const by = e.container.y + (host.container.y - e.container.y) * t2
+            e.healBeamGfx.circle(bx, by, 4).fill({ color: 0xffee88, alpha: 0.9 })
+          }
+          if ((e.cnoxLaserTimer ?? 0) <= 0 || dd < 12) {
+            // Attach!
+            if (e.healBeamGfx) e.healBeamGfx.clear()
+            e.cnoxLaserState = 'link_firing' // reuse as 'attached'
+            applyDnoxSoilBonus(host, getDnoxSoilCoreKind(e))
+            // Mark host as parasitised
+            host.healTarget = e
+            // Reparent parasite body to host container so it moves with host
+            if (e.body.parent) e.body.parent.removeChild(e.body)
+            host.container.addChild(e.body)
+            // Redraw soil on host (centered)
+            drawDnoxSoil(e.body, 10, getDnoxSoilCoreKind(e))
+            // Move entity position to host (the container becomes invisible placeholder)
+            e.container.visible = false
+            e.hpBarBg.visible = true
+            e.hpBar.visible = true
+          }
+        }
+      } else if (e.cnoxLaserState === 'link_firing') {
+        // Attached: ride with host, keep own HP bar floating
+        const host = e.healTarget
+        if (!host || !ctx.enemies.includes(host)) {
+          // Host died, parasite detaches
+          e.cnoxLaserState = 'idle'
+          e.healTarget = null
+          e.container.visible = true
+          e.container.x = host?.container.x ?? e.container.x
+          e.container.y = host?.container.y ?? e.container.y
+          e.cnoxLaserTimer = 90
+        } else {
+          // Follow host
+          e.container.x = host.container.x
+          e.container.y = host.container.y - 8 // slightly above
+          // Keep HP bar visible above host
+          e.hpBarBg.y = -20
+          e.hpBar.y = -20
+        }
+      }
+
+      if (e.container.y > GAME_H + 50) {
+        if (e.healBeamGfx) { e.healBeamGfx.clear(); if (e.healBeamGfx.parent) e.healBeamGfx.parent.removeChild(e.healBeamGfx) }
         if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
         ctx.enemies.splice(i, 1); game.stageEnemiesKilled++; continue
       }
@@ -3399,6 +3680,7 @@ function gameLoop(ticker: Ticker) {
         }
         const effectiveDmg = Math.round(bulletBaseDmg * (bullet.pierceDmgMult ?? 1) * woundMult)
         e.hp = Math.max(0, e.hp - effectiveDmg)
+        updateDnoxFireHeat(e, effectiveDmg, ctx, game)
         const dmgOffY = e.kind === 'boss_tinhvan' ? 75 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 60 : (e.kind === 'boss_cnox_sun' ? 68 : 14))
         spawnDamageText(ctx, e.container.x, e.container.y - dmgOffY, effectiveDmg)
         hitFlash(e.body)
@@ -3436,6 +3718,7 @@ function gameLoop(ticker: Ticker) {
 
         const dmgToEnemy = getCollisionDamageToEnemy(game.upgrades.damage, e)
         e.hp = Math.max(0, e.hp - dmgToEnemy)
+        updateDnoxFireHeat(e, dmgToEnemy, ctx, game)
         hitFlash(e.body)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
         const dmgOffY = e.kind === 'boss_tinhvan' ? 75 : (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' || e.kind === 'boss_trumso' ? 60 : (e.kind === 'boss_cnox_sun' ? 68 : 14))
@@ -3621,6 +3904,7 @@ function gameLoop(ticker: Ticker) {
           const ae = ctx.enemies[k]
           if (dist2(m.gfx.x, m.gfx.y, ae.container.x, ae.container.y) < aoeRadius * aoeRadius) {
             ae.hp = Math.max(0, ae.hp - m.damage); hitFlash(ae.body)
+            updateDnoxFireHeat(ae, m.damage, ctx, game)
             spawnDamageText(ctx, ae.container.x, ae.container.y - 14, m.damage)
             redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
 
@@ -3640,6 +3924,7 @@ function gameLoop(ticker: Ticker) {
         if (nearestIdx >= 0 && nearestD2 < 28 * 28) {
           const e = ctx.enemies[nearestIdx]!
           e.hp = Math.max(0, e.hp - m.damage); hitFlash(e.body)
+          updateDnoxFireHeat(e, m.damage, ctx, game)
           spawnDamageText(ctx, e.container.x, e.container.y - 14, m.damage)
           redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
 
@@ -3673,6 +3958,7 @@ function gameLoop(ticker: Ticker) {
             const ae = ctx.enemies[k]
             if (dist2(m.gfx.x, m.gfx.y, ae.container.x, ae.container.y) < aoeRadius * aoeRadius) {
               ae.hp = Math.max(0, ae.hp - m.damage); hitFlash(ae.body)
+              updateDnoxFireHeat(ae, m.damage, ctx, game)
               spawnDamageText(ctx, ae.container.x, ae.container.y - 14, m.damage)
               redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
 
@@ -3684,6 +3970,7 @@ function gameLoop(ticker: Ticker) {
           }
         } else {
           e.hp = Math.max(0, e.hp - m.damage); hitFlash(e.body)
+          updateDnoxFireHeat(e, m.damage, ctx, game)
           spawnDamageText(ctx, e.container.x, e.container.y - 14, m.damage)
           redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
 
@@ -3805,6 +4092,17 @@ let lastTapTime = 0
 
 function onTouchStart(e: TouchEvent) {
   e.preventDefault()
+  if (playerFrostStacks >= 2) {
+    playerFreezeTapCount++
+    if (playerFreezeTapCount >= FREEZE_TAP_BREAK) {
+      playerFrostStacks = 0
+      playerFreezeTapCount = 0
+      playerFreezeTimer = 0
+      if (freezeOverlayGfx) freezeOverlayGfx.visible = false
+      if (ctx.playerShip) spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 30, 'BREAK!')
+    }
+    return
+  }
   ctx.isDragging = true
   const rect = (app!.canvas as HTMLCanvasElement).getBoundingClientRect()
   ctx.touchX = (e.touches[0].clientX - rect.left) * (GAME_W / rect.width)
@@ -3823,6 +4121,17 @@ function onTouchMove(e: TouchEvent) {
 }
 function onTouchEnd() { ctx.isDragging = false }
 function onMouseDown(e: MouseEvent) {
+  if (playerFrostStacks >= 2) {
+    playerFreezeTapCount++
+    if (playerFreezeTapCount >= FREEZE_TAP_BREAK) {
+      playerFrostStacks = 0
+      playerFreezeTapCount = 0
+      playerFreezeTimer = 0
+      if (freezeOverlayGfx) freezeOverlayGfx.visible = false
+      if (ctx.playerShip) spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 30, 'BREAK!')
+    }
+    return
+  }
   ctx.isDragging = true
   const rect = (app!.canvas as HTMLCanvasElement).getBoundingClientRect()
   ctx.touchX = (e.clientX - rect.left) * (GAME_W / rect.width)

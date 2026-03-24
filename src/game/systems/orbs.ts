@@ -80,5 +80,23 @@ export function spawnEnemyOrbs(ctx: GameContext, x: number, y: number, kind: Ene
     for (let i = 0; i < 14; i++) spawnExpOrb(ctx, x + (Math.random() - 0.5) * 72, y + (Math.random() - 0.5) * 36, 'gold')
     for (let i = 0; i < 8; i++) spawnExpOrb(ctx, x + (Math.random() - 0.5) * 56, y + (Math.random() - 0.5) * 26, 'purple')
     for (let i = 0; i < 6; i++) spawnExpOrb(ctx, x + (Math.random() - 0.5) * 42, y + (Math.random() - 0.5) * 22, 'blue')
+  } else if (kind === 'dnox_fire') {
+    // Trung bình – tank chịu đòn
+    const count = 2 + Math.floor(Math.random() * 2)
+    for (let i = 0; i < count; i++) spawnExpOrb(ctx, x, y, Math.random() < 0.30 ? 'blue' : 'white')
+  } else if (kind === 'dnox_ice') {
+    // Cao – cho kinh nghiệm bậc cao
+    const count = 2 + Math.floor(Math.random() * 3)
+    for (let i = 0; i < count; i++) {
+      const r = Math.random()
+      spawnExpOrb(ctx, x, y, r < 0.30 ? 'purple' : r < 0.65 ? 'blue' : 'white')
+    }
+  } else if (kind === 'dnox_soil') {
+    // Đáng kể – ký sinh khó chịu
+    const count = 2 + Math.floor(Math.random() * 3)
+    for (let i = 0; i < count; i++) {
+      const r = Math.random()
+      spawnExpOrb(ctx, x, y, r < 0.25 ? 'purple' : r < 0.60 ? 'blue' : 'white')
+    }
   }
 }

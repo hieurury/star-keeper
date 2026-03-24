@@ -16,6 +16,9 @@ import { spawnThuatSi } from '../entities/ThuatSi'
 import { spawnCnoxGreedy } from '../entities/CnoxGreedy'
 import { spawnCnoxShieldWall } from '../entities/CnoxShield'
 import { spawnCnoxSparkGroup } from '../entities/CnoxSpark'
+import { spawnDnoxFireSquad } from '../entities/DnoxFire'
+import { spawnDnoxIce } from '../entities/DnoxIce'
+import { spawnDnoxSoilGroup } from '../entities/DnoxSoil'
 
 type GameStore = ReturnType<typeof useGameStore>
 
@@ -33,13 +36,13 @@ function finalizeWaveOrder(tankers: WaveSpawner[], regular: WaveSpawner[]): Wave
 }
 
 // ─── Faction helpers ──────────────────────────────────────────────────────────
-const ALL_FACTIONS: Array<'anox' | 'bnox' | 'cnox'> = ['anox', 'bnox', 'cnox']
+const ALL_FACTIONS: Array<'anox' | 'bnox' | 'cnox' | 'dnox'> = ['anox', 'bnox', 'cnox', 'dnox']
 
 /** Rotate to a new faction that is different from the current one. */
 function rotateFaction(ctx: GameContext): void {
   const choices = ALL_FACTIONS.filter(f => f !== ctx.activeFaction)
-  ctx.lastFaction = ctx.activeFaction
-  ctx.activeFaction = choices[Math.floor(Math.random() * choices.length)]!
+  ctx.lastFaction = ctx.activeFaction as 'anox' | 'bnox' | 'cnox' | 'dnox'
+  ctx.activeFaction = choices[Math.floor(Math.random() * choices.length)] as 'anox' | 'bnox' | 'cnox' | 'dnox'
 }
 
 // ─── Anox wave (pioneer / sniper / kamikaze) ──────────────────────────────────
@@ -109,6 +112,24 @@ function buildCnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[]
   }
 }
 
+// ─── Dnox wave (hoả chủng / băng lam / thổ nhưỡng) ───────────────────────────
+function buildDnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[], regular: WaveSpawner[]): void {
+  const stage = game.currentStage
+
+  // Hoả chủng làm tank tuyến trước (nhóm 4-5 con)
+  tankers.push(() => spawnDnoxFireSquad(ctx, game))
+
+  // Băng lam tấn công tầm trung (stage >= 1)
+  const iceCount = 1 + (Math.random() < 0.35 ? 1 : 0) + (stage >= 4 && Math.random() < 0.65 ? 1 : 0)
+  for (let i = 0; i < iceCount; i++) regular.push(() => spawnDnoxIce(ctx, game))
+
+  // Thổ nhưỡng ký sinh (stage >= 3, hiếm nhưng gây khó chịu)
+  if (stage >= 3 && Math.random() < 0.55) {
+    regular.push(() => spawnDnoxSoilGroup(ctx, game))
+    if (stage >= 7 && Math.random() < 0.35) regular.push(() => spawnDnoxSoilGroup(ctx, game))
+  }
+}
+
 // ─── Main buildWave ───────────────────────────────────────────────────────────
 export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
   const stage = game.currentStage
@@ -127,9 +148,10 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
       else if (k === 'boss_cnox_sun') { bossWave.push(() => { spawnBossCnoxSun(ctx, game);   ctx.gamePhase = 'bossIntro' }) }
       return bossWave
     } else if (game.testMode.type === 'faction') {
-      ctx.activeFaction = game.testMode.faction
+      ctx.activeFaction = game.testMode.faction as 'anox' | 'bnox' | 'cnox' | 'dnox'
       if (game.testMode.faction === 'bnox') buildBnoxWave(ctx, game, tankers, regular)
       else if (game.testMode.faction === 'cnox') buildCnoxWave(ctx, game, tankers, regular)
+      else if ((game.testMode.faction as string) === 'dnox') buildDnoxWave(ctx, game, tankers, regular)
       else buildAnoxWave(ctx, game, regular)
       return finalizeWaveOrder(tankers, regular)
     }
@@ -164,6 +186,8 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
     buildBnoxWave(ctx, game, tankers, regular)
   } else if (ctx.activeFaction === 'cnox') {
     buildCnoxWave(ctx, game, tankers, regular)
+  } else if ((ctx.activeFaction as string) === 'dnox') {
+    buildDnoxWave(ctx, game, tankers, regular)
   } else {
     buildAnoxWave(ctx, game, regular)
   }

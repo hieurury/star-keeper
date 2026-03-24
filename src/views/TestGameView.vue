@@ -13,7 +13,7 @@ const game = useGameStore()
 // ── Selection state (before game starts) ──────────────────────────────────────
 type TestType = 'faction' | 'boss'
 const testType = ref<TestType>('boss')
-const selectedFaction = ref<'anox' | 'bnox' | 'cnox'>('anox')
+const selectedFaction = ref<'anox' | 'bnox' | 'cnox' | 'dnox'>('anox')
 const selectedBoss = ref<string>('boss_stardestroyer')
 
 const BOSSES: Array<{ kind: string; label: string; emoji: string }> = [
@@ -151,6 +151,15 @@ onMounted(() => {
               <span class="faction-card__emoji">⚡</span>
               <span class="faction-card__name">CNOX</span>
               <span class="faction-card__sub">Tham lam · Lá chắn · Tia lửa</span>
+            </button>
+            <button
+              class="faction-card"
+              :class="{ active: selectedFaction === 'dnox' }"
+              @click="selectedFaction = 'dnox'"
+            >
+              <span class="faction-card__emoji">❄️</span>
+              <span class="faction-card__name">DNOX</span>
+              <span class="faction-card__sub">Hoả chủng · Băng lam · Thổ nhưỡng</span>
             </button>
           </div>
         </div>

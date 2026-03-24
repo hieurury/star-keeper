@@ -60,11 +60,13 @@ export function screenFlash(
   ctx.app.ticker.add(tick)
 }
 
-export function spawnDamageText(ctx: GameContext, x: number, y: number, dmg: number): void {
+export function spawnDamageText(ctx: GameContext, x: number, y: number, dmg: number | string): void {
   if (!ctx.gameLayer) return
+  const isString = typeof dmg === 'string'
+  const isCrit = !isString && Math.random() < 0.15
   const style = new TextStyle({
-    fill: 0xff8844,
-    fontSize: 12,
+    fill: isCrit ? 0xffff44 : 0xff8844,
+    fontSize: isCrit ? 16 : 12,
     fontFamily: "'Chakra Petch', sans-serif",
     fontWeight: 'bold',
   })
@@ -73,7 +75,7 @@ export function spawnDamageText(ctx: GameContext, x: number, y: number, dmg: num
   t.x = x + (Math.random() - 0.5) * 16
   t.y = y
   ctx.gameLayer.addChild(t)
-  ctx.damageTexts.push({ gfx: t, vy: 1.4, life: 40 })
+  ctx.damageTexts.push({ gfx: t, vy: isCrit ? 1.8 : 1.4, life: isCrit ? 45 : 40 })
 }
 
 export function spawnHealText(ctx: GameContext, x: number, y: number, amount: number): void {

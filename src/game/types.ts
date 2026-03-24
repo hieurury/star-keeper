@@ -21,6 +21,7 @@ export interface AllyDrone {
 export type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'
   | 'dai_lien' | 'thu_ho' | 'thuat_si' | 'boss_tinhvan' | 'boss_trumso'
   | 'cnox_greedy' | 'cnox_shield' | 'cnox_spark' | 'boss_cnox_sun' | 'boss_cnox_moon'
+  | 'dnox_fire' | 'dnox_ice' | 'dnox_soil'
 export type KamiState = 'descend' | 'aim' | 'charge' | 'prexplode' | 'dead'
 export type BossAttack2State = 'ready' | 'locking'
 export type PioneerPhase = 'enter' | 'patrol' | 'approach'
