@@ -4,6 +4,7 @@ import type { useGameStore } from '../../stores/gameStore'
 import { redrawHpBar } from '../utils'
 import { spawnDamageText, hitFlash } from '../systems/effects'
 import { killEnemy } from '../entities/kill'
+import { updateDnoxFireHeat } from '../entities/DnoxFire'
 
 type GameStore = ReturnType<typeof useGameStore>
 
@@ -156,6 +157,7 @@ export function spawnHolderLaser(
     const hitR = e.kind === 'boss_cnox_sun' ? 66 : (e.kind.startsWith('boss_') ? 52 : 15)
     if (perpDist < beamW / 2 + hitR && along > -hitR && along < beamLen + hitR) {
       e.hp = Math.max(0, e.hp - damage)
+      updateDnoxFireHeat(e, damage, ctx, game)
       hitFlash(e.body)
       spawnDamageText(ctx, e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 60 : 16), damage)
       redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)

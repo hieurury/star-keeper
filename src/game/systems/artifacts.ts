@@ -3,6 +3,7 @@ import type { GameContext } from '../context'
 import type { useGameStore } from '../../stores/gameStore'
 import { screenFlash, spawnDamageText, spawnExpCollectEffect, getExpTierColor } from './effects'
 import { killEnemy } from '../entities/kill'
+import { updateDnoxFireHeat } from '../entities/DnoxFire'
 
 type GameStore = ReturnType<typeof useGameStore>
 
@@ -88,6 +89,7 @@ export function activateManaCoreOverload(ctx: GameContext, game: GameStore): voi
     const dy = e.container.y - ctx.playerShip.y
     if (Math.sqrt(dx * dx + dy * dy) <= blastRadius) {
       e.hp = Math.max(0, e.hp - blastDmg)
+      updateDnoxFireHeat(e, blastDmg, ctx, game)
       spawnDamageText(ctx, e.container.x, e.container.y - 10, blastDmg)
       if (e.hp <= 0) killEnemy(ctx, game, e, i)
     }

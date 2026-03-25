@@ -10,7 +10,7 @@ import { cleanupBossCnoxSun } from './BossCnoxSun'
 import { drawThuatSiMeteor } from './ThuatSi'
 import { cleanupDnoxFire } from './DnoxFire'
 import { cleanupDnoxIce } from './DnoxIce'
-import { cleanupDnoxSoil, getDnoxSoilCoreKind, removeDnoxSoilBonus } from './DnoxSoil'
+import { cleanupDnoxSoil, getDnoxSoilCoreKind, removeDnoxSoilBonus, isDnoxSoilProtected } from './DnoxSoil'
 import { audioManager } from '../systems/audio'
 
 type GameStore = ReturnType<typeof useGameStore>
@@ -21,6 +21,11 @@ type GameStore = ReturnType<typeof useGameStore>
  * Instead it sets ctx.manaCoreOverloadPending = true; the game loop handles the call.
  */
 export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number, laserKill = false): void {
+  if (isDnoxSoilProtected(e, ctx)) {
+    e.hp = Math.max(1, e.hp)
+    return
+  }
+
   if (e.kind === 'boss_stardestroyer') {
     spawnExplosion(ctx, e.container.x, e.container.y, 50, 0x4466ff, 0xaaccff)
     spawnExplosion(ctx, e.container.x - 30, e.container.y + 20, 28, 0xff4400, 0xffee44)
@@ -95,7 +100,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
       if (host && ctx.enemies.includes(host)) {
         removeDnoxSoilBonus(host, getDnoxSoilCoreKind(e))
         // Strip the parasite visual off the host
-        host.container.removeChild(e.body)
+        if (e.body.parent === host.container) host.container.removeChild(e.body)
       }
       cleanupDnoxSoil(e)
     }

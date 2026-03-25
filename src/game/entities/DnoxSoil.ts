@@ -39,31 +39,82 @@ export function drawDnoxSoil(g: Graphics, size: number, coreKind: DnoxSoilCoreKi
   _drawCore(g, coreKind, size)
 }
 
-function _drawCore(g: Graphics, kind: DnoxSoilCoreKind, size: number): void {
-  const s = size * 0.18
-  if (kind === 'shield') {
-    // Hình khiên – ngũ giác
+export function drawDnoxSoilAttached(g: Graphics, size: number, coreKind: DnoxSoilCoreKind): void {
+  g.clear()
+  // Enlarge both side shields to wrap host body from left/right.
+  for (const side of [-1, 1]) {
+    const px = side * size * 1.45
     g.poly([
-      0,  -s * 1.3,
-       s * 1.1, -s * 0.4,
-       s * 0.7,  s * 1.1,
-      -s * 0.7,  s * 1.1,
-      -s * 1.1, -s * 0.4,
-    ]).fill({ color: 0x3399ff, alpha: 0.95 })
+      px + side * size * 0.16, -size * 1.18,
+      px + side * size * 0.72, -size * 0.34,
+      px + side * size * 0.74,  size * 0.82,
+      px,                        size * 1.18,
+      px - side * size * 0.42,  size * 0.72,
+      px - side * size * 0.34, -size * 0.98,
+    ]).fill({ color: 0x3a271b, alpha: 0.96 })
+    g.poly([
+      px + side * size * 0.10, -size * 0.92,
+      px + side * size * 0.45, -size * 0.22,
+      px + side * size * 0.45,  size * 0.62,
+      px,                        size * 0.86,
+      px - side * size * 0.25,  size * 0.48,
+      px - side * size * 0.20, -size * 0.80,
+    ]).fill({ color: 0x64432d, alpha: 0.92 })
+  }
+
+  // Core merges into host core: keep only a bright emblem at center.
+  g.circle(0, 0, size * 0.30).fill({ color: 0xfff5c2, alpha: 0.88 })
+  _drawCore(g, coreKind, size * 1.2)
+}
+
+function _drawCore(g: Graphics, kind: DnoxSoilCoreKind, size: number): void {
+  const s = size * 0.28
+  if (kind === 'shield') {
+    // Shield core: cyan-blue crest, larger and easy to read.
+    g.poly([
+      0,  -s * 1.55,
+       s * 1.25, -s * 0.45,
+       s * 0.82,  s * 1.25,
+      -s * 0.82,  s * 1.25,
+      -s * 1.25, -s * 0.45,
+    ]).fill({ color: 0x4ac8ff, alpha: 0.97 })
+    g.poly([
+      0,  -s * 1.22,
+       s * 0.95, -s * 0.36,
+       s * 0.60,  s * 0.92,
+      -s * 0.60,  s * 0.92,
+      -s * 0.95, -s * 0.36,
+    ]).fill({ color: 0xe7fbff, alpha: 0.72 })
   } else if (kind === 'sword') {
-    // Hình kiếm – thanh dọc có tay cầm
-    g.rect(-s * 0.22, -s * 1.5, s * 0.44, s * 2.2).fill({ color: 0xffcc00, alpha: 0.95 })
-    g.rect(-s * 0.7,  s * 0.5,  s * 1.4,  s * 0.35).fill({ color: 0xffaa00, alpha: 0.90 })
+    // Sword core: warm orange blade with bright guard.
+    g.poly([
+      0, -s * 1.75,
+      s * 0.34, -s * 0.95,
+      s * 0.34,  s * 1.05,
+      0,  s * 1.45,
+      -s * 0.34,  s * 1.05,
+      -s * 0.34, -s * 0.95,
+    ]).fill({ color: 0xff8c2a, alpha: 0.98 })
+    g.rect(-s * 0.95,  s * 0.52,  s * 1.9,  s * 0.40).fill({ color: 0xffc44d, alpha: 0.96 })
+    g.circle(0, s * 1.16, s * 0.22).fill({ color: 0xffefbf, alpha: 0.9 })
   } else {
-    // Hình gió – tròn có tia xoắn
-    g.circle(0, 0, s).fill({ color: 0x88ffaa, alpha: 0.95 })
-    for (let i = 0; i < 4; i++) {
+    // Wind core: emerald vortex ring.
+    g.circle(0, 0, s * 1.08).fill({ color: 0x35d77a, alpha: 0.94 })
+    g.circle(0, 0, s * 0.52).fill({ color: 0xd8ffe8, alpha: 0.82 })
+    for (let i = 0; i < 5; i++) {
       const a = (i / 4) * Math.PI * 2
-      const cx = Math.cos(a) * s * 0.7
-      const cy = Math.sin(a) * s * 0.7
-      g.circle(cx, cy, s * 0.32).fill({ color: 0xccffdd, alpha: 0.80 })
+      const cx = Math.cos(a) * s * 0.86
+      const cy = Math.sin(a) * s * 0.86
+      g.circle(cx, cy, s * 0.20).fill({ color: 0xaef6c8, alpha: 0.88 })
     }
   }
+}
+
+export function isDnoxSoilProtected(e: Enemy, ctx: GameContext): boolean {
+  if (e.kind !== 'dnox_soil') return false
+  if (e.cnoxLaserState !== 'link_firing') return false
+  const host = e.healTarget
+  return !!host && ctx.enemies.includes(host)
 }
 
 // ─── Spawn ────────────────────────────────────────────────────────────────────
@@ -133,17 +184,17 @@ export function getDnoxSoilCoreKind(e: Enemy): DnoxSoilCoreKind {
 /** Apply parasite bonuses to host. Call once when attaching. */
 export function applyDnoxSoilBonus(host: Enemy, coreKind: DnoxSoilCoreKind): void {
   if (coreKind === 'shield') {
-    // +80% HP
+    // +80% HP: makes host tankier; for Dnox Fire this also scales retaliate beam damage.
     const bonus = Math.round(host.maxHp * 0.80)
     host.maxHp += bonus
     host.hp = Math.min(host.maxHp, host.hp + bonus)
     redrawHpBar(host.hpBarBg, host.hpBar, host.hp / host.maxHp, host.barW)
   } else if (coreKind === 'sword') {
-    // +80% damage: stored in cnoxPowerMult
+    // +80% damage multiplier used by host offensive skills.
     host.cnoxPowerMult = (host.cnoxPowerMult ?? 1) * 1.80
   } else {
-    // +100% speed (vy)
-    host.vy *= 2.0
+    // +65% action haste for host AI timers and movement.
+    host.dnoxSoilHasteMult = (host.dnoxSoilHasteMult ?? 1) * 1.65
   }
 }
 
@@ -157,7 +208,7 @@ export function removeDnoxSoilBonus(host: Enemy, coreKind: DnoxSoilCoreKind): vo
   } else if (coreKind === 'sword') {
     host.cnoxPowerMult = (host.cnoxPowerMult ?? 1.80) / 1.80
   } else {
-    host.vy = Math.max(0.8, host.vy / 2.0)
+    host.dnoxSoilHasteMult = Math.max(1, (host.dnoxSoilHasteMult ?? 1.65) / 1.65)
   }
 }
 

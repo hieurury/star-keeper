@@ -59,13 +59,13 @@ export function spawnDnoxIce(ctx: GameContext, game: GameStore): void {
   const warnGfx = new Graphics()   // cảnh báo đạn
   const container = new Container()
   container.addChild(body, iceA, iceB, hpBarBg, hpBar)
-  // Tầm trung – ở độ cao trung bình, núp sau Hoả chủng
+  // Spawn từ trên xuống, giữ tầng bay cao để gây áp lực tầm xa.
   container.x = GAME_W * 0.18 + Math.random() * GAME_W * 0.64
   container.y = -36
   ctx.gameLayer.addChild(container)
   ctx.gameLayer.addChild(warnGfx)
 
-  const enterTargetY = GAME_H * 0.15 + Math.random() * GAME_H * 0.22
+  const enterTargetY = GAME_H * 0.05 + Math.random() * GAME_H * 0.12
 
   const e: Enemy = {
     container, body, hpBarBg, hpBar,
@@ -84,7 +84,7 @@ export function spawnDnoxIce(ctx: GameContext, game: GameStore): void {
     cnoxShields: [iceA, iceB],       // rotating ice orbs
     cnoxShieldAngle: Math.random() * Math.PI * 2,
     cnoxWarnGfx: warnGfx,
-    cnoxLaserTimer: 140 + Math.random() * 80,  // shoot cooldown
+    cnoxLaserTimer: 110 + Math.random() * 60,  // shoot cooldown
     cnoxLaserState: 'idle',
   }
   ctx.enemies.push(e)

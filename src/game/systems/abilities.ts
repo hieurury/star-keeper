@@ -5,6 +5,7 @@ import { GAME_W, GAME_H } from '../constants'
 import { dist2, redrawHpBar, findNearestEnemy } from '../utils'
 import { spawnExplosion, screenFlash, spawnDamageText, spawnHeatWave, hitFlash } from './effects'
 import { killEnemy } from '../entities/kill'
+import { updateDnoxFireHeat } from '../entities/DnoxFire'
 
 type GameStore = ReturnType<typeof useGameStore>
 
@@ -185,6 +186,7 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
               const ae = ctx.enemies[k]
               if (dist2(m.gfx.x, m.gfx.y, ae.container.x, ae.container.y) < AOE_R2) {
                 ae.hp = Math.max(0, ae.hp - m.damage)
+                updateDnoxFireHeat(ae, m.damage, ctx, game)
                 hitFlash(ae.body)
                 spawnDamageText(ctx, ae.container.x, ae.container.y - (ae.kind === 'boss_stardestroyer' ? 60 : 16), m.damage)
                 redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
@@ -238,6 +240,7 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
             const ae = ctx.enemies[k]
             if (dist2(m.gfx.x, m.gfx.y, ae.container.x, ae.container.y) < AOE_R2) {
               ae.hp = Math.max(0, ae.hp - m.damage)
+              updateDnoxFireHeat(ae, m.damage, ctx, game)
               hitFlash(ae.body)
               spawnDamageText(ctx, ae.container.x, ae.container.y - (ae.kind === 'boss_stardestroyer' ? 60 : 16), m.damage)
               redrawHpBar(ae.hpBarBg, ae.hpBar, ae.hp / ae.maxHp, ae.barW)
@@ -247,6 +250,7 @@ export function updateMissileLaunchers(ctx: GameContext, game: GameStore, dt: nu
         } else {
 
           e.hp = Math.max(0, e.hp - m.damage)
+          updateDnoxFireHeat(e, m.damage, ctx, game)
           hitFlash(e.body)
           spawnDamageText(ctx, e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' ? 60 : 16), m.damage)
           redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
@@ -275,6 +279,7 @@ export function spawnPlasmaBeam(ctx: GameContext, game: GameStore, x: number, da
       const isBoss = e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader'
       const finalDmg = isDevastation ? Math.round(damage * 1.5) : damage
       e.hp = Math.max(0, e.hp - finalDmg)
+      updateDnoxFireHeat(e, finalDmg, ctx, game)
       hitFlash(e.body)
       spawnDamageText(ctx, e.container.x, e.container.y - (isBoss ? 60 : 16), finalDmg)
       redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
@@ -348,6 +353,7 @@ export function dropClusterBomb(ctx: GameContext, game: GameStore, fromX: number
         const e = ctx.enemies[i]
         if (dist2(bomb.x, bomb.y, e.container.x, e.container.y) < AOE_R2) {
           e.hp = Math.max(0, e.hp - damage)
+          updateDnoxFireHeat(e, damage, ctx, game)
           hitFlash(e.body)
           spawnDamageText(ctx, e.container.x, e.container.y - 16, damage)
           redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
@@ -386,6 +392,7 @@ export function fireLaserSweep(ctx: GameContext, game: GameStore, damage: number
     const e = ctx.enemies[i]
     if (Math.abs(e.container.y - sweepY) < 26) {
       e.hp = Math.max(0, e.hp - damage)
+      updateDnoxFireHeat(e, damage, ctx, game)
       hitFlash(e.body)
       spawnDamageText(ctx, e.container.x, e.container.y - 16, damage)
       redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
@@ -476,6 +483,7 @@ export function updateStaticField(ctx: GameContext, game: GameStore, dt: number)
       const e = ctx.enemies[i]
       if (dist2(ctx.playerShip.x, ctx.playerShip.y, e.container.x, e.container.y) < r2) {
         e.hp = Math.max(0, e.hp - cs.staticFieldDmgPerTick)
+        updateDnoxFireHeat(e, cs.staticFieldDmgPerTick, ctx, game)
         if (cs.staticFieldLifesteal) totalHealed += 1
         hitFlash(e.body)
         spawnDamageText(ctx, e.container.x, e.container.y - 14, cs.staticFieldDmgPerTick)
@@ -630,6 +638,7 @@ export function activateHeatWave(ctx: GameContext, game: GameStore): void {
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
     const e = ctx.enemies[i]
     e.hp = Math.max(0, e.hp - waveDamage)
+    updateDnoxFireHeat(e, waveDamage, ctx, game)
     hitFlash(e.body)
     spawnDamageText(ctx, e.container.x, e.container.y - (e.kind === 'boss_stardestroyer' || e.kind === 'boss_invader' ? 60 : 16), waveDamage)
     redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)

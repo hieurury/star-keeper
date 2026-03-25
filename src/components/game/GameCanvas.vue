@@ -24,9 +24,9 @@ import { drawDaiLienBullet, spawnDaiLienPair } from '../../game/entities/DaiLien
 import { drawThuHo, spawnThuHoSwarm } from '../../game/entities/ThuHo'
 import { drawHealBeam, spawnThuatSi } from '../../game/entities/ThuatSi'
 import { drawCnoxGreedy } from '../../game/entities/CnoxGreedy'
-import { drawDnoxFire, updateDnoxFireHeat } from '../../game/entities/DnoxFire'
+import { drawDnoxFire, updateDnoxFireHeat, updateDnoxFireAttack } from '../../game/entities/DnoxFire'
 import { drawDnoxIce, FREEZE_DURATION, FREEZE_TAP_BREAK } from '../../game/entities/DnoxIce'
-import { drawDnoxSoil, getDnoxSoilCoreKind, applyDnoxSoilBonus } from '../../game/entities/DnoxSoil'
+import { drawDnoxSoil, drawDnoxSoilAttached, getDnoxSoilCoreKind, applyDnoxSoilBonus } from '../../game/entities/DnoxSoil'
 import type { AllyDrone, Enemy, SunWeaponStar } from '../../game/types'
 
 const canvasWrapper = ref<HTMLDivElement>()
@@ -42,6 +42,8 @@ let playerFrostStacks = 0     // 0 = clear, 1 = tê cóng, 2 = frozen
 let playerFreezeTimer = 0      // frames until thaw
 let playerFreezeTapCount = 0   // taps received while frozen
 let freezeOverlayGfx: Graphics | null = null
+let freezeScreenGfx: Graphics | null = null
+let freezeBreakPulse = 0
 const INTRO_SHIP_START_Y = GAME_H + 70
 const INTRO_SHIP_END_Y = GAME_H * 0.67
 
@@ -49,6 +51,68 @@ const INTRO_SHIP_END_Y = GAME_H * 0.67
 let zoomIndicatorText: Text | null = null
 let zoomIndicatorTimer = 0
 let zoomIndicatorLastZoom = 1.0
+
+function renderFreezeEffects() {
+  if (!freezeScreenGfx) return
+  const frozen = playerFrostStacks >= 2 && playerFreezeTimer > 0
+  if (!frozen) {
+    freezeScreenGfx.clear()
+    freezeScreenGfx.visible = false
+    if (freezeOverlayGfx) freezeOverlayGfx.visible = false
+    return
+  }
+
+  if (freezeOverlayGfx && ctx.playerShip) {
+    freezeOverlayGfx.visible = true
+    freezeOverlayGfx.x = ctx.playerShip.x
+    freezeOverlayGfx.y = ctx.playerShip.y
+    freezeOverlayGfx.clear()
+    const crackRatio = Math.min(1, playerFreezeTapCount / FREEZE_TAP_BREAK)
+    freezeOverlayGfx.circle(0, 0, 26).fill({ color: 0x8feeff, alpha: 0.40 })
+    freezeOverlayGfx.circle(0, 0, 20).fill({ color: 0xd6fbff, alpha: 0.55 })
+    freezeOverlayGfx.circle(0, 0, 27).stroke({ color: 0xeaffff, width: 2, alpha: 0.84 })
+    if (crackRatio > 0) {
+      const crackLen = 32 * crackRatio
+      freezeOverlayGfx.moveTo(-14, -14).lineTo(-14 + crackLen, -14 + crackLen).stroke({ color: 0xffffff, width: 2 })
+      freezeOverlayGfx.moveTo(14, -14).lineTo(14 - crackLen, -14 + crackLen).stroke({ color: 0xffffff, width: 2 })
+      freezeOverlayGfx.moveTo(-2, 2).lineTo(-2 + crackLen * 0.8, 2 - crackLen * 0.35).stroke({ color: 0xe8fdff, width: 1.6, alpha: 0.9 })
+    }
+  }
+
+  const crackRatio = Math.min(1, playerFreezeTapCount / FREEZE_TAP_BREAK)
+  const pulse = freezeBreakPulse > 0 ? (freezeBreakPulse / 12) : 0
+  freezeScreenGfx.visible = true
+  freezeScreenGfx.clear()
+  freezeScreenGfx.rect(0, 0, GAME_W, GAME_H).fill({ color: 0x7cd6ff, alpha: 0.14 + crackRatio * 0.06 })
+  freezeScreenGfx.rect(0, 0, GAME_W, GAME_H).stroke({ color: 0xc9f5ff, width: 6, alpha: 0.20 + pulse * 0.25 })
+
+  const centerX = GAME_W / 2
+  const centerY = GAME_H * 0.56
+  for (let i = 0; i < 7; i++) {
+    const a = i * (Math.PI * 2 / 7) + pulse * 0.22
+    const len = 60 + crackRatio * 125 + pulse * 38
+    freezeScreenGfx.moveTo(centerX, centerY)
+      .lineTo(centerX + Math.cos(a) * len, centerY + Math.sin(a) * len)
+      .stroke({ color: 0xe9fcff, width: 1.6 + crackRatio * 1.4, alpha: 0.20 + crackRatio * 0.55 })
+  }
+}
+
+function applyFreezeBreakTap() {
+  freezeBreakPulse = 12
+  playerFreezeTapCount++
+  if (playerFreezeTapCount >= FREEZE_TAP_BREAK) {
+    playerFrostStacks = 0
+    playerFreezeTapCount = 0
+    playerFreezeTimer = 0
+    freezeBreakPulse = 0
+    if (freezeOverlayGfx) freezeOverlayGfx.visible = false
+    if (freezeScreenGfx) {
+      freezeScreenGfx.clear()
+      freezeScreenGfx.visible = false
+    }
+    if (ctx.playerShip) spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 30, 'BREAK!')
+  }
+}
 
 // --- Auto-pause on tab switch / window blur -----------------------------------
 function handleVisibilityChange() {
@@ -512,29 +576,13 @@ function gameLoop(ticker: Ticker) {
     playerFreezeTimer -= dt
     if (playerFreezeTimer <= 0) {
       playerFrostStacks = 0
-      if (freezeOverlayGfx) freezeOverlayGfx.visible = false
-    } else {
-      if (!freezeOverlayGfx && ctx.gameLayer) {
-        freezeOverlayGfx = new Graphics()
-        ctx.gameLayer.addChild(freezeOverlayGfx)
-      }
-      if (freezeOverlayGfx && ctx.playerShip) {
-        freezeOverlayGfx.visible = true
-        freezeOverlayGfx.x = ctx.playerShip.x
-        freezeOverlayGfx.y = ctx.playerShip.y
-        freezeOverlayGfx.clear()
-        freezeOverlayGfx.rect(-24, -24, 48, 48).fill({ color: 0x88eeff, alpha: 0.55 })
-        freezeOverlayGfx.rect(-20, -20, 40, 40).fill({ color: 0xccffff, alpha: 0.75 })
-        if (playerFreezeTapCount > 0) {
-          const crackRatio = playerFreezeTapCount / FREEZE_TAP_BREAK
-          freezeOverlayGfx.moveTo(-18, -18).lineTo(-18 + 36 * crackRatio, -18 + 36 * crackRatio).stroke({ color: 0xffffff, width: 2 })
-          freezeOverlayGfx.moveTo(18, -18).lineTo(18 - 36 * crackRatio, -18 + 36 * crackRatio).stroke({ color: 0xffffff, width: 2 })
-        }
-      }
+      playerFreezeTimer = 0
+      playerFreezeTapCount = 0
+      freezeBreakPulse = 0
     }
-  } else {
-    if (freezeOverlayGfx) freezeOverlayGfx.visible = false
   }
+  if (freezeBreakPulse > 0) freezeBreakPulse = Math.max(0, freezeBreakPulse - dt)
+  renderFreezeEffects()
 
   const isFrozen = playerFrostStacks >= 2
 
@@ -896,6 +944,7 @@ function gameLoop(ticker: Ticker) {
       const bhDmg = Math.round(e.maxHp * dmgRate * dt / 60)
       if (bhDmg > 0) {
         e.hp = Math.max(0, e.hp - bhDmg); hitFlash(e.body)
+        updateDnoxFireHeat(e, bhDmg, ctx, game)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
         if (e.hp <= 0) { killEnemy(ctx, game, e, i); continue }
       }
@@ -1951,15 +2000,17 @@ function gameLoop(ticker: Ticker) {
           e.container.y += (dy / dist) * speed * dt
         }
       } else {
-        // Patrol: drift side-to-side slowly in lower/mid zone
+        // Patrol: hold formation row and drift gently.
+        const haste = e.dnoxSoilHasteMult ?? 1
         const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.009
-        e.container.x += Math.sin(t * 0.85) * 0.45 * dt
+        e.container.x += Math.sin(t * 0.85 * haste) * 0.45 * dt * haste
         e.container.x = Math.max(22, Math.min(GAME_W - 22, e.container.x))
       }
+      updateDnoxFireAttack(e, ctx, game, dt)
       // Aura pulse redraw (heat stored in cnoxLaserAngle)
-      if (e.cnoxLaserState !== 'firing') {
+      if (e.cnoxLaserState !== 'firing' && e.cnoxLaserState !== 'warning') {
         const heat = e.cnoxLaserAngle ?? 0
-        drawDnoxFire(e.body, 13, heat)
+        drawDnoxFire(e.body, e.cnoxBaseSize ?? 13, heat)
       }
       if (e.container.y > GAME_H + 50) {
         if (e.cnoxLaserGfx) { e.cnoxLaserGfx.clear(); if (e.cnoxLaserGfx.parent) e.cnoxLaserGfx.parent.removeChild(e.cnoxLaserGfx) }
@@ -1985,6 +2036,7 @@ function gameLoop(ticker: Ticker) {
         }
       } else {
         // Patrol: gentle drift, hide behind Hoả chủng if possible
+        const haste = e.dnoxSoilHasteMult ?? 1
         const fireTank = ctx.enemies.find(other => other.kind === 'dnox_fire')
         if (fireTank && ctx.playerShip) {
           const hx = fireTank.container.x - ctx.playerShip.x
@@ -1995,15 +2047,17 @@ function gameLoop(ticker: Ticker) {
           const ddx = hideX - e.container.x
           const ddy = hideY - e.container.y
           const dd = Math.sqrt(ddx * ddx + ddy * ddy) || 1
-          const step = Math.min(2.2 * dt, dd)
+          const step = Math.min(2.2 * dt * haste, dd)
           e.container.x += (ddx / dd) * step
           e.container.y += (ddy / dd) * step
           e.container.x = Math.max(18, Math.min(GAME_W - 18, e.container.x))
-          e.container.y = Math.max(18, Math.min(GAME_H - 80, e.container.y))
+          e.container.y = Math.max(10, Math.min(GAME_H * 0.33, e.container.y))
         } else {
           const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.011
-          e.container.x += Math.sin(t * 1.1) * 0.52 * dt
+          e.container.x += Math.sin(t * 1.1 * haste) * 0.52 * dt * haste
           e.container.x = Math.max(20, Math.min(GAME_W - 20, e.container.x))
+          e.container.y += Math.sin(t * 0.55) * 0.18 * dt
+          e.container.y = Math.max(10, Math.min(GAME_H * 0.33, e.container.y))
         }
       }
       // Spin ice orbs
@@ -2019,9 +2073,10 @@ function gameLoop(ticker: Ticker) {
         }
       }
       // Shoot frost projectile
-      e.cnoxLaserTimer = (e.cnoxLaserTimer ?? 140) - dt
+      const haste = e.dnoxSoilHasteMult ?? 1
+      e.cnoxLaserTimer = (e.cnoxLaserTimer ?? 110) - dt * haste * 1.2
       if ((e.cnoxLaserTimer ?? 0) <= 0 && ctx.playerShip && e.pioneerPhase === 'patrol') {
-        e.cnoxLaserTimer = 150 + Math.random() * 80
+        e.cnoxLaserTimer = (110 + Math.random() * 55) / haste
         const bg = new Graphics()
         drawDnoxIce(bg, 7)
         bg.x = e.container.x
@@ -2030,23 +2085,29 @@ function gameLoop(ticker: Ticker) {
         const tx = ctx.playerShip.x - e.container.x
         const ty = ctx.playerShip.y - e.container.y
         const mag = Math.sqrt(tx * tx + ty * ty) || 1
-        const spd = 4.2 + game.currentStage * 0.1
+        const spd = (4.2 + game.currentStage * 0.1) * (0.92 + haste * 0.16)
+        const dmgMult = e.cnoxPowerMult ?? 1
         const isFrosted = playerFrostStacks >= 1
         ctx.enemyBullets.push({
           gfx: bg,
           vx: (tx / mag) * spd,
           vy: (ty / mag) * spd,
-          damage: 10 + game.currentStage * 2,
+          damage: Math.round((10 + game.currentStage * 2) * dmgMult),
           onHitPlayer: () => {
             if (isFrosted) {
               // Second hit while frost = freeze
               playerFrostStacks = 2
               playerFreezeTimer = FREEZE_DURATION
               playerFreezeTapCount = 0
-              // Freeze overlay
+              freezeBreakPulse = 0
+              // Freeze overlays
               if (!freezeOverlayGfx) {
                 freezeOverlayGfx = new Graphics()
                 ctx.uiLayer.addChild(freezeOverlayGfx)
+              }
+              if (!freezeScreenGfx) {
+                freezeScreenGfx = new Graphics()
+                ctx.uiLayer.addChild(freezeScreenGfx)
               }
             } else {
               // First hit = tê cóng
@@ -2086,21 +2147,27 @@ function gameLoop(ticker: Ticker) {
         e.container.x = Math.max(18, Math.min(GAME_W - 18, e.container.x))
 
         if ((e.cnoxLaserTimer ?? 0) <= 0) {
-          // Find a valid host: any non-dnox enemy within range
+          // Prioritise Dnox host synergy: Fire + Ice can each hold only one parasite.
           let bestHost: Enemy | null = null
-          let bestD2 = 200 * 200
+          let bestD2 = 260 * 260
           for (const other of ctx.enemies) {
-            if (other === e || other.kind.startsWith('dnox_') || other.kind.startsWith('boss_')) continue
-            if (other.healTarget !== null && other.healTarget !== undefined) continue // already parasitised
+            if (other === e || other.kind !== 'dnox_fire' && other.kind !== 'dnox_ice') continue
+            const occupied = ctx.enemies.some((p) => (
+              p !== e
+              && p.kind === 'dnox_soil'
+              && p.healTarget === other
+              && (p.cnoxLaserState === 'link_warning' || p.cnoxLaserState === 'link_firing')
+            ))
+            if (occupied) continue
             const d2 = dist2(e.container.x, e.container.y, other.container.x, other.container.y)
             if (d2 < bestD2) { bestD2 = d2; bestHost = other }
           }
           if (bestHost) {
             e.healTarget = bestHost
             e.cnoxLaserState = 'link_warning'
-            e.cnoxLaserTimer = 90  // 1.5s link beam
+            e.cnoxLaserTimer = 84
           } else {
-            e.cnoxLaserTimer = 120 + Math.random() * 60
+            e.cnoxLaserTimer = 70 + Math.random() * 40
           }
         }
       } else if (e.cnoxLaserState === 'link_warning') {
@@ -2109,6 +2176,7 @@ function gameLoop(ticker: Ticker) {
         const host = e.healTarget
         if (!host || !ctx.enemies.includes(host)) {
           // Host gone, reset
+          if (e.healBeamGfx) e.healBeamGfx.clear()
           e.healTarget = null; e.cnoxLaserState = 'idle'; e.cnoxLaserTimer = 60
         } else {
           // Move toward host
@@ -2132,17 +2200,29 @@ function gameLoop(ticker: Ticker) {
             e.healBeamGfx.circle(bx, by, 4).fill({ color: 0xffee88, alpha: 0.9 })
           }
           if ((e.cnoxLaserTimer ?? 0) <= 0 || dd < 12) {
+            const occupiedByOther = ctx.enemies.some((p) => (
+              p !== e
+              && p.kind === 'dnox_soil'
+              && p.healTarget === host
+              && (p.cnoxLaserState === 'link_warning' || p.cnoxLaserState === 'link_firing')
+            ))
+            if (occupiedByOther) {
+              if (e.healBeamGfx) e.healBeamGfx.clear()
+              e.healTarget = null
+              e.cnoxLaserState = 'idle'
+              e.cnoxLaserTimer = 55
+              continue
+            }
+
             // Attach!
             if (e.healBeamGfx) e.healBeamGfx.clear()
             e.cnoxLaserState = 'link_firing' // reuse as 'attached'
             applyDnoxSoilBonus(host, getDnoxSoilCoreKind(e))
-            // Mark host as parasitised
-            host.healTarget = e
             // Reparent parasite body to host container so it moves with host
             if (e.body.parent) e.body.parent.removeChild(e.body)
             host.container.addChild(e.body)
-            // Redraw soil on host (centered)
-            drawDnoxSoil(e.body, 10, getDnoxSoilCoreKind(e))
+            // Redraw attached shell and merged core on host.
+            drawDnoxSoilAttached(e.body, host.kind === 'dnox_fire' ? 12 : 10.5, getDnoxSoilCoreKind(e))
             // Move entity position to host (the container becomes invisible placeholder)
             e.container.visible = false
             e.hpBarBg.visible = true
@@ -2154,16 +2234,41 @@ function gameLoop(ticker: Ticker) {
         const host = e.healTarget
         if (!host || !ctx.enemies.includes(host)) {
           // Host died, parasite detaches
+          if (e.healBeamGfx) e.healBeamGfx.clear()
           e.cnoxLaserState = 'idle'
           e.healTarget = null
           e.container.visible = true
           e.container.x = host?.container.x ?? e.container.x
           e.container.y = host?.container.y ?? e.container.y
+          if (e.body.parent && e.body.parent !== e.container) e.body.parent.removeChild(e.body)
+          if (e.body.parent !== e.container) e.container.addChildAt(e.body, 0)
           e.cnoxLaserTimer = 90
         } else {
           // Follow host
           e.container.x = host.container.x
           e.container.y = host.container.y - 8 // slightly above
+          e.body.x = 0
+          e.body.y = host.kind === 'dnox_fire' ? -3 : 0
+          e.body.rotation = 0
+          drawDnoxSoilAttached(e.body, host.kind === 'dnox_fire' ? 12 : 10.5, getDnoxSoilCoreKind(e))
+
+          // Static yellow electric beam from parasite core to host core.
+          if (e.healBeamGfx) {
+            const pulse = 0.5 + Math.abs(Math.sin(Date.now() * 0.02)) * 0.5
+            const fromX = host.container.x
+            const fromY = host.container.y - (host.kind === 'dnox_fire' ? 15 : 10)
+            const toX = host.container.x
+            const toY = host.container.y
+            e.healBeamGfx.clear()
+            e.healBeamGfx.moveTo(fromX, fromY).lineTo(toX, toY).stroke({ color: 0xffd84d, width: 4.4, alpha: 0.82 })
+            e.healBeamGfx.moveTo(fromX, fromY).lineTo(toX, toY).stroke({ color: 0xfff3ae, width: 2.2, alpha: 0.9 })
+            for (let z = 0; z < 3; z++) {
+              const t3 = (Date.now() * 0.0018 + z * 0.31) % 1
+              const bx = fromX + (toX - fromX) * t3
+              const by = fromY + (toY - fromY) * t3
+              e.healBeamGfx.circle(bx + (Math.random() - 0.5) * 1.8, by + (Math.random() - 0.5) * 1.8, 1.8 + pulse).fill({ color: 0xffef8e, alpha: 0.84 })
+            }
+          }
           // Keep HP bar visible above host
           e.hpBarBg.y = -20
           e.hpBar.y = -20
@@ -3847,6 +3952,7 @@ function gameLoop(ticker: Ticker) {
       if (dist2(m.gfx.x, m.gfx.y, e.container.x, e.container.y) < fragHitR * fragHitR) {
         const dmg = Math.round(60 + game.upgrades.damage * 0.5)
         e.hp = Math.max(0, e.hp - dmg); hitFlash(e.body)
+        updateDnoxFireHeat(e, dmg, ctx, game)
         spawnDamageText(ctx, e.container.x, e.container.y - 14, dmg)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
         spawnExplosion(ctx, m.gfx.x, m.gfx.y, 10, 0xff8800, 0xffdd44)
@@ -4055,6 +4161,14 @@ async function initPixi() {
   starFasterAuraGfx.visible = false
   ctx.gameLayer.addChild(starFasterAuraGfx)
 
+  freezeScreenGfx = new Graphics()
+  freezeScreenGfx.visible = false
+  ctx.uiLayer.addChild(freezeScreenGfx)
+
+  freezeOverlayGfx = new Graphics()
+  freezeOverlayGfx.visible = false
+  ctx.uiLayer.addChild(freezeOverlayGfx)
+
   // Zoom level indicator
   const zStyle = new TextStyle({
     fill: 0xffdd44, fontSize: 12,
@@ -4093,14 +4207,7 @@ let lastTapTime = 0
 function onTouchStart(e: TouchEvent) {
   e.preventDefault()
   if (playerFrostStacks >= 2) {
-    playerFreezeTapCount++
-    if (playerFreezeTapCount >= FREEZE_TAP_BREAK) {
-      playerFrostStacks = 0
-      playerFreezeTapCount = 0
-      playerFreezeTimer = 0
-      if (freezeOverlayGfx) freezeOverlayGfx.visible = false
-      if (ctx.playerShip) spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 30, 'BREAK!')
-    }
+    applyFreezeBreakTap()
     return
   }
   ctx.isDragging = true
@@ -4122,14 +4229,7 @@ function onTouchMove(e: TouchEvent) {
 function onTouchEnd() { ctx.isDragging = false }
 function onMouseDown(e: MouseEvent) {
   if (playerFrostStacks >= 2) {
-    playerFreezeTapCount++
-    if (playerFreezeTapCount >= FREEZE_TAP_BREAK) {
-      playerFrostStacks = 0
-      playerFreezeTapCount = 0
-      playerFreezeTimer = 0
-      if (freezeOverlayGfx) freezeOverlayGfx.visible = false
-      if (ctx.playerShip) spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 30, 'BREAK!')
-    }
+    applyFreezeBreakTap()
     return
   }
   ctx.isDragging = true
@@ -4183,6 +4283,14 @@ function destroyPixi() {
   ctx.shooterBlackHoleProjGfx = null
   if (starFasterAuraGfx && !starFasterAuraGfx.destroyed) ctx.gameLayer?.removeChild(starFasterAuraGfx)
   starFasterAuraGfx = null
+  playerFrostStacks = 0
+  playerFreezeTimer = 0
+  playerFreezeTapCount = 0
+  freezeBreakPulse = 0
+  if (freezeOverlayGfx && !freezeOverlayGfx.destroyed) ctx.uiLayer?.removeChild(freezeOverlayGfx)
+  freezeOverlayGfx = null
+  if (freezeScreenGfx && !freezeScreenGfx.destroyed) ctx.uiLayer?.removeChild(freezeScreenGfx)
+  freezeScreenGfx = null
 }
 
 onMounted(async () => { await initPixi(); game.startGame() })
@@ -4227,6 +4335,12 @@ watch(() => game.isPlaying, (val, old) => {
     if (ctx.shieldGfx) ctx.shieldGfx.visible = false
     if (ctx.sfGfx) ctx.sfGfx.visible = false
     if (starFasterAuraGfx) { starFasterAuraGfx.visible = false; starFasterAuraGfx.clear() }
+    playerFrostStacks = 0
+    playerFreezeTimer = 0
+    playerFreezeTapCount = 0
+    freezeBreakPulse = 0
+    if (freezeOverlayGfx) { freezeOverlayGfx.visible = false; freezeOverlayGfx.clear() }
+    if (freezeScreenGfx) { freezeScreenGfx.visible = false; freezeScreenGfx.clear() }
     ctx.starFasterSkillTimer = 0
     ctx.starFasterEnemySlowFactor = 1
     ctx.starFasterFireRateBoost = 1

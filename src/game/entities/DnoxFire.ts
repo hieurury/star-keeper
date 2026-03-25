@@ -7,6 +7,11 @@ import { redrawHpBar } from '../utils'
 
 type GameStore = ReturnType<typeof useGameStore>
 
+const DNOX_FIRE_WARNING_FRAMES = 45 // 0.75s @ 60fps
+const DNOX_FIRE_BEAM_FRAMES = 40
+const DNOX_FIRE_COOL_DELAY = 60
+const DNOX_FIRE_COOL_PER_FRAME = 0.006
+
 // ─── Colour palette ───────────────────────────────────────────────────────────
 // Heat-state 0 = red (đỏ), 1 = orange (cam), 2 = yellow (vàng), 3 = blue (lam)
 export type DnoxFireHeatState = 0 | 1 | 2 | 3
@@ -66,13 +71,12 @@ export function spawnDnoxFire(ctx: GameContext, game: GameStore, overrideX?: num
   const fireballGfx = new Graphics()   // hoả cầu / hiệu ứng phóng (detached)
   const container = new Container()
   container.addChild(body, hpBarBg, hpBar)
-  // Drop zone: phần dưới + giữa màn hình
   container.x = overrideX ?? (GAME_W * 0.12 + Math.random() * GAME_W * 0.76)
-  container.y = -40
+  container.y = overrideY ?? -40
   ctx.gameLayer.addChild(container)
   ctx.gameLayer.addChild(fireballGfx)
 
-  const enterTargetY = overrideY ?? (GAME_H * 0.38 + Math.random() * GAME_H * 0.32)
+  const enterTargetY = GAME_H * 0.32 + Math.random() * GAME_H * 0.18
 
   const e: Enemy = {
     container, body, hpBarBg, hpBar,
@@ -82,16 +86,17 @@ export function spawnDnoxFire(ctx: GameContext, game: GameStore, overrideX?: num
     hp: maxHp,
     maxHp,
     barW,
+    cnoxBaseSize: size,
     pioneerPhase: 'enter',
     enterTargetX: container.x,
     enterTargetY,
     formTargetX: container.x,
     formTargetY: enterTargetY,
-    // heat state storage via cnoxLaserGfx slot for graphics, heat via cnoxLaserTimer
     cnoxLaserGfx: fireballGfx,       // hoả cầu graphics (detached)
-    cnoxLaserTimer: 0,                // heat (0–1) * 1000 stored × 1000 scale
-    cnoxLaserState: 'idle',           // 'idle' | 'firing' (hoả cầu đang bay)
-    cnoxLaserAngle: 0,                // heat value 0→1
+    cnoxLaserTimer: 0,
+    cnoxLaserState: 'idle',
+    cnoxLaserAngle: 0,
+    dnoxFireCoolTimer: 0,
   }
   ctx.enemies.push(e)
   game.stageEnemiesTotal++
@@ -101,81 +106,103 @@ export function spawnDnoxFire(ctx: GameContext, game: GameStore, overrideX?: num
  *  Returns true if the fireball fired (causes the fireball to fly). */
 export function updateDnoxFireHeat(e: Enemy, damageDealt: number, ctx: GameContext, game: GameStore): void {
   if (e.kind !== 'dnox_fire') return
-  if (e.cnoxLaserState === 'firing') return  // already firing
+  if (e.cnoxLaserState === 'firing' || e.cnoxLaserState === 'warning') return
 
-  // Accumulate heat – 1 point of damage adds heat proportional to maxHp
-  const heatGain = damageDealt / (e.maxHp * 0.4)   // ~40 dmg to full cycle
+  // Rage gain scales with incoming damage; large burst hits fill noticeably faster.
+  const damageRatio = damageDealt / Math.max(1, e.maxHp)
+  const burstBoost = 1 + Math.min(1.2, damageRatio * 3.2)
+  const heatGain = damageRatio * 0.95 * burstBoost
   const prevHeat = e.cnoxLaserAngle ?? 0
   const newHeat = Math.min(1, prevHeat + heatGain)
   e.cnoxLaserAngle = newHeat
+  e.dnoxFireCoolTimer = 0
 
   // Redraw body colour
-  drawDnoxFire(e.body, 13 + (e.cnoxBaseSize ?? 0), newHeat)
+  drawDnoxFire(e.body, e.cnoxBaseSize ?? 13, newHeat)
 
   if (prevHeat < 1 && newHeat >= 1) {
-    // PHÓNG HỎA CẦU
-    triggerDnoxFireball(e, ctx, game)
+    e.cnoxLaserState = 'warning'
+    e.cnoxLaserTimer = DNOX_FIRE_WARNING_FRAMES
   }
 }
 
-function triggerDnoxFireball(e: Enemy, ctx: GameContext, game: GameStore): void {
-  // Accumulated damage = 20% of damage received while red→lam (approx: 20% maxHp)
-  const fireballDmg = Math.round(e.maxHp * 0.20)
+function beginDnoxFireball(e: Enemy, ctx: GameContext, game: GameStore): void {
+  const dmgMult = e.cnoxPowerMult ?? 1
+  const fireballDmg = Math.round(e.maxHp * 0.20 * dmgMult)
   const ex = e.container.x
   const ey = e.container.y
   e.cnoxLaserState = 'firing'
+  e.cnoxLaserTimer = DNOX_FIRE_BEAM_FRAMES
 
-  // Hoả cầu bay thẳng xuống dọc trục Y, chiều rộng = kích cỡ quái, chiều dài = hết map
-  const gfx = e.cnoxLaserGfx
-  if (!gfx) return
-
-  // Width of fireball = size of the enemy (~13-16px)
-  const fireW = 28
-  let frame = 0
-  const totalFrames = 40
-
-  // immediate: check player collision at position (they can't move out in 0 frames)
+  const fireW = 30
   const playerHit = ctx.playerShip
-    ? Math.abs(ctx.playerShip.x - ex) < fireW / 2 + 10
+    ? Math.abs(ctx.playerShip.x - ex) <= fireW * 0.5 + 11
     : false
-
-  const tick = () => {
-    frame++
-    if (!gfx || gfx.destroyed) return
-    const alpha = Math.max(0, 1 - frame / totalFrames)
-    gfx.clear()
-    // Draw fireball beam from enemy to bottom edge
-    gfx.rect(ex - fireW / 2, ey, fireW, GAME_H + 80 - ey).fill({ color: 0xff5500, alpha: alpha * 0.45 })
-    gfx.rect(ex - fireW / 4, ey, fireW / 2, GAME_H + 80 - ey).fill({ color: 0xffcc00, alpha: alpha * 0.70 })
-    // Fireball core at enemy
-    gfx.circle(ex, ey, 18 - frame * 0.4).fill({ color: 0xff8800, alpha: alpha })
-
-    if (frame >= totalFrames) {
-      if (!gfx.destroyed) gfx.clear()
-      ctx.app?.ticker.remove(tick)
-
-      // Reset heat after firing
-      e.cnoxLaserAngle = 0
-      e.cnoxLaserState = 'idle'
-      drawDnoxFire(e.body, 13 + (e.cnoxBaseSize ?? 0), 0)
-
-      // Hồi 50% HP nếu trúng người chơi
-      if (playerHit) {
-        const heal = Math.round(e.maxHp * 0.50)
-        e.hp = Math.min(e.maxHp, e.hp + heal)
-        redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
-      }
-    }
-  }
-
-  // Deal damage to player immediately if in beam path
   if (playerHit && ctx.playerShip) {
     if (!game.absorbShieldHit()) {
       game.takeDamage(fireballDmg)
     }
+    const heal = Math.round(e.maxHp * 0.20)
+    e.hp = Math.min(e.maxHp, e.hp + heal)
+    redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+  }
+}
+
+export function updateDnoxFireAttack(e: Enemy, ctx: GameContext, game: GameStore, dt: number): void {
+  if (e.kind !== 'dnox_fire') return
+  const gfx = e.cnoxLaserGfx
+  if (!gfx || gfx.destroyed) return
+  const haste = e.dnoxSoilHasteMult ?? 1
+
+  if (e.cnoxLaserState === 'warning') {
+    e.cnoxLaserTimer = (e.cnoxLaserTimer ?? DNOX_FIRE_WARNING_FRAMES) - dt * haste
+    const pulse = 0.35 + Math.abs(Math.sin(Date.now() * 0.02)) * 0.65
+    const ex = e.container.x
+    const ey = e.container.y
+    const fireW = 30
+    gfx.clear()
+    gfx.rect(ex - fireW * 0.5, ey, fireW, GAME_H + 80 - ey).fill({ color: 0xff8833, alpha: 0.16 * pulse })
+    gfx.rect(ex - fireW * 0.25, ey, fireW * 0.5, GAME_H + 80 - ey).fill({ color: 0xffee88, alpha: 0.22 * pulse })
+    gfx.circle(ex, ey, 15 + pulse * 4).stroke({ color: 0xffdd88, width: 2.4, alpha: 0.85 })
+    if ((e.cnoxLaserTimer ?? 0) <= 0) {
+      beginDnoxFireball(e, ctx, game)
+    }
+    return
   }
 
-  ctx.app?.ticker.add(tick)
+  if (e.cnoxLaserState === 'firing') {
+    e.cnoxLaserTimer = (e.cnoxLaserTimer ?? DNOX_FIRE_BEAM_FRAMES) - dt * haste
+    const ex = e.container.x
+    const ey = e.container.y
+    const fireW = 30
+    const t = Math.max(0, (e.cnoxLaserTimer ?? 0) / DNOX_FIRE_BEAM_FRAMES)
+    const alpha = 0.2 + t * 0.8
+    gfx.clear()
+    gfx.rect(ex - fireW * 0.5, ey, fireW, GAME_H + 80 - ey).fill({ color: 0xff5500, alpha: alpha * 0.52 })
+    gfx.rect(ex - fireW * 0.24, ey, fireW * 0.48, GAME_H + 80 - ey).fill({ color: 0xffcc00, alpha: alpha * 0.76 })
+    gfx.circle(ex, ey, 12 + t * 8).fill({ color: 0xffaa44, alpha: alpha * 0.92 })
+
+    if ((e.cnoxLaserTimer ?? 0) <= 0) {
+      gfx.clear()
+      e.cnoxLaserAngle = 0
+      e.cnoxLaserState = 'idle'
+      drawDnoxFire(e.body, e.cnoxBaseSize ?? 13, 0)
+    }
+    return
+  }
+
+  if (e.cnoxLaserState === 'idle') {
+    e.dnoxFireCoolTimer = (e.dnoxFireCoolTimer ?? 0) + dt
+    if ((e.dnoxFireCoolTimer ?? 0) > DNOX_FIRE_COOL_DELAY) {
+      const nextHeat = Math.max(0, (e.cnoxLaserAngle ?? 0) - DNOX_FIRE_COOL_PER_FRAME * dt)
+      if (nextHeat !== (e.cnoxLaserAngle ?? 0)) {
+        e.cnoxLaserAngle = nextHeat
+        drawDnoxFire(e.body, e.cnoxBaseSize ?? 13, nextHeat)
+      }
+    }
+  }
+
+  gfx.clear()
 }
 
 export function cleanupDnoxFire(e: Enemy, ctx: GameContext): void {
@@ -188,12 +215,23 @@ export function cleanupDnoxFire(e: Enemy, ctx: GameContext): void {
 }
 
 export function spawnDnoxFireSquad(ctx: GameContext, game: GameStore): void {
-  const count = 4 + (Math.random() < 0.5 ? 1 : 0) // 4 to 5
-  const spacing = GAME_W / (count + 1)
-  const enterY = GAME_H * 0.38 + Math.random() * GAME_H * 0.2
+  const count = 5 + Math.floor(Math.random() * 3) // 5 to 7
+  const spacing = 44
+  const lineY = GAME_H * 0.30 + Math.random() * GAME_H * 0.14
+  const lineStartX = GAME_W * 0.5 - ((count - 1) * spacing) * 0.5
 
   for (let i = 0; i < count; i++) {
-    const x = spacing * (i + 1) + (Math.random() * 20 - 10)
-    spawnDnoxFire(ctx, game, x, enterY + (Math.random() * 30 - 15))
+    const formX = lineStartX + i * spacing + (Math.random() * 4 - 2)
+    const formY = lineY + (Math.random() * 8 - 4)
+    const side = i % 2 === 0 ? 'left' : 'right'
+    const startX = side === 'left' ? -44 - Math.random() * 12 : GAME_W + 44 + Math.random() * 12
+    spawnDnoxFire(ctx, game, startX, formY)
+    const spawned = ctx.enemies[ctx.enemies.length - 1]
+    if (!spawned || spawned.kind !== 'dnox_fire') continue
+    spawned.enterTargetX = formX
+    spawned.enterTargetY = formY
+    spawned.formTargetX = formX
+    spawned.formTargetY = formY
+    spawned.vx = side === 'left' ? 2.8 : -2.8
   }
 }

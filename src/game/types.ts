@@ -111,6 +111,8 @@ export interface Enemy {
   // cnox_greedy
   cnoxStolenExp?: number
   cnoxPowerMult?: number
+  dnoxSoilHasteMult?: number
+  dnoxFireCoolTimer?: number
   cnoxBaseMaxHp?: number
   cnoxBaseBarW?: number
   cnoxBaseSize?: number
