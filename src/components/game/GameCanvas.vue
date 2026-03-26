@@ -26,7 +26,7 @@ import { drawHealBeam, spawnThuatSi } from '../../game/entities/ThuatSi'
 import { drawCnoxGreedy } from '../../game/entities/CnoxGreedy'
 import { drawDnoxFire, updateDnoxFireHeat, updateDnoxFireAttack } from '../../game/entities/DnoxFire'
 import { drawDnoxIce, FREEZE_DURATION, FREEZE_TAP_BREAK } from '../../game/entities/DnoxIce'
-import { drawDnoxSoil, drawDnoxSoilAttached, getDnoxSoilCoreKind, applyDnoxSoilBonus } from '../../game/entities/DnoxSoil'
+import { drawDnoxSoilAttached, getDnoxSoilCoreKind, applyDnoxSoilBonus } from '../../game/entities/DnoxSoil'
 import type { AllyDrone, Enemy, SunWeaponStar } from '../../game/types'
 
 const canvasWrapper = ref<HTMLDivElement>()

@@ -104,7 +104,7 @@ export function spawnDnoxFire(ctx: GameContext, game: GameStore, overrideX?: num
 
 /** Called every frame from GameCanvas after bullet/damage is applied.
  *  Returns true if the fireball fired (causes the fireball to fly). */
-export function updateDnoxFireHeat(e: Enemy, damageDealt: number, ctx: GameContext, game: GameStore): void {
+export function updateDnoxFireHeat(e: Enemy, damageDealt: number, _ctx: GameContext, _game: GameStore): void {
   if (e.kind !== 'dnox_fire') return
   if (e.cnoxLaserState === 'firing' || e.cnoxLaserState === 'warning') return
 
@@ -130,7 +130,6 @@ function beginDnoxFireball(e: Enemy, ctx: GameContext, game: GameStore): void {
   const dmgMult = e.cnoxPowerMult ?? 1
   const fireballDmg = Math.round(e.maxHp * 0.20 * dmgMult)
   const ex = e.container.x
-  const ey = e.container.y
   e.cnoxLaserState = 'firing'
   e.cnoxLaserTimer = DNOX_FIRE_BEAM_FRAMES
 
