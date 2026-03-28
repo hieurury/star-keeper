@@ -45,6 +45,7 @@ export interface GameContext {
   manaCoreOverloadPending: boolean
   artifactOrbitAngle: number
   artifactGfx: Graphics | null
+  artifactGfxList: Graphics[]
 
   // Soul missile queue (Star Holder)
   soulMissileQueue: number
@@ -91,6 +92,10 @@ export interface GameContext {
   shooterBlackHoleProjGfx: Graphics | null
   shooterBlackHoleProjTX: number
   shooterBlackHoleProjTY: number
+  tracerLockGfx: Graphics | null
+  tracerFreezeTimer: number
+  tracerSlashDone: boolean
+  tracerSlashWaveGfx: Graphics | null
 
   // Star Faster
   starFasterSkillTimer: number
@@ -138,6 +143,7 @@ export function createGameContext(): GameContext {
     manaCoreOverloadPending: false,
     artifactOrbitAngle: 0,
     artifactGfx: null,
+    artifactGfxList: [],
     soulMissileQueue: 0,
     soulMissileFireTimer: 0,
     thuHoReflectTimer: 300,
@@ -171,6 +177,10 @@ export function createGameContext(): GameContext {
     shooterBlackHoleProjGfx: null,
     shooterBlackHoleProjTX: 0,
     shooterBlackHoleProjTY: 0,
+    tracerLockGfx: null,
+    tracerFreezeTimer: 0,
+    tracerSlashDone: false,
+    tracerSlashWaveGfx: null,
     starFasterSkillTimer: 0,
     starFasterEnemySlowFactor: 1,
     starFasterFireRateBoost: 1,

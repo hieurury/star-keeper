@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useGameStore, ALL_CARD_DEFS, ALL_ARTIFACT_DEFS, SHIP_DEFS } from '../../stores/gameStore'
 import type { CardDef, CardType } from '../../stores/gameStore'
-import { PhCrosshair, PhHouse, PhLightning, PhPlay, PhQuestion, PhSpiral } from '@phosphor-icons/vue'
+import { PhCrosshair, PhHouse, PhLightning, PhPlay, PhQuestion, PhSpiral, PhSword } from '@phosphor-icons/vue'
 import ArtifactIcon from '../ui/ArtifactIcon.vue'
 import CardIcon from '../ui/CardIcon.vue'
 
@@ -285,6 +285,7 @@ const skillLabelHtml = computed(() => {
           'hud__skill-btn--orange': game.selectedShip === 'star_holder',
           'hud__skill-btn--purple': game.selectedShip === 'star_shooter',
           'hud__skill-btn--cyan': game.selectedShip === 'star_faster',
+          'hud__skill-btn--red': game.selectedShip === 'thien_ha_truy',
         }"
       >
         <!-- Star Holder: fragment counter -->
@@ -296,6 +297,7 @@ const skillLabelHtml = computed(() => {
           <span v-if="game.isSkillReady" class="hud__skill-icon">
             <PhSpiral v-if="game.selectedShip === 'star_shooter'" weight="fill" :size="24" />
             <PhCrosshair v-else-if="game.selectedShip === 'star_faster'" weight="fill" :size="24" />
+            <PhSword v-else-if="game.selectedShip === 'thien_ha_truy'" weight="fill" :size="24" />
             <PhLightning v-else weight="fill" :size="24" />
           </span>
           <span v-else class="hud__skill-cd">{{ Math.ceil(game.skillCooldown) }}</span>
@@ -848,6 +850,13 @@ const skillLabelHtml = computed(() => {
 .hud__skill-btn--cyan.hud__skill-btn--ready {
   border-color: #33d4ff;
   box-shadow: 0 0 12px rgba(60, 210, 255, 0.7), inset 0 0 8px rgba(50, 170, 220, 0.2);
+}
+.hud__skill-btn--red {
+  border-color: #7c2230;
+}
+.hud__skill-btn--red.hud__skill-btn--ready {
+  border-color: #ff667a;
+  box-shadow: 0 0 12px rgba(255, 92, 92, 0.7), inset 0 0 8px rgba(255, 120, 70, 0.2);
 }
 .hud__skill-frags {
   font-size: 16px;

@@ -108,6 +108,14 @@ export interface CardStats {
   allyDroneFireRateMult: number
   allyDroneUltimate: boolean
   fasterDeepWound: boolean
+  // Kho Vũ Khí - Thiên Hà Truy
+  tracerSwordBonus: number
+  tracerSwordSpdMult: number
+  tracerSwordDmgMult: number
+  tracerSwordPierce: boolean
+  tracerSwordUltimateMode: 'none' | 'tu_kiem' | 'van_kiem'
+  tracerSwordSmallMax: number
+  tracerSwordExecutePct: number
 }
 
 export const ALL_CARD_DEFS: CardDef[] = [
@@ -188,6 +196,15 @@ export const ALL_CARD_DEFS: CardDef[] = [
       { desc: 'Tăng 20% tốc độ bắn, tăng thêm 20% sát thương đạn.' },
       { desc: 'Tăng thêm 1 tia đạn và tăng 20% tốc độ bắn.' },
       { desc: 'Tăng thêm 1 tia đạn và tăng 30% sát thương đạn.' },
+    ],
+  },
+  { id: 'weapon_cache_truy', name: 'Kho Vũ Khí - Thiên Hà Truy', type: 'attack', icon: 'PhSword', maxLevel: 5, shipId: 'thien_ha_truy',
+    levels: [
+      { desc: 'Kiếm hồn bay nhanh hơn 50%.' },
+      { desc: 'Sát thương kiếm hồn +30%.' },
+      { desc: 'Thêm 1 kiếm hồn (tổng +1).' },
+      { desc: 'Sát thương kiếm hồn +50%.' },
+      { desc: 'Thêm 1 kiếm hồn nữa và tốc độ bay tăng thêm 20%.' },
     ],
   },
   // ── Hỗ trợ ──────────────────────────────────────────────────────────────────
@@ -278,6 +295,20 @@ export const ALL_CARD_DEFS: CardDef[] = [
     requiresAttackId: 'weapon_cache_faster',
     levels: [
       { desc: 'Kẻ địch càng dính nhiều đạn của Star Faster càng nhận thêm sát thương, tối đa +100% với quái thường và +50% với boss.' },
+    ],
+  },
+  {
+    id: 'weapon_cache_truy_tu_kiem', name: 'Tứ Kiếm Trận', type: 'ultimate', icon: 'PhDiamondsFour', maxLevel: 1, shipId: 'thien_ha_truy',
+    requiresAttackId: 'weapon_cache_truy',
+    levels: [
+      { desc: 'Số kiếm hồn cố định thành 4. Tốc độ và sát thương +30%. Mục tiêu dưới 10% HP sẽ bị xử trảm ngay.' },
+    ],
+  },
+  {
+    id: 'weapon_cache_truy_van_kiem', name: 'Vạn Kiếm Tề Tụ', type: 'ultimate', icon: 'PhSparkle', maxLevel: 1, shipId: 'thien_ha_truy',
+    requiresAttackId: 'weapon_cache_truy',
+    levels: [
+      { desc: 'Chỉ còn 1 kiếm hồn chính, nhưng mỗi lần lướt qua mục tiêu sẽ sinh kiếm nhỏ gây 50% sát thương, tối đa 10 kiếm nhỏ.' },
     ],
   },
   {
@@ -410,15 +441,17 @@ export const ALL_ARTIFACT_DEFS: ArtifactDef[] = [
   { id: 'mana_core',    name: 'Lõi Mana',      icon: '💠', cost: 3500, desc: '+1 đạn (vượt giới hạn); mỗi 10 tiêu diệt → nổ diện rộng' },
 ]
 
-export type ShipId = 'star_keeper' | 'star_holder' | 'star_shooter' | 'star_faster'
+export type ShipId = 'star_keeper' | 'star_holder' | 'star_shooter' | 'star_faster' | 'thien_ha_truy'
 export type ShipUpgradeKey = 'hp' | 'fireRate' | 'damage'
 export interface ShipUpgradeLevels { hp: number, fireRate: number, damage: number }
+export type ShipUnlockCurrency = 'coins' | 'ruby'
 
 export interface ShipDefinition {
   id: ShipId
   name: string
   description: string
   unlockCost: number
+  unlockCurrency?: ShipUnlockCurrency
   durabilityMax: number
   artifactSlots: number
   bulletCount: { base: number, max: number }
@@ -513,6 +546,26 @@ export const SHIP_DEFS: Record<ShipId, ShipDefinition> = {
       max: { hp: 310, damage: 65, fireRate: 2.0, speed: 2.0 },
     },
   },
+  thien_ha_truy: {
+    id: 'thien_ha_truy',
+    name: 'Thiên Hà Truy',
+    description: 'Phi kiếm ngọc bích truy sát mục tiêu bằng kiếm hồn. Kỹ năng Thiên Hà Trảm ngưng động chiến trường rồi chém quét toàn bản đồ.',
+    unlockCost: 30,
+    unlockCurrency: 'ruby',
+    durabilityMax: 105,
+    artifactSlots: 2,
+    bulletCount: { base: 1, max: 3 },
+    skill: {
+      name: 'THIÊN HÀ TRẢM',
+      cooldownSec: 45,
+      description: 'Ngưng động thời gian trong 2 giây, gọi toàn bộ kiếm hồn quay về, sau đó vung trảm sóng xung kích gây sát thương cực lớn lên mọi mục tiêu và hủy toàn bộ đạn.',
+      hudLabelHtml: 'THIÊN<br/>TRẢM',
+    },
+    stats: {
+      base: { hp: 165, damage: 35, fireRate: 0.72, speed: 1.25 },
+      max: { hp: 360, damage: 210, fireRate: 1.45, speed: 2.0 },
+    },
+  },
 }
 
 export const SHIP_ARTIFACT_SLOTS: Record<string, number> = Object.fromEntries(
@@ -551,6 +604,10 @@ const SHIP_UPGRADE_STEP_FACTOR: Record<ShipUpgradeKey, number> = {
 export const SHIP_UNLOCK_COST: Record<ShipId, number> = Object.fromEntries(
   Object.entries(SHIP_DEFS).map(([id, def]) => [id, def.unlockCost]),
 ) as Record<ShipId, number>
+
+export const SHIP_UNLOCK_CURRENCY: Record<ShipId, ShipUnlockCurrency> = Object.fromEntries(
+  Object.entries(SHIP_DEFS).map(([id, def]) => [id, def.unlockCurrency ?? 'coins']),
+) as Record<ShipId, ShipUnlockCurrency>
 
 function getShipUpgradeCostMultiplierByUnlockCost(shipId: ShipId): number {
   const unlockCost = SHIP_UNLOCK_COST[shipId] ?? 0
@@ -800,6 +857,7 @@ export const useGameStore = defineStore('game', () => {
     star_holder: { hp: 0, fireRate: 0, damage: 0 },
     star_shooter: { hp: 0, fireRate: 0, damage: 0 },
     star_faster: { hp: 0, fireRate: 0, damage: 0 },
+    thien_ha_truy: { hp: 0, fireRate: 0, damage: 0 },
   })
 
   // Thành tựu
@@ -913,6 +971,13 @@ export const useGameStore = defineStore('game', () => {
       allyDroneFireRateMult: 1,
       allyDroneUltimate: false,
       fasterDeepWound: false,
+      tracerSwordBonus: 0,
+      tracerSwordSpdMult: 1,
+      tracerSwordDmgMult: 1,
+      tracerSwordPierce: false,
+      tracerSwordUltimateMode: 'none',
+      tracerSwordSmallMax: 0,
+      tracerSwordExecutePct: 0,
     }
     const c = activeCards.value
 
@@ -1050,6 +1115,24 @@ export const useGameStore = defineStore('game', () => {
     if (sc >= 5) { stats.shooterMissileBonus = 3; stats.shooterMissileDmgMult = (sc >= 3 ? 1.4 : 1.0) * 1.3 }
     if ((c['weapon_cache_shooter_ult'] ?? 0) >= 1) stats.shooterMissileKillCdReduce = 1
 
+    // weapon_cache_truy (Thiên Hà Truy)
+    const tc = c['weapon_cache_truy'] ?? 0
+    if (tc >= 1) stats.tracerSwordSpdMult *= 1.5
+    if (tc >= 2) stats.tracerSwordDmgMult *= 1.3
+    if (tc >= 3) stats.tracerSwordBonus = 1
+    if (tc >= 4) stats.tracerSwordDmgMult *= 1.5
+    if (tc >= 5) { stats.tracerSwordBonus = 2; stats.tracerSwordSpdMult *= 1.2 }
+
+    if ((c['weapon_cache_truy_tu_kiem'] ?? 0) >= 1) {
+      stats.tracerSwordUltimateMode = 'tu_kiem'
+      stats.tracerSwordSpdMult *= 1.3
+      stats.tracerSwordDmgMult *= 1.3
+      stats.tracerSwordExecutePct = 0.1
+    } else if ((c['weapon_cache_truy_van_kiem'] ?? 0) >= 1) {
+      stats.tracerSwordUltimateMode = 'van_kiem'
+      stats.tracerSwordSmallMax = 10
+    }
+
     // bullet_rain_ult: cluster bomb halved interval + always double
     if ((c['bullet_rain_ult'] ?? 0) >= 1) {
       stats.cbTurboBoost = true
@@ -1076,7 +1159,7 @@ export const useGameStore = defineStore('game', () => {
   // ─── Artifact & Durability state ─────────────────────────────────────────────
   const ownedArtifacts = ref<string[]>([])
   const equippedArtifacts = ref<Record<string, string[]>>({})  // shipId → artifactId[]
-  const shipDurabilities = ref<Record<string, number>>({ star_keeper: 100, star_holder: 90, star_shooter: 95, star_faster: 100 })
+  const shipDurabilities = ref<Record<string, number>>({ star_keeper: 100, star_holder: 90, star_shooter: 95, star_faster: 100, thien_ha_truy: 105 })
   // Runtime artifact progress (0–1), written by GameCanvas each frame for HUD
   const neutronVacuumPct = ref(0)
   const manaCorePct = ref(0)
@@ -1224,10 +1307,28 @@ export const useGameStore = defineStore('game', () => {
     const supFilled = getSupportSlotsFilled()
 
     // Ultimates eligible: requirements met (attack max if provided, supports level>=1)
+    const ownedUltimateIds = new Set(
+      Object.keys(owned).filter(id => {
+        const d = ALL_CARD_DEFS.find(c => c.id === id)
+        return !!d && d.type === 'ultimate' && (owned[id] ?? 0) > 0
+      }),
+    )
+
+    const hasSiblingUltimateOwned = (def: CardDef): boolean => {
+      if (def.type !== 'ultimate') return false
+      return ALL_CARD_DEFS.some(other => {
+        if (other.id === def.id || other.type !== 'ultimate') return false
+        if ((other.shipId ?? '') !== (def.shipId ?? '')) return false
+        if ((other.requiresAttackId ?? '') !== (def.requiresAttackId ?? '')) return false
+        return ownedUltimateIds.has(other.id)
+      })
+    }
+
     const eligibleUltimates = ALL_CARD_DEFS.filter(def => {
       if (def.type !== 'ultimate') return false
       if (def.shipId && def.shipId !== selectedShip.value) return false
       if ((owned[def.id] ?? 0) >= def.maxLevel) return false
+      if (hasSiblingUltimateOwned(def)) return false
       const hasAtkReq = !!def.requiresAttackId
       const hasSupReq = !!def.requiresSupportId
       const hasSupReq2 = !!def.requiresSupportId2
@@ -1453,10 +1554,17 @@ export const useGameStore = defineStore('game', () => {
   }
 
   // Ship purchase + selection
-  function buyShip(id: string, cost: number): boolean {
-    if (playerCoins.value < cost) return false
+  function buyShip(id: ShipId): boolean {
+    const cost = SHIP_UNLOCK_COST[id] ?? 0
+    const currency = SHIP_UNLOCK_CURRENCY[id] ?? 'coins'
     if (ownedShips.value.includes(id)) return false
-    playerCoins.value -= cost
+    if (currency === 'ruby') {
+      if (playerRuby.value < cost) return false
+      playerRuby.value -= cost
+    } else {
+      if (playerCoins.value < cost) return false
+      playerCoins.value -= cost
+    }
     ownedShips.value = [...ownedShips.value, id]
     saveProgress()
     return true
@@ -1524,7 +1632,8 @@ export const useGameStore = defineStore('game', () => {
       unlockAchievement('skill_use')
       skillActivationPending.value = true
       audioManager.playSkill()
-      const baseCd = selectedShip.value === 'star_shooter' ? 35 : 30
+      const shipDef = SHIP_DEFS[selectedShip.value as ShipId]
+      const baseCd = shipDef?.skill.cooldownSec ?? 30
       skillCooldown.value = baseCd * (1 - cardStats.value.cdReductionPct)
     }
   }
@@ -1572,8 +1681,9 @@ export const useGameStore = defineStore('game', () => {
     const maxDmg = maxShipStats.damage
     const baseSpd = SHIP_BASE_STATS[shipId].speed
     const maxSpd = maxShipStats.speed
-    const shipBaseBulletCount = shipId === 'star_faster' ? 2 : 1
-    const shipMaxBulletCount = shipId === 'star_faster' ? 5 : (shipId === 'star_shooter' ? 4 : 3)
+    const shipBulletDef = SHIP_BULLET_COUNT[shipId] ?? { base: 1, max: 3 }
+    const shipBaseBulletCount = shipBulletDef.base
+    const shipMaxBulletCount = shipBulletDef.max
     const shipBaseBulletSpeed = isHolder ? 1.2 : (shipId === 'star_faster' ? 1.45 : 1)
     upgrades.value = {
       bulletSpeed: shipBaseBulletSpeed,
@@ -1835,7 +1945,7 @@ export const useGameStore = defineStore('game', () => {
     accountLevel.value = Math.max(1, Math.floor(accountLevel.value))
     accountExp.value = Math.max(0, Math.floor(accountExp.value))
 
-    const validShipIds = new Set(['star_keeper', 'star_holder', 'star_shooter', 'star_faster'])
+    const validShipIds = new Set(Object.keys(SHIP_DEFS))
     const safeOwnedShips = ownedShips.value.filter(id => validShipIds.has(id))
     ownedShips.value = safeOwnedShips.length > 0 ? [...new Set(safeOwnedShips)] : ['star_keeper']
     if (!ownedShips.value.includes(selectedShip.value)) selectedShip.value = ownedShips.value[0] ?? 'star_keeper'
@@ -1947,6 +2057,11 @@ export const useGameStore = defineStore('game', () => {
         hp: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_faster?.hp ?? 0))),
         fireRate: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_faster?.fireRate ?? 0))),
         damage: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.star_faster?.damage ?? 0))),
+      },
+      thien_ha_truy: {
+        hp: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.thien_ha_truy?.hp ?? 0))),
+        fireRate: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.thien_ha_truy?.fireRate ?? 0))),
+        damage: Math.max(0, Math.min(SHIP_UPGRADE_MAX_LEVEL, Math.floor(rawShipUpgrades.thien_ha_truy?.damage ?? 0))),
       },
     }
     unlockedAchievements.value    = (data.unlockedAchievements as string[])  ?? []

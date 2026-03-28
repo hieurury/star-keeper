@@ -51,13 +51,21 @@ export function initArtifactGfx(ctx: GameContext, game: GameStore): void {
     if (!ctx.artifactGfx.destroyed) ctx.gameLayer.removeChild(ctx.artifactGfx)
     ctx.artifactGfx = null
   }
+  for (const g of ctx.artifactGfxList) {
+    if (!g.destroyed) ctx.gameLayer.removeChild(g)
+  }
+  ctx.artifactGfxList = []
+
   const equipped = game.equippedArtifacts[game.selectedShip] ?? []
   if (equipped.length === 0 || !ctx.gameLayer) return
-  const id = equipped[0]!
-  const g = new Graphics()
-  drawArtifactGfx(g, id)
-  ctx.gameLayer.addChild(g)
-  ctx.artifactGfx = g
+
+  for (const id of equipped) {
+    const g = new Graphics()
+    drawArtifactGfx(g, id)
+    ctx.gameLayer.addChild(g)
+    ctx.artifactGfxList.push(g)
+  }
+  ctx.artifactGfx = ctx.artifactGfxList[0] ?? null
 }
 
 export function activateNeutronVacuum(ctx: GameContext, game: GameStore): void {

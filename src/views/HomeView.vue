@@ -8,6 +8,7 @@ import {
   SHIP_DEFS,
   SHIP_BULLET_COUNT,
   SHIP_UNLOCK_COST,
+  SHIP_UNLOCK_CURRENCY,
   SHIP_ARTIFACT_SLOTS,
   SHIP_DURABILITY_MAX,
   SHIP_UPGRADE_MAX_LEVEL,
@@ -283,7 +284,7 @@ const usernameInput = ref('')
 const shipNameInput = ref('')
 
 interface ShipStatItem {
-  key: ShipUpgradeKey | 'bulletCount'
+  key: ShipUpgradeKey | 'bulletCount' | 'speed'
   label: string
   display: string
   basePct: number
@@ -322,14 +323,19 @@ function formatShipStatValue(key: ShipUpgradeKey, current: number, max: number):
   return `${Math.round(current)} / ${Math.round(max)}`
 }
 
+function formatSpeedStatValue(current: number, max: number): string {
+  return `${current.toFixed(2)} / ${max.toFixed(2)}`
+}
+
 function buildShipStatItems(shipId: ShipId): ShipStatItem[] {
   const base = game.getShipBaseStats(shipId)
   const max = game.getShipMaxStats(shipId)
   const now = game.getShipEffectiveStats(shipId)
 
-  const rows: Array<{ key: ShipUpgradeKey | 'bulletCount', label: string }> = [
+  const rows: Array<{ key: ShipUpgradeKey | 'bulletCount' | 'speed', label: string }> = [
     { key: 'damage', label: 'SÁT THƯƠNG' },
     { key: 'fireRate', label: 'TỐC ĐỘ BẮN' },
+    { key: 'speed', label: 'TỐC ĐỘ BAY' },
     { key: 'hp', label: 'HP' },
     { key: 'bulletCount', label: 'SỐ TIA ĐẠN' },
   ]
@@ -346,6 +352,22 @@ function buildShipStatItems(shipId: ShipId): ShipStatItem[] {
         bonusPct: 0,
         pct: pct,
         color: '#66ff88',
+      }
+    }
+    if (r.key === 'speed') {
+      const b = base.speed
+      const n = now.speed
+      const m = max.speed
+      const basePct = toPercent(b, m)
+      const nowPct = toPercent(n, m)
+      return {
+        key: 'speed',
+        label: r.label,
+        display: formatSpeedStatValue(n, m),
+        basePct,
+        bonusPct: Math.max(0, nowPct - basePct),
+        pct: nowPct,
+        color: '#66ccff',
       }
     }
     const b = r.key === 'damage' ? base.damage : r.key === 'fireRate' ? base.fireRate : base.hp
@@ -369,6 +391,7 @@ const starKeeperStats = computed(() => buildShipStatItems('star_keeper'))
 const starHolderStats = computed(() => buildShipStatItems('star_holder'))
 const starShooterStats = computed(() => buildShipStatItems('star_shooter'))
 const starFasterStats = computed(() => buildShipStatItems('star_faster'))
+const thienHaTruyStats = computed(() => buildShipStatItems('thien_ha_truy'))
 
 const upgradeShipName = computed(() => getShipDef(upgradeShipId.value).name)
 const upgradeStatItems = computed(() => buildShipStatItems(upgradeShipId.value))
@@ -409,7 +432,27 @@ function canUnequipArtifact(artifactId: string): boolean {
 }
 
 function buyShip(id: ShipId) {
-  game.buyShip(id, SHIP_UNLOCK_COST[id])
+  game.buyShip(id)
+}
+
+function canAffordShip(id: ShipId): boolean {
+  const cost = SHIP_UNLOCK_COST[id]
+  return SHIP_UNLOCK_CURRENCY[id] === 'ruby'
+    ? game.playerRuby >= cost
+    : game.playerCoins >= cost
+}
+
+function getShipUnlockLabel(id: ShipId): string {
+  const cost = formatCoin(getShipDef(id).unlockCost)
+  return SHIP_UNLOCK_CURRENCY[id] === 'ruby'
+    ? `🔒 Cần mở khoá · ${cost} 💎`
+    : `🔒 Cần mở khoá · ${cost} 🪙`
+}
+
+function getShipBuyLabel(id: ShipId): string {
+  const cost = formatCoin(getShipDef(id).unlockCost)
+  const icon = SHIP_UNLOCK_CURRENCY[id] === 'ruby' ? '💎' : '🪙'
+  return `Mua — ${cost} ${icon}`
 }
 function selectShip(id: string) {
   game.selectShip(id)
@@ -635,6 +678,19 @@ function onShipNameKey(e: KeyboardEvent) {
                 <rect x="4.8" y="-12" width="1" height="27" fill="#c0a8ff" opacity="0.5"/>
                 <circle cx="0" cy="16" r="3.8" fill="#00eeff" opacity="0.6"/>
                 <circle cx="0" cy="16" r="2.2" fill="#66ffff"/>
+              </svg>
+            </template>
+            <template v-else-if="game.selectedShip === 'thien_ha_truy'">
+              <svg viewBox="-34 -38 68 74" width="56" height="54">
+                <polygon points="0,-34 8,-10 5,20 0,28 -5,20 -8,-10" fill="#39d3a2"/>
+                <polygon points="0,-34 8,-10 3,-7 0,-20" fill="#7dffd7" opacity="0.75"/>
+                <polygon points="0,-30 5,16 0,24 -5,16" fill="#1f9f7f"/>
+                <polygon points="0,-36 3,-30 -3,-30" fill="#d9fff4"/>
+                <rect x="-10" y="18" width="20" height="4" fill="#0f6f5b"/>
+                <rect x="-5" y="20" width="10" height="5" fill="#155448"/>
+                <rect x="-1" y="-32" width="2" height="58" fill="#d5fff4" opacity="0.55"/>
+                <polygon points="-12,4 -18,18 -14,24 -8,10" fill="#66ffe4" opacity="0.45"/>
+                <polygon points="12,4 18,18 14,24 8,10" fill="#66ffe4" opacity="0.45"/>
               </svg>
             </template>
             <template v-else>
@@ -872,7 +928,7 @@ function onShipNameKey(e: KeyboardEvent) {
                     <div class="ship-card__info">
                       <div class="ship-card__name">{{ getShipDef('star_holder').name.toUpperCase() }}</div>
                       <div class="ship-card__tag" :class="game.ownedShips.includes('star_holder') ? 'tag--owned' : 'tag--locked'">
-                        {{ game.ownedShips.includes('star_holder') ? '✅ Đã sở hữu' : `🔒 Cần mở khoá · ${formatCoin(getShipDef('star_holder').unlockCost)} 🪙` }}
+                        {{ game.ownedShips.includes('star_holder') ? '✅ Đã sở hữu' : getShipUnlockLabel('star_holder') }}
                       </div>
                       <div class="ship-card__desc">{{ getShipDef('star_holder').description }}</div>
                     </div>
@@ -894,8 +950,8 @@ function onShipNameKey(e: KeyboardEvent) {
                   </div>
                   <div class="ship-card__actions">
                     <template v-if="!game.ownedShips.includes('star_holder')">
-                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < getShipDef('star_holder').unlockCost" @click="buyShip('star_holder')">
-                        {{ game.playerCoins >= getShipDef('star_holder').unlockCost ? `Mua — ${formatCoin(getShipDef('star_holder').unlockCost)} 🪙` : 'Không đủ vàng' }}
+                      <button class="ship-btn ship-btn--buy" :disabled="!canAffordShip('star_holder')" @click="buyShip('star_holder')">
+                        {{ canAffordShip('star_holder') ? getShipBuyLabel('star_holder') : 'Không đủ tài nguyên' }}
                       </button>
                     </template>
                     <template v-else>
@@ -932,7 +988,7 @@ function onShipNameKey(e: KeyboardEvent) {
                     <div class="ship-card__info">
                       <div class="ship-card__name">{{ getShipDef('star_shooter').name.toUpperCase() }}</div>
                       <div class="ship-card__tag" :class="game.ownedShips.includes('star_shooter') ? 'tag--owned' : 'tag--locked'">
-                        {{ game.ownedShips.includes('star_shooter') ? '✅ Đã sở hữu' : `🔒 Cần mở khoá · ${formatCoin(getShipDef('star_shooter').unlockCost)} 🪙` }}
+                        {{ game.ownedShips.includes('star_shooter') ? '✅ Đã sở hữu' : getShipUnlockLabel('star_shooter') }}
                       </div>
                       <div class="ship-card__desc">{{ getShipDef('star_shooter').description }}</div>
                     </div>
@@ -954,8 +1010,8 @@ function onShipNameKey(e: KeyboardEvent) {
                   </div>
                   <div class="ship-card__actions">
                     <template v-if="!game.ownedShips.includes('star_shooter')">
-                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < getShipDef('star_shooter').unlockCost" @click="buyShip('star_shooter')">
-                        {{ game.playerCoins >= getShipDef('star_shooter').unlockCost ? `Mua — ${formatCoin(getShipDef('star_shooter').unlockCost)} 🪙` : 'Không đủ vàng' }}
+                      <button class="ship-btn ship-btn--buy" :disabled="!canAffordShip('star_shooter')" @click="buyShip('star_shooter')">
+                        {{ canAffordShip('star_shooter') ? getShipBuyLabel('star_shooter') : 'Không đủ tài nguyên' }}
                       </button>
                     </template>
                     <template v-else>
@@ -1007,7 +1063,7 @@ function onShipNameKey(e: KeyboardEvent) {
                     <div class="ship-card__info">
                       <div class="ship-card__name">{{ getShipDef('star_faster').name.toUpperCase() }}</div>
                       <div class="ship-card__tag" :class="game.ownedShips.includes('star_faster') ? 'tag--owned' : 'tag--locked'">
-                        {{ game.ownedShips.includes('star_faster') ? '✅ Đã sở hữu' : `🔒 Cần mở khoá · ${formatCoin(getShipDef('star_faster').unlockCost)} 🪙` }}
+                        {{ game.ownedShips.includes('star_faster') ? '✅ Đã sở hữu' : getShipUnlockLabel('star_faster') }}
                       </div>
                       <div class="ship-card__desc">{{ getShipDef('star_faster').description }}</div>
                     </div>
@@ -1029,12 +1085,64 @@ function onShipNameKey(e: KeyboardEvent) {
                   </div>
                   <div class="ship-card__actions">
                     <template v-if="!game.ownedShips.includes('star_faster')">
-                      <button class="ship-btn ship-btn--buy" :disabled="game.playerCoins < getShipDef('star_faster').unlockCost" @click="buyShip('star_faster')">
-                        {{ game.playerCoins >= getShipDef('star_faster').unlockCost ? `Mua — ${formatCoin(getShipDef('star_faster').unlockCost)} 🪙` : 'Không đủ vàng' }}
+                      <button class="ship-btn ship-btn--buy" :disabled="!canAffordShip('star_faster')" @click="buyShip('star_faster')">
+                        {{ canAffordShip('star_faster') ? getShipBuyLabel('star_faster') : 'Không đủ tài nguyên' }}
                       </button>
                     </template>
                     <template v-else>
                       <button v-if="game.selectedShip !== 'star_faster'" class="ship-btn ship-btn--select" @click="selectShip('star_faster')"><PhCheck :size="11" style="vertical-align:middle;margin-right:4px"/>Chọn phi cơ này</button>
+                      <div v-else class="ship-btn ship-btn--active"><PhLightning weight="fill" :size="11" style="vertical-align:middle;margin-right:4px"/>Đang sử dụng</div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Slide 4: Thiên Hà Truy (Price: 30 Ruby) -->
+              <div class="ship-carousel__slide">
+                <div class="ship-card" :class="{ 'ship-card--selected': game.selectedShip === 'thien_ha_truy' }">
+                  <div class="ship-card__header">
+                    <svg class="ship-svg" viewBox="-34 -38 68 74" width="60" height="58">
+                      <polygon points="0,-34 8,-10 5,20 0,28 -5,20 -8,-10" fill="#39d3a2"/>
+                      <polygon points="0,-34 8,-10 3,-7 0,-20" fill="#7dffd7" opacity="0.75"/>
+                      <polygon points="0,-30 5,16 0,24 -5,16" fill="#1f9f7f"/>
+                      <polygon points="0,-36 3,-30 -3,-30" fill="#d9fff4"/>
+                      <rect x="-10" y="18" width="20" height="4" fill="#0f6f5b"/>
+                      <rect x="-5" y="20" width="10" height="5" fill="#155448"/>
+                      <rect x="-1" y="-32" width="2" height="58" fill="#d5fff4" opacity="0.55"/>
+                      <polygon points="-12,4 -18,18 -14,24 -8,10" fill="#66ffe4" opacity="0.45"/>
+                      <polygon points="12,4 18,18 14,24 8,10" fill="#66ffe4" opacity="0.45"/>
+                    </svg>
+                    <div class="ship-card__info">
+                      <div class="ship-card__name">{{ getShipDef('thien_ha_truy').name.toUpperCase() }}</div>
+                      <div class="ship-card__tag" :class="game.ownedShips.includes('thien_ha_truy') ? 'tag--owned' : 'tag--locked'">
+                        {{ game.ownedShips.includes('thien_ha_truy') ? '✅ Đã sở hữu' : getShipUnlockLabel('thien_ha_truy') }}
+                      </div>
+                      <div class="ship-card__desc">{{ getShipDef('thien_ha_truy').description }}</div>
+                    </div>
+                  </div>
+                  <div class="ship-stats">
+                    <div v-for="stat in thienHaTruyStats" :key="stat.label" class="ship-stat">
+                      <span class="ship-stat__label">{{ stat.label }}</span>
+                      <div class="ship-stat__track">
+                        <div class="ship-stat__fill ship-stat__fill--base" :style="{ width: stat.basePct + '%', background: stat.color }" />
+                        <div v-if="stat.bonusPct > 0" class="ship-stat__fill ship-stat__fill--bonus" :style="{ left: stat.basePct + '%', width: stat.bonusPct + '%', background: stat.color }" />
+                      </div>
+                      <span class="ship-stat__val">{{ stat.display }}</span>
+                    </div>
+                  </div>
+                  <div class="ship-skill ship-skill--red">
+                    <div class="ship-skill__name">🗡 {{ getShipDef('thien_ha_truy').skill.name }}</div>
+                    <div class="ship-skill__cd"><PhTimer :size="11" style="vertical-align:middle;margin-right:4px"/>Hồi chiêu: {{ getShipDef('thien_ha_truy').skill.cooldownSec }} giây</div>
+                    <div class="ship-skill__desc">{{ getShipDef('thien_ha_truy').skill.description }}</div>
+                  </div>
+                  <div class="ship-card__actions">
+                    <template v-if="!game.ownedShips.includes('thien_ha_truy')">
+                      <button class="ship-btn ship-btn--buy" :disabled="!canAffordShip('thien_ha_truy')" @click="buyShip('thien_ha_truy')">
+                        {{ canAffordShip('thien_ha_truy') ? getShipBuyLabel('thien_ha_truy') : 'Không đủ tài nguyên' }}
+                      </button>
+                    </template>
+                    <template v-else>
+                      <button v-if="game.selectedShip !== 'thien_ha_truy'" class="ship-btn ship-btn--select" @click="selectShip('thien_ha_truy')"><PhCheck :size="11" style="vertical-align:middle;margin-right:4px"/>Chọn phi cơ này</button>
                       <div v-else class="ship-btn ship-btn--active"><PhLightning weight="fill" :size="11" style="vertical-align:middle;margin-right:4px"/>Đang sử dụng</div>
                     </template>
                   </div>
@@ -2193,6 +2301,10 @@ function onShipNameKey(e: KeyboardEvent) {
 .ship-skill--purple {
   background: rgba(160, 60, 255, 0.09);
   border-color: rgba(160, 60, 255, 0.5);
+}
+.ship-skill--red {
+  background: rgba(255, 76, 76, 0.1);
+  border-color: rgba(255, 102, 122, 0.55);
 }
 .ship-card__actions {
   display: flex;
