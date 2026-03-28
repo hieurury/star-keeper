@@ -119,6 +119,9 @@ export function isDnoxSoilProtected(e: Enemy, ctx: GameContext): boolean {
 
 // ─── Spawn ────────────────────────────────────────────────────────────────────
 const CORE_KINDS: DnoxSoilCoreKind[] = ['shield', 'sword', 'wind']
+const SOIL_SHIELD_HP_BONUS_MULT = 1.10
+const SOIL_SWORD_POWER_MULT = 2.05
+const SOIL_WIND_HASTE_MULT = 1.85
 
 export function spawnDnoxSoilGroup(ctx: GameContext, game: GameStore): void {
   const count = 1 + Math.floor(Math.random() * 2)
@@ -184,31 +187,32 @@ export function getDnoxSoilCoreKind(e: Enemy): DnoxSoilCoreKind {
 /** Apply parasite bonuses to host. Call once when attaching. */
 export function applyDnoxSoilBonus(host: Enemy, coreKind: DnoxSoilCoreKind): void {
   if (coreKind === 'shield') {
-    // +80% HP: makes host tankier; for Dnox Fire this also scales retaliate beam damage.
-    const bonus = Math.round(host.maxHp * 0.80)
+    // +110% HP: noticeably stronger host after successful parasite attach.
+    const bonus = Math.round(host.maxHp * SOIL_SHIELD_HP_BONUS_MULT)
     host.maxHp += bonus
     host.hp = Math.min(host.maxHp, host.hp + bonus)
     redrawHpBar(host.hpBarBg, host.hpBar, host.hp / host.maxHp, host.barW)
   } else if (coreKind === 'sword') {
-    // +80% damage multiplier used by host offensive skills.
-    host.cnoxPowerMult = (host.cnoxPowerMult ?? 1) * 1.80
+    // +105% damage multiplier used by host offensive skills.
+    host.cnoxPowerMult = (host.cnoxPowerMult ?? 1) * SOIL_SWORD_POWER_MULT
   } else {
-    // +65% action haste for host AI timers and movement.
-    host.dnoxSoilHasteMult = (host.dnoxSoilHasteMult ?? 1) * 1.65
+    // +85% action haste for host AI timers and movement.
+    host.dnoxSoilHasteMult = (host.dnoxSoilHasteMult ?? 1) * SOIL_WIND_HASTE_MULT
   }
 }
 
 /** Remove parasite bonuses when parasite is killed. */
 export function removeDnoxSoilBonus(host: Enemy, coreKind: DnoxSoilCoreKind): void {
   if (coreKind === 'shield') {
-    const bonus = Math.round((host.maxHp / 1.80) * 0.80)
+    const preBonusMaxHp = host.maxHp / (1 + SOIL_SHIELD_HP_BONUS_MULT)
+    const bonus = Math.round(preBonusMaxHp * SOIL_SHIELD_HP_BONUS_MULT)
     host.maxHp = Math.max(1, host.maxHp - bonus)
     host.hp = Math.min(host.maxHp, host.hp)
     redrawHpBar(host.hpBarBg, host.hpBar, host.hp / host.maxHp, host.barW)
   } else if (coreKind === 'sword') {
-    host.cnoxPowerMult = (host.cnoxPowerMult ?? 1.80) / 1.80
+    host.cnoxPowerMult = (host.cnoxPowerMult ?? SOIL_SWORD_POWER_MULT) / SOIL_SWORD_POWER_MULT
   } else {
-    host.dnoxSoilHasteMult = Math.max(1, (host.dnoxSoilHasteMult ?? 1.65) / 1.65)
+    host.dnoxSoilHasteMult = Math.max(1, (host.dnoxSoilHasteMult ?? SOIL_WIND_HASTE_MULT) / SOIL_WIND_HASTE_MULT)
   }
 }
 

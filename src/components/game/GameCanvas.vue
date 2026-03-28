@@ -26,7 +26,7 @@ import { drawHealBeam, spawnThuatSi } from '../../game/entities/ThuatSi'
 import { drawCnoxGreedy } from '../../game/entities/CnoxGreedy'
 import { drawDnoxFire, updateDnoxFireHeat, updateDnoxFireAttack } from '../../game/entities/DnoxFire'
 import { drawDnoxIce, FREEZE_DURATION, FREEZE_TAP_BREAK } from '../../game/entities/DnoxIce'
-import { drawDnoxSoil, drawDnoxSoilAttached, getDnoxSoilCoreKind, applyDnoxSoilBonus } from '../../game/entities/DnoxSoil'
+import { drawDnoxSoilAttached, getDnoxSoilCoreKind, applyDnoxSoilBonus } from '../../game/entities/DnoxSoil'
 import type { AllyDrone, Enemy, SunWeaponStar } from '../../game/types'
 
 const canvasWrapper = ref<HTMLDivElement>()
@@ -2035,7 +2035,7 @@ function gameLoop(ticker: Ticker) {
           e.container.y += (dy / dist) * speed * dt
         }
       } else {
-        // Patrol: gentle drift, hide behind Hoả chủng if possible
+        // Patrol: hide behind Hoả chủng when possible, otherwise strafe + dodge bullets.
         const haste = e.dnoxSoilHasteMult ?? 1
         const fireTank = ctx.enemies.find(other => other.kind === 'dnox_fire')
         if (fireTank && ctx.playerShip) {
@@ -2054,10 +2054,38 @@ function gameLoop(ticker: Ticker) {
           e.container.y = Math.max(10, Math.min(GAME_H * 0.33, e.container.y))
         } else {
           const t = Date.now() / 1000 + (e.formTargetX ?? 0) * 0.011
-          e.container.x += Math.sin(t * 1.1 * haste) * 0.52 * dt * haste
+          const anchorX = Math.max(24, Math.min(GAME_W - 24, (e.formTargetX ?? e.container.x) + Math.sin(t * 0.85) * 48))
+          const anchorY = Math.max(14, Math.min(GAME_H * 0.36, (e.formTargetY ?? (GAME_H * 0.18)) + Math.sin(t * 0.42) * 18))
+          let moveX = (anchorX - e.container.x) * 0.07
+          let moveY = (anchorY - e.container.y) * 0.06
+
+          // React to nearby player bullets so the unit does not stand still when no tank cover exists.
+          let evadeX = 0
+          let evadeY = 0
+          for (const b of ctx.bullets) {
+            const bx = b.gfx.x
+            const by = b.gfx.y
+            const dx = e.container.x - bx
+            const dy = e.container.y - by
+            if (dy > -36 && dy < 145 && Math.abs(dx) < 52) {
+              const side = dx === 0 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(dx)
+              const proximity = 1 - Math.min(1, Math.abs(dx) / 52)
+              evadeX += side * (0.85 + proximity * 0.75)
+              evadeY -= Math.max(0, (145 - dy) / 145) * 0.35
+            }
+          }
+
+          // Add a mild side strafe so idle motion stays alive even without direct threats.
+          moveX += Math.sin(t * 1.9) * 0.4
+          moveX += evadeX
+          moveY += evadeY
+          const moveMag = Math.sqrt(moveX * moveX + moveY * moveY) || 1
+          const baseSpeed = 1.55
+          const step = Math.min(baseSpeed * dt * haste, moveMag)
+          e.container.x += (moveX / moveMag) * step
+          e.container.y += (moveY / moveMag) * step
           e.container.x = Math.max(20, Math.min(GAME_W - 20, e.container.x))
-          e.container.y += Math.sin(t * 0.55) * 0.18 * dt
-          e.container.y = Math.max(10, Math.min(GAME_H * 0.33, e.container.y))
+          e.container.y = Math.max(10, Math.min(GAME_H * 0.36, e.container.y))
         }
       }
       // Spin ice orbs
@@ -2085,7 +2113,9 @@ function gameLoop(ticker: Ticker) {
         const tx = ctx.playerShip.x - e.container.x
         const ty = ctx.playerShip.y - e.container.y
         const mag = Math.sqrt(tx * tx + ty * ty) || 1
-        const spd = (4.2 + game.currentStage * 0.1) * (0.92 + haste * 0.16)
+        const stageSpeed = 3.6 + Math.min(1.7, game.currentStage * 0.05)
+        const hasteShotMult = 1 + Math.max(0, haste - 1) * 0.2
+        const spd = stageSpeed * hasteShotMult
         const dmgMult = e.cnoxPowerMult ?? 1
         const isFrosted = playerFrostStacks >= 1
         ctx.enemyBullets.push({
@@ -2147,9 +2177,10 @@ function gameLoop(ticker: Ticker) {
         e.container.x = Math.max(18, Math.min(GAME_W - 18, e.container.x))
 
         if ((e.cnoxLaserTimer ?? 0) <= 0) {
-          // Prioritise Dnox host synergy: Fire + Ice can each hold only one parasite.
+          // Pick host by parasite core utility first, then distance.
+          const coreKind = getDnoxSoilCoreKind(e)
           let bestHost: Enemy | null = null
-          let bestD2 = 260 * 260
+          let bestScore = -Infinity
           for (const other of ctx.enemies) {
             if (other === e || other.kind !== 'dnox_fire' && other.kind !== 'dnox_ice') continue
             const occupied = ctx.enemies.some((p) => (
@@ -2160,7 +2191,25 @@ function gameLoop(ticker: Ticker) {
             ))
             if (occupied) continue
             const d2 = dist2(e.container.x, e.container.y, other.container.x, other.container.y)
-            if (d2 < bestD2) { bestD2 = d2; bestHost = other }
+            if (d2 > 300 * 300) continue
+
+            const hpRatio = other.hp / Math.max(1, other.maxHp)
+            const lowHpNeed = 1 - hpRatio
+            let suitability = 0
+            if (coreKind === 'shield') {
+              suitability += other.kind === 'dnox_fire' ? 2.25 : 1.35
+              suitability += lowHpNeed * 1.9
+            } else if (coreKind === 'sword') {
+              suitability += other.kind === 'dnox_ice' ? 2.2 : 1.45
+              suitability += hpRatio * 1.15
+            } else {
+              suitability += other.kind === 'dnox_ice' ? 2.1 : 1.55
+              suitability += (other.kind === 'dnox_ice' ? 0.55 : 0.2)
+            }
+
+            const distanceScore = 1 - Math.min(1, Math.sqrt(d2) / 300)
+            const score = suitability + distanceScore * 0.9
+            if (score > bestScore) { bestScore = score; bestHost = other }
           }
           if (bestHost) {
             e.healTarget = bestHost

@@ -126,4 +126,4 @@ export interface FrostState {
 }
 
 export const FREEZE_DURATION = 120  // 2s at 60fps
-export const FREEZE_TAP_BREAK = 5   // taps needed to break
+export const FREEZE_TAP_BREAK = 3   // taps needed to break

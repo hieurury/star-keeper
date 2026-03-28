@@ -4,6 +4,7 @@ import type { useGameStore } from '../../stores/gameStore'
 import type { Enemy } from '../types'
 import { GAME_H, GAME_W } from '../constants'
 import { redrawHpBar } from '../utils'
+import { screenFlash, spawnDamageText, spawnExplosion } from '../systems/effects'
 
 type GameStore = ReturnType<typeof useGameStore>
 
@@ -104,7 +105,7 @@ export function spawnDnoxFire(ctx: GameContext, game: GameStore, overrideX?: num
 
 /** Called every frame from GameCanvas after bullet/damage is applied.
  *  Returns true if the fireball fired (causes the fireball to fly). */
-export function updateDnoxFireHeat(e: Enemy, damageDealt: number, ctx: GameContext, game: GameStore): void {
+export function updateDnoxFireHeat(e: Enemy, damageDealt: number, _ctx: GameContext, _game: GameStore): void {
   if (e.kind !== 'dnox_fire') return
   if (e.cnoxLaserState === 'firing' || e.cnoxLaserState === 'warning') return
 
@@ -130,7 +131,6 @@ function beginDnoxFireball(e: Enemy, ctx: GameContext, game: GameStore): void {
   const dmgMult = e.cnoxPowerMult ?? 1
   const fireballDmg = Math.round(e.maxHp * 0.20 * dmgMult)
   const ex = e.container.x
-  const ey = e.container.y
   e.cnoxLaserState = 'firing'
   e.cnoxLaserTimer = DNOX_FIRE_BEAM_FRAMES
 
@@ -141,6 +141,11 @@ function beginDnoxFireball(e: Enemy, ctx: GameContext, game: GameStore): void {
   if (playerHit && ctx.playerShip) {
     if (!game.absorbShieldHit()) {
       game.takeDamage(fireballDmg)
+      screenFlash(ctx, 0xff5533, 0.3, 180)
+      spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, fireballDmg)
+    } else {
+      spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 10, 0xff7744, 0xffdd88)
+      screenFlash(ctx, 0xff7744, 0.25, 150)
     }
     const heal = Math.round(e.maxHp * 0.20)
     e.hp = Math.min(e.maxHp, e.hp + heal)
@@ -215,7 +220,8 @@ export function cleanupDnoxFire(e: Enemy, ctx: GameContext): void {
 }
 
 export function spawnDnoxFireSquad(ctx: GameContext, game: GameStore): void {
-  const count = 5 + Math.floor(Math.random() * 3) // 5 to 7
+  const stageBonus = Math.min(3, Math.floor((game.currentStage - 1) / 4))
+  const count = 5 + stageBonus + Math.floor(Math.random() * 2) // scales from 5-6 up to 8-9
   const spacing = 44
   const lineY = GAME_H * 0.30 + Math.random() * GAME_H * 0.14
   const lineStartX = GAME_W * 0.5 - ((count - 1) * spacing) * 0.5
