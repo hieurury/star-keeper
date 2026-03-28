@@ -116,8 +116,10 @@ function buildCnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[]
 function buildDnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[], regular: WaveSpawner[]): void {
   const stage = game.currentStage
 
-  // Hoả chủng làm tank tuyến trước (nhóm 4-5 con)
+  // Hoả chủng làm tank tuyến trước (nhiều đợt hơn ở màn cao)
   tankers.push(() => spawnDnoxFireSquad(ctx, game))
+  if (stage >= 4) tankers.push(() => spawnDnoxFireSquad(ctx, game))
+  if (stage >= 8 && Math.random() < 0.7) tankers.push(() => spawnDnoxFireSquad(ctx, game))
 
   // Băng lam tấn công tầm trung (stage >= 1)
   const iceCount = 1 + (Math.random() < 0.45 ? 1 : 0) + (stage >= 4 && Math.random() < 0.75 ? 1 : 0)
