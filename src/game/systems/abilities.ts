@@ -601,12 +601,14 @@ export function activateBlackHole(ctx: GameContext, _game: GameStore): void {
     if (!ctx.shooterBlackHoleGfx.destroyed) ctx.gameLayer.removeChild(ctx.shooterBlackHoleGfx)
     ctx.shooterBlackHoleGfx = null
     ctx.shooterBlackHoleTimer = 0
+    ctx.shooterBlackHoleDamageTick = 0
   }
   // Remove in-flight projectile if any
   if (ctx.shooterBlackHoleProjGfx) {
     if (!ctx.shooterBlackHoleProjGfx.destroyed) ctx.gameLayer.removeChild(ctx.shooterBlackHoleProjGfx)
     ctx.shooterBlackHoleProjGfx = null
   }
+  ctx.shooterBlackHoleDamageTick = 0
   // Target nearest enemy, fallback to above-center
   const nearest = findNearestEnemy(ctx.enemies, ctx.playerShip?.x ?? GAME_W / 2, ctx.playerShip?.y ?? GAME_H * 0.5)
   ctx.shooterBlackHoleProjTX = nearest ? nearest.container.x : GAME_W / 2

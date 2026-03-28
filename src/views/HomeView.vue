@@ -10,6 +10,7 @@ import {
   SHIP_UNLOCK_COST,
   SHIP_ARTIFACT_SLOTS,
   SHIP_DURABILITY_MAX,
+  SHIP_UPGRADE_MAX_LEVEL,
   type CardDef,
   type ShipId,
   type ShipUpgradeKey,
@@ -388,6 +389,23 @@ function openShipUpgradePanel(shipId?: ShipId) {
 
 function buyShipUpgrade(key: ShipUpgradeKey) {
   game.buyShipUpgrade(upgradeShipId.value, key)
+}
+
+const equippedArtifactsForSelectedShip = computed(() => game.equippedArtifacts[game.selectedShip] ?? [])
+
+function equippedArtifactCount(artifactId: string): number {
+  return equippedArtifactsForSelectedShip.value.filter(id => id === artifactId).length
+}
+
+function canEquipArtifact(artifactId: string): boolean {
+  const slots = SHIP_ARTIFACT_SLOTS[game.selectedShip] ?? 1
+  return game.ownedArtifacts.includes(artifactId)
+    && !equippedArtifactsForSelectedShip.value.includes(artifactId)
+    && equippedArtifactsForSelectedShip.value.length < slots
+}
+
+function canUnequipArtifact(artifactId: string): boolean {
+  return equippedArtifactCount(artifactId) > 0
 }
 
 function buyShip(id: ShipId) {
@@ -1072,7 +1090,7 @@ function onShipNameKey(e: KeyboardEvent) {
               <div v-for="row in upgradeRows" :key="row.key" class="ship-upgrade__row">
                 <div class="ship-upgrade__meta">
                   <div class="ship-upgrade__label">{{ row.label }}</div>
-                  <div class="ship-upgrade__level">Lv {{ row.level }}/5</div>
+                  <div class="ship-upgrade__level">Lv {{ row.level }}/{{ SHIP_UPGRADE_MAX_LEVEL }}</div>
                 </div>
                 <button
                   class="ship-upgrade__btn"
@@ -1120,17 +1138,17 @@ function onShipNameKey(e: KeyboardEvent) {
                     @click="game.buyArtifact(art.id)"
                   >{{ game.playerCoins >= art.cost ? 'Mua' : 'Thiếu vàng' }}</button>
                   <template v-else>
+                    <div class="artifact-equip-state">Đang trang bị: {{ equippedArtifactCount(art.id) }}</div>
                     <button
-                      v-if="(game.equippedArtifacts[game.selectedShip] ?? []).includes(art.id)"
-                      class="artifact-btn artifact-btn--unequip"
-                      @click="game.unequipArtifact(game.selectedShip, art.id)"
-                    >Tháo</button>
-                    <button
-                      v-else
                       class="artifact-btn artifact-btn--equip"
-                      :disabled="((game.equippedArtifacts[game.selectedShip] ?? []).length) >= (SHIP_ARTIFACT_SLOTS[game.selectedShip] ?? 1)"
+                      :disabled="!canEquipArtifact(art.id)"
                       @click="game.equipArtifact(game.selectedShip, art.id)"
                     >Trang bị</button>
+                    <button
+                      class="artifact-btn artifact-btn--unequip"
+                      :disabled="!canUnequipArtifact(art.id)"
+                      @click="game.unequipArtifact(game.selectedShip, art.id)"
+                    >Tháo</button>
                   </template>
                 </div>
               </div>
@@ -2716,6 +2734,11 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   color: #f1c40f;
 }
 .artifact-card__actions { display: flex; flex-direction: column; gap: 4px; width: 100%; margin-top: auto; }
+.artifact-equip-state {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--color-text-dim);
+}
 .artifact-btn {
   font-family: var(--font-pixel);
   font-size: 9px;
@@ -2753,6 +2776,12 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   background: #1a1a00;
   border-color: #777700;
   color: #cccc44;
+}
+.artifact-btn--unequip:disabled {
+  background: #111;
+  border-color: #333;
+  color: #555;
+  cursor: not-allowed;
 }
 
 /* ─── PC Scroll Fix ──────────────────────────────────────────────────────── */

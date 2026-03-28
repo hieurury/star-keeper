@@ -343,6 +343,7 @@ function clearTransientCombatGraphics() {
 
   if (ctx.shooterBlackHoleGfx && !ctx.shooterBlackHoleGfx.destroyed) ctx.gameLayer.removeChild(ctx.shooterBlackHoleGfx)
   ctx.shooterBlackHoleGfx = null
+  ctx.shooterBlackHoleDamageTick = 0
   if (ctx.shooterBlackHoleProjGfx && !ctx.shooterBlackHoleProjGfx.destroyed) ctx.gameLayer.removeChild(ctx.shooterBlackHoleProjGfx)
   ctx.shooterBlackHoleProjGfx = null
 
@@ -910,6 +911,7 @@ function gameLoop(ticker: Ticker) {
       ctx.gameLayer.addChild(g)
       ctx.shooterBlackHoleGfx = g
       ctx.shooterBlackHoleTimer = 300
+      ctx.shooterBlackHoleDamageTick = 60
     } else {
       proj.x += (pdx / pdist) * projSpd
       proj.y += (pdy / pdist) * projSpd
@@ -924,6 +926,12 @@ function gameLoop(ticker: Ticker) {
   // Star Shooter black hole
   if (isShooter && ctx.shooterBlackHoleGfx) {
     ctx.shooterBlackHoleTimer -= dt
+    ctx.shooterBlackHoleDamageTick -= dt
+    let blackHoleDamageTicks = 0
+    while (ctx.shooterBlackHoleDamageTick <= 0) {
+      blackHoleDamageTicks++
+      ctx.shooterBlackHoleDamageTick += 60
+    }
     const bhg = ctx.shooterBlackHoleGfx
     bhg.clear()
     const bhPulse = 0.7 + Math.sin(Date.now() * 0.003) * 0.3
@@ -940,11 +948,13 @@ function gameLoop(ticker: Ticker) {
         const pull = (1 - bd / 185) * 4 * dt
         e.container.x += (bdx / bd) * pull; e.container.y += (bdy / bd) * pull
       }
-      const dmgRate = isBoss ? 0.02 : 0.10
-      const bhDmg = Math.round(e.maxHp * dmgRate * dt / 60)
-      if (bhDmg > 0) {
-        e.hp = Math.max(0, e.hp - bhDmg); hitFlash(e.body)
+      if (blackHoleDamageTicks > 0) {
+        const dmgRate = isBoss ? 0.04 : 0.10
+        const bhDmg = Math.max(1, Math.round(e.maxHp * dmgRate)) * blackHoleDamageTicks
+        e.hp = Math.max(0, e.hp - bhDmg)
+        hitFlash(e.body)
         updateDnoxFireHeat(e, bhDmg, ctx, game)
+        spawnDamageText(ctx, e.container.x, e.container.y - (isBoss ? 60 : 16), bhDmg)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
         if (e.hp <= 0) { killEnemy(ctx, game, e, i); continue }
       }
@@ -963,12 +973,15 @@ function gameLoop(ticker: Ticker) {
           c.gfx.x = c.x
           c.gfx.y = c.y
         }
-        const bhDmg = Math.max(1, Math.round(c.maxHp * 0.10 * dt / 60))
-        c.hp = Math.max(0, c.hp - bhDmg)
-        if (c.hp <= 0) {
-          spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
-          if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
-          crystals.splice(ci, 1)
+        if (blackHoleDamageTicks > 0) {
+          const bhDmg = Math.max(1, Math.round(c.maxHp * 0.04)) * blackHoleDamageTicks
+          c.hp = Math.max(0, c.hp - bhDmg)
+          spawnDamageText(ctx, c.x, c.y - 14, bhDmg)
+          if (c.hp <= 0) {
+            spawnExplosion(ctx, c.x, c.y, 20, 0x66c7ff, 0xe9f8ff)
+            if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+            crystals.splice(ci, 1)
+          }
         }
       }
     }
@@ -983,6 +996,7 @@ function gameLoop(ticker: Ticker) {
       if (!bhg.destroyed) ctx.gameLayer.removeChild(bhg)
       ctx.shooterBlackHoleGfx = null
       ctx.shooterBlackHoleTimer = 0
+      ctx.shooterBlackHoleDamageTick = 0
     }
   }
 

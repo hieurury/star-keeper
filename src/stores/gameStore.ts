@@ -166,10 +166,10 @@ export const ALL_CARD_DEFS: CardDef[] = [
     id: 'weapon_cache_shooter', name: 'Kho Vũ Khí - Star Shooter', type: 'attack', icon: 'PhTarget', maxLevel: 5, shipId: 'star_shooter',
     levels: [
       { desc: 'Tăng thêm 1 tên lửa bắn ra.' },
-      { desc: 'Tên lửa bây giờ gây sát thương AOE tầm gần khi nổ.' },
       { desc: 'Tăng 20% tốc độ bay và 40% sát thương cho tên lửa.' },
+      { desc: 'Sát thương tên lửa +30%.' },
       { desc: 'Tăng nhẹ phạm vi nổ AOE thêm 15%.' },
-      { desc: 'Thêm 2 tên lửa bắn ra, tăng thêm 30% sát thương.' },
+      { desc: 'Thêm 2 tên lửa bắn ra.' },
     ],
   },
   { id: 'weapon_cache_holder', name: 'Kho Vũ Khí - Star Holder', type: 'attack', icon: 'PhFire', maxLevel: 5, shipId: 'star_holder',
@@ -253,10 +253,10 @@ export const ALL_CARD_DEFS: CardDef[] = [
   },
   // ── Tối thượng ──────────────────────────────────────────────────────────────
   {
-    id: 'weapon_cache_shooter_ult', name: 'Tên Lửa Lạnh Lùng', type: 'ultimate', icon: 'PhShootingStar', maxLevel: 1, shipId: 'star_shooter',
+    id: 'weapon_cache_shooter_ult', name: 'Tái chế hố đen', type: 'ultimate', icon: 'PhShootingStar', maxLevel: 1, shipId: 'star_shooter',
     requiresAttackId: 'weapon_cache_shooter',
     levels: [
-      { desc: 'Kẻ địch bị tên lửa tiêu diệt giảm 0.5s hồi chiêu kỹ năng.' },
+      { desc: 'Kẻ địch bị tên lửa tiêu diệt giảm 1s hồi chiêu kỹ năng.' },
     ],
   },
   {
@@ -481,16 +481,16 @@ export const SHIP_DEFS: Record<ShipId, ShipDefinition> = {
     description: 'Chiến cơ 4 cánh với pod tên lửa hạng nặng. Tên lửa tự dẫn bám sát đối thủ, kỹ năng hố đen hấp thụ kẻ địch.',
     unlockCost: 15000,
     durabilityMax: 95,
-    artifactSlots: 1,
+    artifactSlots: 2,
     bulletCount: { base: 1, max: 4 },
     skill: {
       name: 'HỐ ĐEN HẤP DẪN',
       cooldownSec: 35,
-      description: 'Triệu hồi hố đen trong 5 giây — hút kẻ địch thường lại gần, gây 10% HP/s sát thương liên tục (trùm 2%) và hấp thụ toàn bộ đạn kẻ địch.',
+      description: 'Triệu hồi hố đen trong 5 giây — hút kẻ địch thường lại gần, gây 10% HP/s (trùm 4%) và hấp thụ toàn bộ đạn kẻ địch.',
       hudLabelHtml: 'HỐ<br/>ĐEN',
     },
     stats: {
-      base: { hp: 220, damage: 40, fireRate: 0.38, speed: 1.0 },
+      base: { hp: 220, damage: 45, fireRate: 0.6, speed: 1.0 },
       max: { hp: 400, damage: 200, fireRate: 1.25, speed: 1.6 },
     },
   },
@@ -900,7 +900,7 @@ export const useGameStore = defineStore('game', () => {
       turboFireRatePct: 0,
       cbTurboBoost: false,
       shooterMissileBonus: 0,
-      shooterMissileAoe: false,
+      shooterMissileAoe: true,
       shooterMissileSpdMult: 1.0,
       shooterMissileDmgMult: 1.0,
       shooterMissileAoeSizeBonus: 0,
@@ -1044,11 +1044,11 @@ export const useGameStore = defineStore('game', () => {
     // weapon_cache_shooter (Star Shooter)
     const sc = c['weapon_cache_shooter'] ?? 0
     if (sc >= 1) stats.shooterMissileBonus = 1
-    if (sc >= 2) stats.shooterMissileAoe = true
-    if (sc >= 3) { stats.shooterMissileSpdMult = 1.2; stats.shooterMissileDmgMult = 1.4 }
+    if (sc >= 2) { stats.shooterMissileSpdMult = 1.2; stats.shooterMissileDmgMult = 1.4 }
+    if (sc >= 3) stats.shooterMissileDmgMult *= 1.3
     if (sc >= 4) stats.shooterMissileAoeSizeBonus = 0.15
     if (sc >= 5) { stats.shooterMissileBonus = 3; stats.shooterMissileDmgMult = (sc >= 3 ? 1.4 : 1.0) * 1.3 }
-    if ((c['weapon_cache_shooter_ult'] ?? 0) >= 1) stats.shooterMissileKillCdReduce = 0.5
+    if ((c['weapon_cache_shooter_ult'] ?? 0) >= 1) stats.shooterMissileKillCdReduce = 1
 
     // bullet_rain_ult: cluster bomb halved interval + always double
     if ((c['bullet_rain_ult'] ?? 0) >= 1) {
@@ -1673,7 +1673,11 @@ export const useGameStore = defineStore('game', () => {
 
   function unequipArtifact(shipId: string, artifactId: string) {
     const current = equippedArtifacts.value[shipId] ?? []
-    equippedArtifacts.value = { ...equippedArtifacts.value, [shipId]: current.filter(id => id !== artifactId) }
+    const idx = current.indexOf(artifactId)
+    if (idx < 0) return
+    const next = [...current]
+    next.splice(idx, 1)
+    equippedArtifacts.value = { ...equippedArtifacts.value, [shipId]: next }
     saveProgress()
   }
 
