@@ -327,6 +327,11 @@ function formatSpeedStatValue(current: number, max: number): string {
   return `${current.toFixed(2)} / ${max.toFixed(2)}`
 }
 
+function getShipUpgradeLabel(shipId: ShipId, key: ShipUpgradeKey): string {
+  if (shipId === 'thien_ha_truy' && key === 'fireRate') return 'Tốc bay Hồn kiếm'
+  return SHIP_UPGRADE_LABEL_MAP[key]
+}
+
 function buildShipStatItems(shipId: ShipId): ShipStatItem[] {
   const base = game.getShipBaseStats(shipId)
   const max = game.getShipMaxStats(shipId)
@@ -334,7 +339,7 @@ function buildShipStatItems(shipId: ShipId): ShipStatItem[] {
 
   const rows: Array<{ key: ShipUpgradeKey | 'bulletCount' | 'speed', label: string }> = [
     { key: 'damage', label: 'SÁT THƯƠNG' },
-    { key: 'fireRate', label: 'TỐC ĐỘ BẮN' },
+    { key: 'fireRate', label: shipId === 'thien_ha_truy' ? 'TỐC BAY HỒN KIẾM' : 'TỐC ĐỘ BẮN' },
     { key: 'speed', label: 'TỐC ĐỘ BAY' },
     { key: 'hp', label: 'HP' },
     { key: 'bulletCount', label: 'SỐ TIA ĐẠN' },
@@ -398,7 +403,7 @@ const upgradeStatItems = computed(() => buildShipStatItems(upgradeShipId.value))
 const upgradeRows = computed(() => {
   return (['hp', 'fireRate', 'damage'] as ShipUpgradeKey[]).map((key) => ({
     key,
-    label: SHIP_UPGRADE_LABEL_MAP[key],
+    label: getShipUpgradeLabel(upgradeShipId.value, key),
     level: game.getShipUpgradeLevel(upgradeShipId.value, key),
     cost: game.getShipUpgradeCost(upgradeShipId.value, key),
   }))

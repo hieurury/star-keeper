@@ -201,8 +201,8 @@ export const ALL_CARD_DEFS: CardDef[] = [
   { id: 'weapon_cache_truy', name: 'Kho Vũ Khí - Thiên Hà Truy', type: 'attack', icon: 'PhSword', maxLevel: 5, shipId: 'thien_ha_truy',
     levels: [
       { desc: 'Kiếm hồn bay nhanh hơn 50%.' },
-      { desc: 'Sát thương kiếm hồn +30%.' },
       { desc: 'Thêm 1 kiếm hồn (tổng +1).' },
+      { desc: 'Sát thương kiếm hồn +30%.' },
       { desc: 'Sát thương kiếm hồn +50%.' },
       { desc: 'Thêm 1 kiếm hồn nữa và tốc độ bay tăng thêm 20%.' },
     ],
@@ -611,8 +611,11 @@ export const SHIP_UNLOCK_CURRENCY: Record<ShipId, ShipUnlockCurrency> = Object.f
 
 function getShipUpgradeCostMultiplierByUnlockCost(shipId: ShipId): number {
   const unlockCost = SHIP_UNLOCK_COST[shipId] ?? 0
+  const unlockCurrency = SHIP_UNLOCK_CURRENCY[shipId] ?? 'coins'
+  // Economy mapping: 30 ruby ship is treated as 15,000 coins tier for upgrade pricing.
+  const unlockCostCoinEquivalent = unlockCurrency === 'ruby' ? unlockCost * 500 : unlockCost
   // Unlock cost 2000 -> x1.10, 5000 -> x1.25, 15000 -> x1.75
-  return 1 + unlockCost / 20000
+  return 1 + unlockCostCoinEquivalent / 20000
 }
 
 // ─── Upgrade definitions ──────────────────────────────────────────────────────
@@ -1118,8 +1121,8 @@ export const useGameStore = defineStore('game', () => {
     // weapon_cache_truy (Thiên Hà Truy)
     const tc = c['weapon_cache_truy'] ?? 0
     if (tc >= 1) stats.tracerSwordSpdMult *= 1.5
-    if (tc >= 2) stats.tracerSwordDmgMult *= 1.3
-    if (tc >= 3) stats.tracerSwordBonus = 1
+    if (tc >= 2) stats.tracerSwordBonus = 1
+    if (tc >= 3) stats.tracerSwordDmgMult *= 1.3
     if (tc >= 4) stats.tracerSwordDmgMult *= 1.5
     if (tc >= 5) { stats.tracerSwordBonus = 2; stats.tracerSwordSpdMult *= 1.2 }
 

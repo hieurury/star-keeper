@@ -587,6 +587,8 @@ function gameLoop(ticker: Ticker) {
     if (battleReady) {
       ctx.gamePhase = 'playing'
       ctx.shootTimer = 0
+      ctx.keeperBurstShotsLeft = 0
+      ctx.keeperBurstDelay = 0
       ctx.bossAttackLockTimer = 60
     }
 
@@ -993,6 +995,7 @@ function gameLoop(ticker: Ticker) {
   const isShooter = game.selectedShip === 'star_shooter'
   const isFaster = game.selectedShip === 'star_faster'
   const isTracer = game.selectedShip === 'thien_ha_truy'
+  const isKeeper = game.selectedShip === 'star_keeper'
   const tracerMode = game.cardStats.tracerSwordUltimateMode
   const tracerFixedCount = tracerMode === 'tu_kiem' ? 4 : (tracerMode === 'van_kiem' ? 1 : null)
   const tracerBaseCount = Math.max(1, game.upgrades.bulletCount + game.cardStats.tracerSwordBonus)
@@ -1005,10 +1008,39 @@ function gameLoop(ticker: Ticker) {
   const baseShootInterval = isHolder ? 60 : (isShooter ? 160 : (isTracer ? 18 : (isFaster ? 12 : 18)))
   const shootCount = isShooter ? effectiveMissileCount : effectiveBulletCount
   const shootInterval = (baseShootInterval / Math.sqrt(shootCount)) / ((1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100) * game.selectedShipFireRateMult * starFasterFireBoost)
-  if (!isBossIntro && !isFrozen && !tracerFreezeActive && ctx.shootTimer >= shootInterval) {
-    ctx.shootTimer = 0
+  const fireStandardBulletVolley = (cnt: number) => {
+    audioManager.playShipShoot(isFaster ? 'star_faster' : 'star_keeper')
+    const perShotSpreadDeg = isFaster ? 1.35 : 3
+    const maxHalfAngle = Math.min(Math.PI * 12 / 180, (cnt - 1) * Math.PI * perShotSpreadDeg / 180)
+    const bulletSpeedMul = isFaster ? 1.45 : 1.15
+    const bulletVy = 8 * game.upgrades.bulletSpeed * bulletSpeedMul
+    for (let i = 0; i < cnt; i++) {
+      const norm = cnt > 1 ? (i - (cnt - 1) / 2) / ((cnt - 1) / 2) : 0
+      const vxDrift = Math.tan(norm * maxHalfAngle) * bulletVy
+      shoot((i - (cnt - 1) / 2) * 12, vxDrift, bulletSpeedMul)
+    }
+  }
+
+  if (!isBossIntro && !isFrozen && !tracerFreezeActive) {
     const cnt = isShooter ? effectiveMissileCount : effectiveBulletCount
-    if (isHolder && ctx.playerShip) {
+
+    if (isKeeper && ctx.playerShip) {
+      const keeperIntraBurstDelay = Math.max(3, shootInterval * 0.35)
+      const keeperPostBurstDelay = Math.max(24, shootInterval * 2.4)
+      ctx.keeperBurstDelay = Math.max(0, ctx.keeperBurstDelay - dt)
+      if (ctx.keeperBurstDelay <= 0) {
+        fireStandardBulletVolley(cnt)
+        if (ctx.keeperBurstShotsLeft <= 0) {
+          ctx.keeperBurstShotsLeft = 2
+          ctx.keeperBurstDelay = keeperIntraBurstDelay
+        } else {
+          ctx.keeperBurstShotsLeft -= 1
+          ctx.keeperBurstDelay = ctx.keeperBurstShotsLeft > 0 ? keeperIntraBurstDelay : keeperPostBurstDelay
+        }
+      }
+    } else if (ctx.shootTimer >= shootInterval) {
+      ctx.shootTimer = 0
+      if (isHolder && ctx.playerShip) {
       audioManager.playShipShoot('star_holder')
       const laserDmg = Math.round(
         game.upgrades.damage
@@ -1021,7 +1053,7 @@ function gameLoop(ticker: Ticker) {
         const angle = (i - (cnt - 1) / 2) * step
         spawnHolderLaser(ctx, game, ctx.playerShip.x, ctx.playerShip.y - 18, angle, laserDmg)
       }
-    } else if (isTracer && ctx.playerShip) {
+      } else if (isTracer && ctx.playerShip) {
       const crystalTargets = ctx.enemies
         .filter(e => e.kind === 'boss_cnox_sun')
         .flatMap(e => (e.sunEnergyCrystals ?? []).map(c => ({ x: c.x, y: c.y, enemy: undefined as Enemy | undefined })))
@@ -1060,7 +1092,7 @@ function gameLoop(ticker: Ticker) {
           tracerCurrent.push(sword)
         }
       }
-    } else if (isShooter && ctx.playerShip) {
+      } else if (isShooter && ctx.playerShip) {
       const cs = game.cardStats
       const mSpd = 6 * cs.shooterMissileSpdMult
       const missileDmg = Math.round(game.upgrades.damage * cs.shooterMissileDmgMult * (1 + cs.damageBonusPct / 100))
@@ -1095,16 +1127,8 @@ function gameLoop(ticker: Ticker) {
           })
         }
       }
-    } else {
-      audioManager.playShipShoot(isFaster ? 'star_faster' : 'star_keeper')
-      const perShotSpreadDeg = isFaster ? 1.35 : 3
-      const maxHalfAngle = Math.min(Math.PI * 12 / 180, (cnt - 1) * Math.PI * perShotSpreadDeg / 180)
-      const bulletSpeedMul = isFaster ? 1.45 : 1.15
-      const bulletVy = 8 * game.upgrades.bulletSpeed * bulletSpeedMul
-      for (let i = 0; i < cnt; i++) {
-        const norm = cnt > 1 ? (i - (cnt - 1) / 2) / ((cnt - 1) / 2) : 0
-        const vxDrift = Math.tan(norm * maxHalfAngle) * bulletVy
-        shoot((i - (cnt - 1) / 2) * 12, vxDrift, bulletSpeedMul)
+      } else {
+        fireStandardBulletVolley(cnt)
       }
     }
   }
@@ -4298,11 +4322,29 @@ function gameLoop(ticker: Ticker) {
   }
   for (let i = ctx.shooterMissiles.length - 1; i >= 0; i--) {
     const m = ctx.shooterMissiles[i]
-    const mm = m as typeof m & { mode?: 'missile' | 'tracer' | 'tracer_small'; hitCooldown?: number; life?: number; turnDelay?: number; lastHitEnemy?: Enemy; lastHitCooldown?: number }
+    const mm = m as typeof m & {
+      mode?: 'missile' | 'tracer' | 'tracer_small'
+      hitCooldown?: number
+      life?: number
+      turnDelay?: number
+      lastHitEnemy?: Enemy
+      lastHitCooldown?: number
+      recentHitEnemies?: Enemy[]
+      recentHitCooldowns?: number[]
+    }
     if (mm.mode === 'tracer' || mm.mode === 'tracer_small') {
       mm.hitCooldown = Math.max(0, (mm.hitCooldown ?? 0) - dt)
       mm.turnDelay = Math.max(0, (mm.turnDelay ?? 0) - dt)
       mm.lastHitCooldown = Math.max(0, (mm.lastHitCooldown ?? 0) - dt)
+      if (mm.recentHitEnemies && mm.recentHitCooldowns) {
+        for (let ri = mm.recentHitEnemies.length - 1; ri >= 0; ri--) {
+          mm.recentHitCooldowns[ri] = Math.max(0, (mm.recentHitCooldowns[ri] ?? 0) - dt)
+          if ((mm.recentHitCooldowns[ri] ?? 0) <= 0 || !ctx.enemies.includes(mm.recentHitEnemies[ri]!)) {
+            mm.recentHitEnemies.splice(ri, 1)
+            mm.recentHitCooldowns.splice(ri, 1)
+          }
+        }
+      }
       if ((mm.life ?? 9999) < 9999) {
         mm.life = Math.max(0, (mm.life ?? 0) - dt)
         if ((mm.life ?? 0) <= 0) {
@@ -4314,7 +4356,7 @@ function gameLoop(ticker: Ticker) {
 
       const isSmall = mm.mode === 'tracer_small'
       const isInertiaPhase = (mm.turnDelay ?? 0) > 0
-      const canPierceThrough = game.cardStats.tracerSwordPierce
+      const canPierceThrough = true
       let targetEnemy = m.targetEnemy && ctx.enemies.includes(m.targetEnemy) ? m.targetEnemy : undefined
       if (targetEnemy && !isSmall) tracerTakenTargets.add(targetEnemy)
       if (!targetEnemy && !isInertiaPhase) {
@@ -4484,6 +4526,8 @@ function gameLoop(ticker: Ticker) {
         if (!hitByPoint && !hitByTrace) continue
 
         if ((mm.hitCooldown ?? 0) > 0 && !hitByTrace) continue
+        const recentHitIdx = (mm.recentHitEnemies ?? []).findIndex(re => re === e)
+        if (recentHitIdx >= 0 && (mm.recentHitCooldowns?.[recentHitIdx] ?? 0) > 0) continue
         if (mm.lastHitEnemy === e && (mm.lastHitCooldown ?? 0) > 0) continue
 
         const executeHp = !isSmall && game.cardStats.tracerSwordExecutePct > 0 ? Math.round(e.maxHp * game.cardStats.tracerSwordExecutePct) : 0
@@ -4509,6 +4553,15 @@ function gameLoop(ticker: Ticker) {
 
         mm.lastHitEnemy = e
         mm.lastHitCooldown = 16
+        if (!mm.recentHitEnemies) mm.recentHitEnemies = []
+        if (!mm.recentHitCooldowns) mm.recentHitCooldowns = []
+        const markIdx = mm.recentHitEnemies.findIndex(re => re === e)
+        if (markIdx >= 0) {
+          mm.recentHitCooldowns[markIdx] = 16
+        } else {
+          mm.recentHitEnemies.push(e)
+          mm.recentHitCooldowns.push(16)
+        }
         if (!canPierceThrough) break
       }
 
@@ -4918,7 +4971,7 @@ watch(() => game.isPlaying, (val, old) => {
     ctx.starFasterSkillTimer = 0
     ctx.starFasterEnemySlowFactor = 1
     ctx.starFasterFireRateBoost = 1
-    ctx.shootTimer = 0; ctx.playerLaserDamageCd = 0; ctx.bossAttackLockTimer = 0; ctx.waveQueue = []; ctx.waveDispatchTimer = 0
+    ctx.shootTimer = 0; ctx.keeperBurstShotsLeft = 0; ctx.keeperBurstDelay = 0; ctx.playerLaserDamageCd = 0; ctx.bossAttackLockTimer = 0; ctx.waveQueue = []; ctx.waveDispatchTimer = 0
     ctx.waveIsClearing = false; ctx.stageClearTimer = 0; ctx.stageAnnouncePending = false
     ctx.gamePhase = 'intro'; ctx.introTimer = 0
     if (ctx.playerShip) {
