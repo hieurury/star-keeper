@@ -421,19 +421,25 @@ function buyShipUpgrade(key: ShipUpgradeKey) {
 
 const equippedArtifactsForSelectedShip = computed(() => game.equippedArtifacts[game.selectedShip] ?? [])
 
-function equippedArtifactCount(artifactId: string): number {
-  return equippedArtifactsForSelectedShip.value.filter(id => id === artifactId).length
+function isArtifactEquipped(artifactId: string): boolean {
+  return equippedArtifactsForSelectedShip.value.includes(artifactId)
 }
 
-function canEquipArtifact(artifactId: string): boolean {
+function canToggleArtifact(artifactId: string): boolean {
+  if (isArtifactEquipped(artifactId)) return true
   const slots = SHIP_ARTIFACT_SLOTS[game.selectedShip] ?? 1
   return game.ownedArtifacts.includes(artifactId)
-    && !equippedArtifactsForSelectedShip.value.includes(artifactId)
     && equippedArtifactsForSelectedShip.value.length < slots
 }
 
-function canUnequipArtifact(artifactId: string): boolean {
-  return equippedArtifactCount(artifactId) > 0
+function toggleArtifactEquip(artifactId: string): void {
+  if (!game.ownedArtifacts.includes(artifactId)) return
+  if (isArtifactEquipped(artifactId)) {
+    game.unequipArtifact(game.selectedShip, artifactId)
+    return
+  }
+  if (!canToggleArtifact(artifactId)) return
+  game.equipArtifact(game.selectedShip, artifactId)
 }
 
 function buyShip(id: ShipId) {
@@ -1250,19 +1256,13 @@ function onShipNameKey(e: KeyboardEvent) {
                     :disabled="game.playerCoins < art.cost"
                     @click="game.buyArtifact(art.id)"
                   >{{ game.playerCoins >= art.cost ? 'Mua' : 'Thiếu vàng' }}</button>
-                  <template v-else>
-                    <div class="artifact-equip-state">Đang trang bị: {{ equippedArtifactCount(art.id) }}</div>
-                    <button
-                      class="artifact-btn artifact-btn--equip"
-                      :disabled="!canEquipArtifact(art.id)"
-                      @click="game.equipArtifact(game.selectedShip, art.id)"
-                    >Trang bị</button>
-                    <button
-                      class="artifact-btn artifact-btn--unequip"
-                      :disabled="!canUnequipArtifact(art.id)"
-                      @click="game.unequipArtifact(game.selectedShip, art.id)"
-                    >Tháo</button>
-                  </template>
+                  <button
+                    v-else
+                    class="artifact-btn"
+                    :class="isArtifactEquipped(art.id) ? 'artifact-btn--unequip' : 'artifact-btn--equip'"
+                    :disabled="!canToggleArtifact(art.id)"
+                    @click="toggleArtifactEquip(art.id)"
+                  >{{ isArtifactEquipped(art.id) ? 'Tháo' : 'Trang bị' }}</button>
                 </div>
               </div>
             </div>
@@ -2851,11 +2851,6 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   color: #f1c40f;
 }
 .artifact-card__actions { display: flex; flex-direction: column; gap: 4px; width: 100%; margin-top: auto; }
-.artifact-equip-state {
-  font-family: var(--font-pixel);
-  font-size: 8px;
-  color: var(--color-text-dim);
-}
 .artifact-btn {
   font-family: var(--font-pixel);
   font-size: 9px;

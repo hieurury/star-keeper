@@ -80,55 +80,97 @@ export function activateNeutronVacuum(ctx: GameContext, game: GameStore): void {
   screenFlash(ctx, 0xffd700, 0.35, 300)
 }
 
-export function activateManaCoreOverload(ctx: GameContext, game: GameStore): void {
-  if (!ctx.playerShip || !ctx.app || !ctx.gameLayer) return
-  const blastRadius = 130
-  const blastDmg = Math.round(game.upgrades.damage * 0.5)
-  const ring = new Graphics()
-  ring.circle(0, 0, blastRadius).stroke({ color: 0x9933ff, width: 4, alpha: 0.9 })
-  ring.circle(0, 0, blastRadius).fill({ color: 0x6600cc, alpha: 0.12 })
-  ring.x = ctx.playerShip.x
-  ring.y = ctx.playerShip.y
-  ctx.gameLayer.addChild(ring)
-  screenFlash(ctx, 0x9933ff, 0.4, 350)
-  for (let i = ctx.enemies.length - 1; i >= 0; i--) {
-    const e = ctx.enemies[i]
+export function activateManaCoreOverload(ctx: GameContext, game: GameStore): boolean {
+  if (!ctx.playerShip || !ctx.app || !ctx.gameLayer) return false
+
+  let target = null as GameContext['enemies'][number] | null
+  let nearestD2 = Infinity
+  for (const e of ctx.enemies) {
     const dx = e.container.x - ctx.playerShip.x
     const dy = e.container.y - ctx.playerShip.y
-    if (Math.sqrt(dx * dx + dy * dy) <= blastRadius) {
-      e.hp = Math.max(0, e.hp - blastDmg)
-      updateDnoxFireHeat(e, blastDmg, ctx, game)
-      spawnDamageText(ctx, e.container.x, e.container.y - 10, blastDmg)
-      if (e.hp <= 0) killEnemy(ctx, game, e, i)
+    const d2 = dx * dx + dy * dy
+    if (d2 < nearestD2) {
+      nearestD2 = d2
+      target = e
     }
   }
+  if (!target) return false
+
+  const laserDmg = 100
+  const sx = ctx.playerShip.x
+  const sy = ctx.playerShip.y - 10
+  const tx = target.container.x
+  const ty = target.container.y
+  const aimDx = tx - sx
+  const aimDy = ty - sy
+  const aimLen = Math.sqrt(aimDx * aimDx + aimDy * aimDy) || 1
+  const dirX = aimDx / aimLen
+  const dirY = aimDy / aimLen
+  const beamLen = 1300
+  const ex = sx + dirX * beamLen
+  const ey = sy + dirY * beamLen
+  const hitHalfWidth = 24
+
+  screenFlash(ctx, 0xa14bff, 0.45, 240)
+
+  for (let i = ctx.enemies.length - 1; i >= 0; i--) {
+    const e = ctx.enemies[i]
+    const px = e.container.x - sx
+    const py = e.container.y - sy
+    const dot = px * dirX + py * dirY
+    if (dot < 0 || dot > beamLen) continue
+    const perpX = px - dot * dirX
+    const perpY = py - dot * dirY
+    const perpDist = Math.sqrt(perpX * perpX + perpY * perpY)
+    if (perpDist > hitHalfWidth) continue
+
+    e.hp = Math.max(0, e.hp - laserDmg)
+    updateDnoxFireHeat(e, laserDmg, ctx, game)
+    spawnDamageText(ctx, e.container.x, e.container.y - 14, laserDmg)
+    if (e.hp <= 0) killEnemy(ctx, game, e, i)
+  }
+
   for (const boss of ctx.enemies) {
     if (boss.kind !== 'boss_cnox_sun') continue
     const crystals = boss.sunEnergyCrystals ?? []
     for (let ci = crystals.length - 1; ci >= 0; ci--) {
       const c = crystals[ci]!
-      const dx = c.x - ctx.playerShip.x
-      const dy = c.y - ctx.playerShip.y
-      if (Math.sqrt(dx * dx + dy * dy) <= blastRadius) {
-        c.hp = Math.max(0, c.hp - blastDmg)
-        spawnDamageText(ctx, c.x, c.y - 14, blastDmg)
-        if (c.hp <= 0) {
-          if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
-          crystals.splice(ci, 1)
-        }
+      const px = c.x - sx
+      const py = c.y - sy
+      const dot = px * dirX + py * dirY
+      if (dot < 0 || dot > beamLen) continue
+      const perpX = px - dot * dirX
+      const perpY = py - dot * dirY
+      const perpDist = Math.sqrt(perpX * perpX + perpY * perpY)
+      if (perpDist > hitHalfWidth) continue
+
+      c.hp = Math.max(0, c.hp - laserDmg)
+      spawnDamageText(ctx, c.x, c.y - 14, laserDmg)
+      if (c.hp <= 0) {
+        if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
+        crystals.splice(ci, 1)
       }
     }
   }
-  let fadeAlpha = 0.9
-  const fadeFn = () => {
-    fadeAlpha -= 0.08
-    ring.alpha = Math.max(0, fadeAlpha)
-    if (fadeAlpha <= 0) {
-      if (!ring.destroyed) ctx.gameLayer.removeChild(ring)
-      ctx.app!.ticker.remove(fadeFn)
+
+  const beam = new Graphics()
+  ctx.gameLayer.addChild(beam)
+  let frame = 0
+  const beamFn = () => {
+    frame++
+    const t = frame / 12
+    const alpha = Math.max(0, 1 - t)
+    beam.clear()
+    beam.moveTo(sx, sy).lineTo(ex, ey).stroke({ color: 0xe7c8ff, width: 3, alpha: alpha * 0.95 })
+    beam.moveTo(sx, sy).lineTo(ex, ey).stroke({ color: 0xa14bff, width: 12, alpha: alpha * 0.42 })
+    if (frame >= 12) {
+      if (!beam.destroyed) ctx.gameLayer.removeChild(beam)
+      ctx.app?.ticker.remove(beamFn)
     }
   }
-  ctx.app!.ticker.add(fadeFn)
+  ctx.app.ticker.add(beamFn)
+
+  return true
 }
 
 export function activateSoulHarvest(ctx: GameContext, game: GameStore): void {

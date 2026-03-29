@@ -435,10 +435,10 @@ export interface ArtifactDef {
 }
 
 export const ALL_ARTIFACT_DEFS: ArtifactDef[] = [
-  { id: 'neutron_star', name: 'Sao Neutron',   icon: '⭐', cost: 2000, desc: '+20% EXP nhận được; mỗi 30 giây hút tất cả orb EXP về tàu' },
+  { id: 'neutron_star', name: 'Sao Neutron',   icon: '⭐', cost: 2000, desc: '+35% EXP nhận được; mỗi 20 giây hút tất cả orb EXP về tàu' },
   { id: 'carbon_core',  name: 'Lõi Cacbon',    icon: '🪨', cost: 2000, desc: '-10% sát thương nhận; mỗi lần lên cấp +5 HP tối đa' },
-  { id: 'stardust',     name: 'Bùa Bụi Sao',  icon: '✨', cost: 1000, desc: '+10% tốc độ bay; +10% sát thương' },
-  { id: 'mana_core',    name: 'Lõi Mana',      icon: '💠', cost: 3500, desc: '+1 đạn (vượt giới hạn); mỗi 10 tiêu diệt → nổ diện rộng' },
+  { id: 'stardust',     name: 'Bùa Bụi Sao',  icon: '✨', cost: 1000, desc: '+10% tốc bắn; +10% sát thương' },
+  { id: 'mana_core',    name: 'Lõi Mana',      icon: '💠', cost: 3500, desc: '+1 đạn (vượt giới hạn); mỗi 10 tiêu diệt bắn tia laser xuyên thẳng gây 100 sát thương' },
 ]
 
 export type ShipId = 'star_keeper' | 'star_holder' | 'star_shooter' | 'star_faster' | 'thien_ha_truy'
@@ -1233,10 +1233,11 @@ export const useGameStore = defineStore('game', () => {
   const artifactStats = computed(() => {
     const equipped = equippedArtifacts.value[selectedShip.value] ?? []
     return {
-      expMult:               equipped.includes('neutron_star') ? 1.2 : 1.0,
+      expMult:               equipped.includes('neutron_star') ? 1.35 : 1.0,
       damageTakenReduction:  equipped.includes('carbon_core')  ? 0.1 : 0,
       hpPerLevel:            equipped.includes('carbon_core')  ? 5   : 0,
-      speedBonus:            equipped.includes('stardust')     ? 0.1 : 0,
+      speedBonus:            0,
+      fireRateBonus:         equipped.includes('stardust')     ? 0.1 : 0,
       damageBonus:           equipped.includes('stardust')     ? 0.1 : 0,
       extraBullet:           equipped.includes('mana_core')    ? 1   : 0,
       neutronVacuumActive:   equipped.includes('neutron_star'),
@@ -1777,8 +1778,15 @@ export const useGameStore = defineStore('game', () => {
   function equipArtifact(shipId: string, artifactId: string) {
     if (!ownedArtifacts.value.includes(artifactId)) return
     const slots = SHIP_ARTIFACT_SLOTS[shipId] ?? 1
-    const current = equippedArtifacts.value[shipId] ?? []
-    if (current.includes(artifactId)) return
+    const currentRaw = equippedArtifacts.value[shipId] ?? []
+    const current = [...new Set(currentRaw)]
+    if (current.includes(artifactId)) {
+      if (currentRaw.length !== current.length) {
+        equippedArtifacts.value = { ...equippedArtifacts.value, [shipId]: current.slice(0, slots) }
+        saveProgress()
+      }
+      return
+    }
     if (current.length >= slots) return
     equippedArtifacts.value = { ...equippedArtifacts.value, [shipId]: [...current, artifactId] }
     saveProgress()

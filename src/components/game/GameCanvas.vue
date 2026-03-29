@@ -669,18 +669,20 @@ function gameLoop(ticker: Ticker) {
 
   // Neutron Star vacuum timer
   if (game.artifactStats.neutronVacuumActive) {
+    const cooldownFactor = Math.max(0.35, 1 - game.cardStats.cdReductionPct)
+    const neutronCooldownSec = 20 * cooldownFactor
     ctx.neutronVacuumTimer += dt / 60
-    if (ctx.neutronVacuumTimer >= 30) {
+    if (ctx.neutronVacuumTimer >= neutronCooldownSec) {
       ctx.neutronVacuumTimer = 0
       activateNeutronVacuum(ctx, game)
     }
-    game.neutronVacuumPct = ctx.neutronVacuumTimer / 30
+    game.neutronVacuumPct = Math.min(1, ctx.neutronVacuumTimer / neutronCooldownSec)
   }
 
-  // Mana core overload (set by killEnemy via flag to avoid circular dep)
+  // Mana core laser trigger (stays charged until there is at least one target)
   if (ctx.manaCoreOverloadPending) {
-    ctx.manaCoreOverloadPending = false
-    activateManaCoreOverload(ctx, game)
+    const didFire = activateManaCoreOverload(ctx, game)
+    if (didFire) ctx.manaCoreOverloadPending = false
   }
 
   // Artifact gfx orbit ship (supports multiple equipped cores)
@@ -1007,7 +1009,7 @@ function gameLoop(ticker: Ticker) {
   ctx.shootTimer += dt
   const baseShootInterval = isHolder ? 60 : (isShooter ? 160 : (isTracer ? 18 : (isFaster ? 12 : 18)))
   const shootCount = isShooter ? effectiveMissileCount : effectiveBulletCount
-  const shootInterval = (baseShootInterval / Math.sqrt(shootCount)) / ((1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100) * game.selectedShipFireRateMult * starFasterFireBoost)
+  const shootInterval = (baseShootInterval / Math.sqrt(shootCount)) / ((1 + game.permUpgrades.fireRate * 0.15 + game.cardStats.arsenalFireRatePct / 100 + game.cardStats.turboFireRatePct / 100 + game.artifactStats.fireRateBonus) * game.selectedShipFireRateMult * starFasterFireBoost)
   const fireStandardBulletVolley = (cnt: number) => {
     audioManager.playShipShoot(isFaster ? 'star_faster' : 'star_keeper')
     const perShotSpreadDeg = isFaster ? 1.35 : 3
@@ -4889,7 +4891,7 @@ function destroyPixi() {
   ctx.bullets = []; ctx.allyDrones = []; ctx.enemies = []; ctx.enemyBullets = []; ctx.stars = []
   ctx.damageTexts = []; ctx.expOrbs = []; ctx.expCollectParticles = []; ctx.fragmentOrbs = []; ctx.fragmentMissiles = []
   ctx.soulMissileQueue = 0; ctx.soulMissileFireTimer = 0
-  ctx.neutronVacuumTimer = 0; ctx.manaCoreKillCount = 0; ctx.artifactOrbitAngle = 0
+  ctx.neutronVacuumTimer = 0; ctx.manaCoreKillCount = 0; ctx.manaCoreOverloadPending = false; ctx.artifactOrbitAngle = 0
   ctx.artifactGfx = null
   ctx.artifactGfxList = []
   game.neutronVacuumPct = 0; game.manaCorePct = 0
