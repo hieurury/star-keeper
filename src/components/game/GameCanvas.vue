@@ -1066,6 +1066,7 @@ function gameLoop(ticker: Ticker) {
         ...enemyTargets.map(e => ({ x: e.container.x, y: e.container.y, enemy: e as Enemy | undefined })),
       ]
       if (orderedTargets.length > 0) {
+        audioManager.playShipShoot('thien_ha_truy')
         const tracerCurrent = ctx.shooterMissiles.filter(m => (m as typeof m & { mode?: string }).mode === 'tracer')
         while (tracerCurrent.length < tracerSwordCount) {
           const mg = new Graphics()
@@ -4065,6 +4066,7 @@ function gameLoop(ticker: Ticker) {
               if (!c.gfx.destroyed) ctx.gameLayer.removeChild(c.gfx)
               crystals.splice(ci, 1)
             }
+            if (isKeeper || isFaster) audioManager.playShipHit('star_keeper')
             if (!b.gfx.destroyed) ctx.gameLayer.removeChild(b.gfx)
             ctx.bullets.splice(j, 1)
             hitCrystal = true
@@ -4141,6 +4143,7 @@ function gameLoop(ticker: Ticker) {
         spawnDamageText(ctx, e.container.x, e.container.y - dmgOffY, effectiveDmg)
         hitFlash(e.body)
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
+        if (isKeeper || isFaster) audioManager.playShipHit('star_keeper')
 
         if (game.cardStats.bulletPierceOnKill && !isBoss) {
           bullet.pierceDmgMult = (bullet.pierceDmgMult ?? 1) * 0.75
@@ -4568,6 +4571,7 @@ function gameLoop(ticker: Ticker) {
       }
 
       if (hitAny) {
+        if (!isSmall) audioManager.playShipHit('thien_ha_truy')
         mm.hitCooldown = 9
       }
 

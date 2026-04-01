@@ -1460,17 +1460,26 @@ function onShipNameKey(e: KeyboardEvent) {
             <div class="audio-row">
               <label class="audio-toggle" for="audio-enabled">
                 <span class="audio-toggle__label"><PhSpeakerHigh :size="13" weight="bold" /> Bật âm thanh</span>
-                <input id="audio-enabled" type="checkbox" :checked="game.audioSettings.enabled" @change="setAudioEnabled(($event.target as HTMLInputElement).checked)" />
+                <span class="audio-switch">
+                  <input id="audio-enabled" type="checkbox" :checked="game.audioSettings.enabled" @change="setAudioEnabled(($event.target as HTMLInputElement).checked)" />
+                  <span class="audio-switch__track"></span>
+                </span>
               </label>
 
               <label class="audio-toggle" for="audio-music">
                 <span class="audio-toggle__label"><PhMusicNotes :size="13" weight="bold" /> Nhạc nền</span>
-                <input id="audio-music" type="checkbox" :checked="game.audioSettings.musicEnabled" :disabled="!game.audioSettings.enabled" @change="setMusicEnabled(($event.target as HTMLInputElement).checked)" />
+                <span class="audio-switch">
+                  <input id="audio-music" type="checkbox" :checked="game.audioSettings.musicEnabled" :disabled="!game.audioSettings.enabled" @change="setMusicEnabled(($event.target as HTMLInputElement).checked)" />
+                  <span class="audio-switch__track"></span>
+                </span>
               </label>
 
               <label class="audio-toggle" for="audio-sfx">
                 <span class="audio-toggle__label"><PhSpeakerSlash :size="13" weight="bold" /> Hiệu ứng</span>
-                <input id="audio-sfx" type="checkbox" :checked="game.audioSettings.sfxEnabled" :disabled="!game.audioSettings.enabled" @change="setSfxEnabled(($event.target as HTMLInputElement).checked)" />
+                <span class="audio-switch">
+                  <input id="audio-sfx" type="checkbox" :checked="game.audioSettings.sfxEnabled" :disabled="!game.audioSettings.enabled" @change="setSfxEnabled(($event.target as HTMLInputElement).checked)" />
+                  <span class="audio-switch__track"></span>
+                </span>
               </label>
             </div>
 
@@ -3334,9 +3343,57 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   align-items: center;
   gap: 6px;
 }
-.audio-toggle input[type="checkbox"] {
+.audio-switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+.audio-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+.audio-switch__track {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+.audio-switch__track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
   width: 14px;
   height: 14px;
+  border-radius: 50%;
+  background: #8c9bb1;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+.audio-switch input:checked + .audio-switch__track {
+  background: rgba(0, 210, 255, 0.24);
+  border-color: rgba(0, 210, 255, 0.86);
+}
+.audio-switch input:checked + .audio-switch__track::after {
+  transform: translateX(16px);
+  background: #7ee6ff;
+}
+.audio-switch input:focus-visible + .audio-switch__track {
+  box-shadow: 0 0 0 2px rgba(126, 230, 255, 0.28);
+}
+.audio-switch input:disabled {
+  cursor: not-allowed;
+}
+.audio-switch input:disabled + .audio-switch__track {
+  opacity: 0.5;
 }
 .audio-slider-wrap {
   background: rgba(0, 0, 0, 0.2);

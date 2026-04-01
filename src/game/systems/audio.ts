@@ -20,7 +20,15 @@ const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 
-type ShipAudioId = 'star_keeper' | 'star_holder' | 'star_shooter' | 'star_faster'
+type ShipAudioId = 'star_keeper' | 'star_holder' | 'star_shooter' | 'star_faster' | 'thien_ha_truy'
+type ManagedSfxAudio = HTMLAudioElement & { __baseGain?: number }
+
+interface ShipSfxConfig {
+  src: string
+  gain: number
+  cooldownMs: number
+  playbackRateJitter?: number
+}
 
 class AudioManager {
   private lobbyTrack: HTMLAudioElement | null = null
@@ -39,6 +47,8 @@ class AudioManager {
   private lobbyHandlersBound = false
   private gameHandlersBound = false
   private bossHandlersBound = false
+  private readonly activeSfx = new Set<ManagedSfxAudio>()
+  private readonly sfxLastPlayedAt = new Map<string, number>()
 
   private settings: AudioSettings = { ...DEFAULT_AUDIO_SETTINGS }
 
@@ -54,9 +64,67 @@ class AudioManager {
   private readonly LOBBY_OUTRO_MS = 680
   private readonly LOBBY_GAP_MS = 340
   private readonly LOBBY_INTRO_MS = 620
+  private readonly MAX_SFX_VOICES = 14
+
+  private readonly SHIP_SHOT_SFX: Partial<Record<ShipAudioId, ShipSfxConfig>> = {
+    star_keeper: {
+      src: '/audio/soundEffects/starKeeper/shot-cue.flac',
+      gain: 0.48,
+      cooldownMs: 48,
+      playbackRateJitter: 0.03,
+    },
+    star_faster: {
+      src: '/audio/soundEffects/starKeeper/shot-cue.flac',
+      gain: 0.38,
+      cooldownMs: 36,
+      playbackRateJitter: 0.05,
+    },
+    star_shooter: {
+      src: '/audio/soundEffects/starShooter/shot-cue.flac',
+      gain: 0.5,
+      cooldownMs: 72,
+      playbackRateJitter: 0.04,
+    },
+    thien_ha_truy: {
+      src: '/audio/soundEffects/ThienHaTruy/shot-cue.flac',
+      gain: 0.34,
+      cooldownMs: 72,
+      playbackRateJitter: 0.04,
+    },
+  }
+
+  private readonly SHIP_HIT_SFX: Partial<Record<ShipAudioId, ShipSfxConfig>> = {
+    star_keeper: {
+      src: '/audio/soundEffects/starKeeper/hit-cue.flac',
+      gain: 0.68,
+      cooldownMs: 22,
+      playbackRateJitter: 0.03,
+    },
+    star_faster: {
+      src: '/audio/soundEffects/starKeeper/hit-cue.flac',
+      gain: 0.58,
+      cooldownMs: 20,
+      playbackRateJitter: 0.04,
+    },
+    thien_ha_truy: {
+      src: '/audio/soundEffects/ThienHaTruy/hit-cue.flac',
+      gain: 0.74,
+      cooldownMs: 26,
+      playbackRateJitter: 0.05,
+    },
+  }
 
   private canPlayMusic(): boolean {
     return this.settings.enabled && this.settings.musicEnabled
+  }
+
+  private canPlaySfx(): boolean {
+    return this.settings.enabled && this.settings.sfxEnabled
+  }
+
+  private getSfxBaseGain(): number {
+    if (!this.canPlaySfx()) return 0
+    return clamp01(this.settings.masterVolume * this.settings.sfxVolume)
   }
 
   private armUnlockRetry() {
@@ -80,6 +148,7 @@ class AudioManager {
     const master = this.settings.enabled ? this.settings.masterVolume : 0
     const music = this.canPlayMusic() ? this.settings.musicVolume : 0
     const base = clamp01(master * music)
+    const sfxBase = this.getSfxBaseGain()
 
     if (this.lobbyTrack) {
       this.lobbyTrack.volume = clamp01(base * this.lobbyGainFactor)
@@ -94,6 +163,63 @@ class AudioManager {
     if (this.bossTrack) {
       this.bossTrack.volume = clamp01(base * this.bossGainFactor)
       this.bossTrack.muted = !this.canPlayMusic()
+    }
+
+    for (const sfx of this.activeSfx) {
+      sfx.volume = clamp01((sfx.__baseGain ?? 1) * sfxBase)
+      sfx.muted = !this.canPlaySfx()
+    }
+  }
+
+  private shouldThrottleSfx(key: string, cooldownMs: number): boolean {
+    const now = Date.now()
+    const last = this.sfxLastPlayedAt.get(key) ?? 0
+    if (cooldownMs > 0 && now - last < cooldownMs) return true
+    this.sfxLastPlayedAt.set(key, now)
+    return false
+  }
+
+  private trimSfxVoices() {
+    while (this.activeSfx.size >= this.MAX_SFX_VOICES) {
+      const oldest = this.activeSfx.values().next().value
+      if (!oldest) break
+      oldest.pause()
+      this.activeSfx.delete(oldest)
+    }
+  }
+
+  private playSfx(config: ShipSfxConfig) {
+    if (typeof Audio === 'undefined' || !this.canPlaySfx()) return
+    const sfxBase = this.getSfxBaseGain()
+    if (sfxBase <= 0) return
+
+    this.trimSfxVoices()
+
+    const audio = new Audio(config.src) as ManagedSfxAudio
+    audio.preload = 'auto'
+    audio.__baseGain = clamp01(config.gain)
+    audio.volume = clamp01(audio.__baseGain * sfxBase)
+
+    if ((config.playbackRateJitter ?? 0) > 0) {
+      const jitter = config.playbackRateJitter!
+      audio.playbackRate = Math.max(0.86, Math.min(1.2, 1 + (Math.random() * 2 - 1) * jitter))
+    }
+
+    this.activeSfx.add(audio)
+
+    const cleanup = () => {
+      this.activeSfx.delete(audio)
+      audio.removeEventListener('ended', cleanup)
+      audio.removeEventListener('error', cleanup)
+    }
+    audio.addEventListener('ended', cleanup)
+    audio.addEventListener('error', cleanup)
+
+    const playPromise = audio.play()
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        cleanup()
+      })
     }
   }
 
@@ -457,7 +583,19 @@ class AudioManager {
 
   playBossAlert() {}
 
-  playShipShoot(_shipId: ShipAudioId) {}
+  playShipShoot(shipId: ShipAudioId) {
+    const config = this.SHIP_SHOT_SFX[shipId] ?? this.SHIP_SHOT_SFX.star_keeper
+    if (!config) return
+    if (this.shouldThrottleSfx(`ship_shot:${shipId}`, config.cooldownMs)) return
+    this.playSfx(config)
+  }
+
+  playShipHit(shipId: ShipAudioId) {
+    const config = this.SHIP_HIT_SFX[shipId]
+    if (!config) return
+    if (this.shouldThrottleSfx(`ship_hit:${shipId}`, config.cooldownMs)) return
+    this.playSfx(config)
+  }
 }
 
 export const audioManager = new AudioManager()
