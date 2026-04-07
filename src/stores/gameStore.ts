@@ -4,6 +4,8 @@ import { UPDATE_NOTICES } from '../content/updateNotices'
 import type { EnemyKind } from '../game/types'
 import { audioManager, DEFAULT_AUDIO_SETTINGS, type AudioSettings } from '../game/systems/audio'
 import { queueMirrorSave, readMirrorSave } from '../game/systems/saveFileMirror'
+import { pushSave, pullSave, resolveConflict, ensureProfile } from '../lib/syncService'
+import { isOnline, onReconnect } from '../lib/networkStatus'
 
 export const ALL_ENEMY_KINDS: EnemyKind[] = [
   'pioneer',
@@ -1154,6 +1156,17 @@ export const useGameStore = defineStore('game', () => {
     return stats
   })
 
+  // ─── Sync state ────────────────────────────────────────────────────────────────
+  /** True khi có thay đổi chưa được đồng bộ lên Supabase */
+  const pendingSync = ref(false)
+  /** Thời điểm client lần cuối lưu (ISO string), dùng cho conflict resolution */
+  const saveUpdatedAt = ref<string | null>(null)
+
+  // Reconnect → tự động push pending save
+  onReconnect(() => {
+    if (pendingSync.value) void pushToSupabase()
+  })
+
   // Skill: Sóng tầm nhiệt huỷ diệt (Star Keeper) / Thu thập linh hồn (Star Holder)
   const skillCooldown = ref(0)          // giây còn lại (0 = sẵn sàng) — chỉ dùng cho star_keeper
   const skillActivationPending = ref(false) // GameCanvas tiêu thụ flag này
@@ -2031,6 +2044,55 @@ export const useGameStore = defineStore('game', () => {
     const serialized = JSON.stringify(envelope)
     localStorage.setItem(SAVE_KEY, serialized)
     queueMirrorSave(serialized)
+    // Ghi timestamp để dùng cho conflict resolution
+    saveUpdatedAt.value = new Date().toISOString()
+    // Push lên Supabase nếu online, nếu không thì đặt cờ pendingSync
+    void pushToSupabase()
+  }
+
+  /** Push dữ liệu save hiện tại lên Supabase (nội bộ hoặc khi liên kết). */
+  async function pushToSupabase(): Promise<void> {
+    // Import inline để tránh circular dependency với authStore
+    const { useAuthStore } = await import('./authStore')
+    const auth = useAuthStore()
+    if (!auth.isLoggedIn || !auth.userId) { pendingSync.value = true; return }
+    if (!isOnline.value) { pendingSync.value = true; return }
+    const saved = localStorage.getItem(SAVE_KEY)
+    if (!saved) return
+    let payload: Record<string, unknown>
+    try { payload = (JSON.parse(saved) as { payload: Record<string, unknown> }).payload } catch { return }
+    const ok = await pushSave(auth.userId, SAVE_VERSION, payload)
+    if (ok) {
+      pendingSync.value = false
+      void ensureProfile(auth.userId, username.value, avatarId.value)
+    } else {
+      pendingSync.value = true
+    }
+  }
+
+  /** Pull dữ liệu từ Supabase và merge nếu cần (gọi khi startup). */
+  async function pullFromSupabase(): Promise<void> {
+    const { useAuthStore } = await import('./authStore')
+    const auth = useAuthStore()
+    if (!auth.isLoggedIn || !auth.userId) return
+    if (!isOnline.value) return
+    const remote = await pullSave(auth.userId)
+    if (!remote) return
+    const decision = resolveConflict(saveUpdatedAt.value, SAVE_VERSION, remote)
+    if (decision === 'remote') {
+      // Áp dụng dữ liệu từ server
+      const remotePayload = remote.payload
+      // Backup local trước
+      const localSaved = localStorage.getItem(SAVE_KEY)
+      if (localSaved) localStorage.setItem(SAVE_BACKUP_KEY, localSaved)
+      _applyDataToStore(remotePayload)
+      if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
+      saveProgress()
+      console.info('[Sync] Đã tải dữ liệu từ cloud (server mới hơn local).')
+    } else if (decision === 'local') {
+      // Local mới hơn → push lên server
+      void pushToSupabase()
+    }
   }
 
   function _applyDataToStore(data: Record<string, unknown>) {
@@ -2186,12 +2248,15 @@ export const useGameStore = defineStore('game', () => {
     if (!loaded) {
       void tryRecoverFromMirrorFile().finally(() => {
         generateDailyMissions()
+        void pullFromSupabase()
       })
       return
     }
 
     // Refresh/generate today's missions after loading
     generateDailyMissions()
+    // Đồng bộ từ Supabase sau khi load local xong
+    void pullFromSupabase()
   }
 
   /** Xuất dữ liệu game ra file JSON để người dùng tự bảo quản. */
@@ -2363,6 +2428,10 @@ export const useGameStore = defineStore('game', () => {
     exportSave,
     importSave,
     updateAudioSettings,
+    // Supabase sync
+    pendingSync,
+    pullFromSupabase,
+    pushToSupabase,
     // Test mode
     testMode,
   }

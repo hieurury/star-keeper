@@ -7,6 +7,7 @@ import { registerSW } from 'virtual:pwa-register'
 import { Capacitor } from '@capacitor/core'
 import { useUiStore } from './stores/uiStore'
 import { audioManager } from './game/systems/audio'
+import { useAuthStore } from './stores/authStore'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -42,3 +43,7 @@ if (!Capacitor.isNativePlatform()) {
 }
 
 app.mount('#app')
+
+// Khôi phục phiên đăng nhập Supabase sau khi app mount
+const authStore = useAuthStore(pinia)
+void authStore.restoreSession()

@@ -30,11 +30,14 @@ import {
   PhBell, PhSpeakerHigh, PhSpeakerSlash, PhMusicNotes,
   PhTreasureChest,
   PhBookOpen,
+  PhUserCircle, PhCloudArrowUp, PhSignOut
 } from '@phosphor-icons/vue'
 import { audioManager } from '../game/systems/audio'
+import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
 const game = useGameStore()
+const auth = useAuthStore()
 
 const AVATARS = ['PhRocketLaunch', 'PhAirplaneTilt', 'PhLightning', 'PhFire', 'PhPlanet', 'PhStar']
 
@@ -1454,7 +1457,42 @@ function onShipNameKey(e: KeyboardEvent) {
             <button class="sheet-close" @click="showSettingsPanel = false"><PhX :size="14" /></button>
           </div>
           <div class="ships-scroll" style="padding: 20px 16px 32px;">
-            <div class="settings-section-label">ÂM THANH</div>
+            <!-- Tài khoản & Đồng bộ -->
+            <div class="settings-section">
+              <h3 class="settings-section__title" style="display:flex;align-items:center;gap:6px;font-family:var(--font-pixel);font-size:11px;color:var(--color-accent);margin-bottom:8px;"><PhUserCircle :size="18"/> TÀI KHOẢN & ĐỒNG BỘ</h3>
+              <div class="settings-auth-card">
+                <template v-if="auth.isLoggedIn">
+                  <div class="auth-status logged-in">
+                    <div class="status-icon">✅</div>
+                    <div class="status-info">
+                      <div class="status-title">Đã kết nối</div>
+                      <div class="status-email">{{ auth.userEmail }}</div>
+                    </div>
+                  </div>
+                  <div class="auth-sync-status">
+                    <span v-if="game.pendingSync" class="sync-pending">⏳ Đang chờ đồng bộ...</span>
+                    <span v-else class="sync-done">☁ Đã đồng bộ lên Cloud</span>
+                  </div>
+                  <button class="btn-cancel btn-logout" style="width:100%;padding:10px;display:flex;align-items:center;justify-content:center;border-radius:8px;" @click="auth.logout()">
+                    <PhSignOut :size="18" style="margin-right:6px;" /> Đăng xuất
+                  </button>
+                </template>
+                <template v-else-if="auth.isGuest">
+                  <div class="auth-status guest">
+                    <div class="status-icon">👤</div>
+                    <div class="status-info">
+                      <div class="status-title">Chơi Khách (Guest)</div>
+                      <div class="status-desc">Dữ liệu chỉ lưu trên thiết bị này.</div>
+                    </div>
+                  </div>
+                  <button class="btn-guest btn-link-account" style="padding:10px;border-radius:8px;font-family:'Chakra Petch';" @click="$router.push('/auth')">
+                    <PhCloudArrowUp :size="18" /> Liên kết tài khoản
+                  </button>
+                </template>
+              </div>
+            </div>
+
+            <div class="settings-section-label" style="margin-top:24px;">ÂM THANH</div>
             <div class="settings-desc">Điều chỉnh nhạc nền và hiệu ứng theo ý bạn. Cài đặt sẽ được lưu tự động.</div>
 
             <div class="audio-row">
@@ -2490,6 +2528,64 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   background: var(--color-panel-dark);
   border: 2px solid var(--color-border-dark);
   padding: 8px 10px;
+}
+/* ─── Settings Auth UI ─────────────────────────────────────────────────── */
+.settings-auth-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 15px;
+}
+.auth-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.auth-status .status-icon {
+  font-size: 24px;
+  background: rgba(0,0,0,0.2);
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.auth-status.logged-in .status-icon { color: #68d391; }
+.status-info { flex: 1; }
+.status-title {
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+}
+.status-email, .status-desc {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  margin-top: 2px;
+}
+.auth-sync-status {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  margin-bottom: 12px;
+  text-align: right;
+}
+.sync-pending { color: #f6ad55; }
+.sync-done { color: #68d391; }
+.btn-logout { background: rgba(229, 62, 62, 0.2); color: #fc8181; border: 1px solid rgba(229, 62, 62, 0.3); }
+.btn-logout:hover { background: rgba(229, 62, 62, 0.3); }
+.btn-link-account { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+.core-detail-lv {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: #f1c40f;
+  min-width: 24px;
+  flex-shrink: 0;
+  padding-top: 1px;
 }
 .core-detail-lv-badge {
   font-family: var(--font-pixel);
