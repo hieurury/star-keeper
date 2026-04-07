@@ -74,7 +74,7 @@ class AudioManager {
       playbackRateJitter: 0.03,
     },
     star_faster: {
-      src: '/audio/soundEffects/starKeeper/shot-cue.flac',
+      src: '/audio/soundEffects/starFaster/shot-cue.wav',
       gain: 0.38,
       cooldownMs: 36,
       playbackRateJitter: 0.05,

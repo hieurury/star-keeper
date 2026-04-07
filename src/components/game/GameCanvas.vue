@@ -1066,9 +1066,13 @@ function gameLoop(ticker: Ticker) {
         ...enemyTargets.map(e => ({ x: e.container.x, y: e.container.y, enemy: e as Enemy | undefined })),
       ]
       if (orderedTargets.length > 0) {
-        audioManager.playShipShoot('thien_ha_truy')
         const tracerCurrent = ctx.shooterMissiles.filter(m => (m as typeof m & { mode?: string }).mode === 'tracer')
+        let playedShotCue = false
         while (tracerCurrent.length < tracerSwordCount) {
+          if (!playedShotCue) {
+            audioManager.playShipShoot('thien_ha_truy')
+            playedShotCue = true
+          }
           const mg = new Graphics()
           drawTracerSword(mg, 'main')
           const idx = tracerCurrent.length
