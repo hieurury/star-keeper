@@ -2,12 +2,12 @@
   <div class="auth-view">
     <div class="auth-card">
       <div v-if="!authStore.hasChosen" class="auth-header">
-        <div class="game-logo">✦ BẮN MÁY BAY ✦</div>
+        <div class="game-logo">✦ STAR KEEPER ✦</div>
         <h1 class="auth-title">Chào Mừng Phi Công</h1>
         <p class="auth-subtitle">Chọn chế độ trải nghiệm của bạn</p>
       </div>
       <div v-else class="auth-header">
-        <div class="game-logo">✦ BẮN MÁY BAY ✦</div>
+        <div class="game-logo">✦ STAR KEEPER ✦</div>
         <h1 class="auth-title">Xác Thực</h1>
         <p class="auth-subtitle">Tham gia Liên Minh để bảo vệ thiên hà!</p>
       </div>
@@ -21,15 +21,9 @@
         <div class="guest-tip">Lưu dữ liệu cục bộ trên máy. Có thể thêm tài khoản sau.</div>
         <button class="btn-guest" @click="goAsGuest">
           <svg width="20" height="20" viewBox="0 0 256 256" fill="currentColor"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM128,80a32,32,0,1,0,32,32A32,32,0,0,0,128,80Zm0,48a16,16,0,1,1,16-16A16,16,0,0,1,128,128Zm64,64a8,8,0,0,1-16,0,48,48,0,0,0-96,0,8,8,0,0,1-16,0,64.07,64.07,0,0,1,128,0Z"></path></svg>
-          <span style="font-size: 1.1rem; font-weight: bold; margin-left:8px;">Bắt Đầu Chơi (Khách)</span>
+          <span>Bắt Đầu Chơi (Khách)</span>
         </button>
         <div class="divider"><span>HOẶC LƯU TRỮ ĐÁM MÂY</span></div>
-      </div>
-
-      <!-- Auth Khối -->
-      <div class="auth-tabs">
-        <button :class="['tab-btn', { active: mode === 'login' }]" @click="mode = 'login'">Đăng nhập</button>
-        <button :class="['tab-btn', { active: mode === 'register' }]" @click="mode = 'register'">Đăng ký mới</button>
       </div>
 
       <button class="btn-google" :disabled="authStore.isLoading" @click="authStore.loginWithGoogle()">
@@ -41,27 +35,10 @@
         </svg>
         Tiếp tục với Google
       </button>
-
-      <div class="divider"><span>hoặc Email</span></div>
-
-      <form class="auth-form" @submit.prevent="handleEmailSubmit">
-        <div class="form-group">
-          <label for="auth-email">Email</label>
-          <input id="auth-email" v-model="email" type="email" placeholder="phi-cong@email.com" autocomplete="email" required />
-        </div>
-        <div class="form-group">
-          <label for="auth-password">Mật khẩu</label>
-          <input id="auth-password" v-model="password" type="password" placeholder="••••••••" autocomplete="current-password" required minlength="6" />
-        </div>
-        <button type="submit" class="btn-primary" :disabled="authStore.isLoading">
-          <span v-if="authStore.isLoading">⏳ Đang xử lý...</span>
-          <span v-else>{{ mode === 'login' ? '→ Đăng nhập' : '→ Tạo tài khoản' }}</span>
-        </button>
-      </form>
       
       <!-- Nút Hủy liên kết (trở về form cài đặt nếu vào từ UI đã đăng nhập) -->
       <button v-if="authStore.hasChosen" class="btn-cancel" @click="$router.push('/')">
-        Thoát Cài Đặt Auth
+        Tiếp tục với tài khoản khách
       </button>
 
     </div>
@@ -69,26 +46,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
 const authStore = useAuthStore()
-
-const mode = ref<'login' | 'register'>('login')
-const email = ref('')
-const password = ref('')
-
-async function handleEmailSubmit() {
-  let ok = false
-  if (mode.value === 'login') {
-    ok = await authStore.loginWithEmail(email.value, password.value)
-  } else {
-    ok = await authStore.registerWithEmail(email.value, password.value)
-  }
-  if (ok) router.push('/')
-}
 
 function goAsGuest() {
   authStore.setGuestMode()
@@ -97,202 +59,238 @@ function goAsGuest() {
 </script>
 
 <style scoped>
+@keyframes tech-pulse {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(0, 212, 255, 0.4)); }
+  50% { filter: drop-shadow(0 0 16px rgba(0, 212, 255, 0.8)); }
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
 .auth-view {
   min-height: 100vh;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at 50% 30%, #0d1b3e 0%, #060b1a 70%);
+  background:
+    linear-gradient(rgba(0, 160, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 160, 255, 0.04) 1px, transparent 1px),
+    radial-gradient(circle at 50% 50%, rgba(10, 20, 40, 0.2), rgba(2, 4, 10, 0.95) 80%),
+    #050814;
+  background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%;
   padding: 1rem;
 }
 
-.auth-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  padding: 2.5rem 2rem;
-  width: 100%;
-  max-width: 440px;
-  backdrop-filter: blur(20px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+.auth-view::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: rgba(0, 212, 255, 0.5);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.8);
+  filter: blur(2px);
+  animation: scanline 6s linear infinite;
+  pointer-events: none;
+  z-index: 10;
 }
 
-.auth-header { text-align: center; margin-bottom: 2rem; }
+.auth-card {
+  position: relative;
+  background: rgba(4, 10, 25, 0.6);
+  width: 100%;
+  max-width: 520px;
+  padding: 3.5rem 3rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.8), inset 0 0 40px rgba(0, 160, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.auth-card::before, .auth-card::after {
+  content: '';
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-color: rgba(0, 212, 255, 0.8);
+  border-style: solid;
+  pointer-events: none;
+}
+.auth-card::before {
+  top: -1px; left: -1px;
+  border-width: 3px 0 0 3px;
+  box-shadow: inset 2px 2px 8px rgba(0, 212, 255, 0.2);
+}
+.auth-card::after {
+  bottom: -1px; right: -1px;
+  border-width: 0 3px 3px 0;
+  box-shadow: inset -2px -2px 8px rgba(0, 212, 255, 0.2);
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 3.5rem;
+  width: 100%;
+}
 
 .game-logo {
-  font-size: 0.75rem;
-  letter-spacing: 0.2em;
-  color: #f0b429;
-  margin-bottom: 0.75rem;
+  font-family: var(--font-pixel);
+  font-size: 1.25rem;
+  letter-spacing: 0.35em;
+  color: #00e0ff;
+  margin-bottom: 1rem;
   text-transform: uppercase;
+  animation: tech-pulse 3s infinite;
 }
 
 .auth-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #fff;
-  margin: 0 0 0.4rem;
+  font-family: var(--font-pixel);
+  font-size: 2.2rem;
+  font-weight: 800;
+  margin: 0 0 1rem;
+  color: #ffffff;
+  text-shadow: 0 2px 8px rgba(0, 160, 255, 0.4);
 }
 
-.auth-subtitle { font-size: 0.9rem; color: rgba(255,255,255,0.5); margin: 0; }
+.auth-subtitle {
+  font-family: var(--font-pixel);
+  font-size: 0.95rem;
+  color: #6a9ac2;
+  margin: 0;
+  letter-spacing: 0.04em;
+}
 
 .auth-error {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  border-radius: 8px;
-  padding: 0.65rem 1rem;
-  font-size: 0.85rem;
-  color: #fca5a5;
-  margin-bottom: 1rem;
+  background: rgba(255, 60, 60, 0.1);
+  border: 1px solid rgba(255, 60, 60, 0.4);
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  color: #ff7575;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  box-shadow: 0 0 12px rgba(255, 60, 60, 0.2);
 }
 
 .guest-section {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  width: 100%;
 }
 
 .guest-tip {
-  font-size: 0.8rem;
-  color: rgba(255,255,255,0.4);
-  margin-bottom: 0.5rem;
+  font-family: var(--font-pixel);
+  font-size: 0.85rem;
+  color: #6a9ac2;
+  margin-bottom: 1.25rem;
   text-align: center;
 }
 
 .btn-guest {
+  font-family: var(--font-pixel);
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0.8rem;
-  border: none;
-  border-radius: 10px;
-  background: linear-gradient(to right, #445588, #2a3a5a);
-  color: #fff;
+  gap: 0.85rem;
+  padding: 1.15rem 1rem;
+  border: 1px solid rgba(26, 120, 255, 0.6);
+  background: rgba(15, 45, 90, 0.4);
+  color: #9cd4ff;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-  transition: all 0.2s;
+  box-shadow: inset 0 0 12px rgba(26, 120, 255, 0.2), 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
-.btn-guest:hover { filter: brightness(1.1); transform: translateY(-1px); }
-
-.auth-tabs {
-  display: flex;
-  background: rgba(255,255,255,0.06);
-  border-radius: 10px;
-  padding: 4px;
-  margin-bottom: 1.25rem;
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 0.5rem;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  color: rgba(255,255,255,0.5);
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tab-btn.active {
-  background: rgba(99, 179, 237, 0.2);
-  color: #90cdf4;
+.btn-guest:hover {
+  background: rgba(26, 120, 255, 0.25);
+  border-color: #3aa0ff;
+  color: #ffffff;
+  box-shadow: inset 0 0 20px rgba(35, 150, 255, 0.4), 0 0 20px rgba(26, 120, 255, 0.4);
+  transform: scale(1.02);
 }
 
 .btn-google {
+  font-family: var(--font-pixel);
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.6rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 10px;
-  background: rgba(255,255,255,0.06);
-  color: #fff;
-  font-size: 0.95rem;
+  gap: 1rem;
+  padding: 1.15rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: #dbe4ee;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .btn-google:hover:not(:disabled) {
-  background: rgba(255,255,255,0.12);
-  border-color: rgba(255,255,255,0.25);
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #ffffff;
+  box-shadow: inset 0 0 15px rgba(255, 255, 255, 0.2), 0 0 15px rgba(255, 255, 255, 0.2);
+  transform: scale(1.02);
+}
+
+.btn-google:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .divider {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin: 1.25rem 0;
-  color: rgba(255,255,255,0.25);
-  font-size: 0.75rem;
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+  color: #3b5f85;
+  font-size: 0.8rem;
   font-weight: 600;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
 }
 
 .divider::before, .divider::after {
   content: '';
   flex: 1;
   height: 1px;
-  background: rgba(255,255,255,0.1);
+  background: rgba(59, 95, 133, 0.4);
 }
-
-.auth-form { display: flex; flex-direction: column; gap: 1rem; }
-
-.form-group { display: flex; flex-direction: column; gap: 0.4rem; }
-
-.form-group label { font-size: 0.85rem; color: rgba(255,255,255,0.65); }
-
-.form-group input {
-  padding: 0.7rem 0.9rem;
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 10px;
-  background: rgba(255,255,255,0.06);
-  color: #fff;
-  font-size: 0.95rem;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.form-group input:focus {
-  border-color: rgba(99, 179, 237, 0.5);
-  background: rgba(255,255,255,0.09);
-}
-
-.btn-primary {
-  width: 100%;
-  padding: 0.75rem;
-  border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  margin-top: 0.25rem;
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
-}
-
-.btn-primary:disabled, .btn-google:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-cancel {
+  font-family: var(--font-pixel);
   display: block;
   width: 100%;
-  margin-top: 1rem;
+  margin-top: 1.5rem;
   background: transparent;
   border: none;
-  color: rgba(255,255,255,0.4);
-  font-size: 0.85rem;
+  color: #5579a1;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   cursor: pointer;
+  transition: color 0.2s, text-shadow 0.2s;
 }
-.btn-cancel:hover { color: #fff; }
+
+.btn-cancel:hover {
+  color: #a3d5ff;
+  text-shadow: 0 0 8px rgba(163, 213, 255, 0.6);
+}
 </style>

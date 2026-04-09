@@ -26,11 +26,11 @@ import {
   PhPlay, PhAirplaneTilt, PhRocketLaunch, PhMagicWand, PhCards, PhGear,
   PhClipboardText, PhPencilSimple, PhCheck, PhX,
   PhArrowLeft, PhCaretLeft, PhCaretRight, PhTimer,
-  PhDownloadSimple, PhUploadSimple, PhWarning, PhWrench, PhLightning,
+  PhWarning, PhWrench, PhLightning,
   PhBell, PhSpeakerHigh, PhSpeakerSlash, PhMusicNotes,
   PhTreasureChest,
   PhBookOpen,
-  PhUserCircle, PhCloudArrowUp, PhSignOut
+  PhCloudArrowUp, PhSignOut
 } from '@phosphor-icons/vue'
 import { audioManager } from '../game/systems/audio'
 import { useAuthStore } from '../stores/authStore'
@@ -70,8 +70,7 @@ const adminInput = ref('')
 const showTourPrompt = ref(false)
 const showTour = ref(false)
 const showSettingsPanel = ref(false)
-const importStatus = ref<'idle' | 'success' | 'error'>('idle')
-let importStatusTimer: ReturnType<typeof setTimeout> | null = null
+const settingsActiveTab = ref<'account' | 'audio'>('account')
 
 function setAudioEnabled(enabled: boolean) {
   game.updateAudioSettings({ enabled })
@@ -102,21 +101,6 @@ function setSfxVolume(ev: Event) {
 
 function unlockAudioByGesture() {
   audioManager.ensureStarted()
-}
-
-function onImportFile(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => {
-    const ok = game.importSave(reader.result as string)
-    importStatus.value = ok ? 'success' : 'error'
-    if (importStatusTimer) clearTimeout(importStatusTimer)
-    importStatusTimer = setTimeout(() => { importStatus.value = 'idle' }, 3000)
-  }
-  reader.readAsText(file)
-  // reset input so same file can be picked again
-  ;(e.target as HTMLInputElement).value = ''
 }
 
 const completedMissions = computed(() => game.dailyMissions.filter(m => m.completed).length)
@@ -1456,110 +1440,88 @@ function onShipNameKey(e: KeyboardEvent) {
             <div class="sheet-title">CÀI ĐẶT</div>
             <button class="sheet-close" @click="showSettingsPanel = false"><PhX :size="14" /></button>
           </div>
+          <div class="settings-tabs">
+            <button class="settings-tab" :class="{ 'settings-tab--active': settingsActiveTab === 'account' }" @click="settingsActiveTab = 'account'">Tài Khoản</button>
+            <button class="settings-tab" :class="{ 'settings-tab--active': settingsActiveTab === 'audio' }" @click="settingsActiveTab = 'audio'">Âm Thanh</button>
+          </div>
           <div class="ships-scroll" style="padding: 20px 16px 32px;">
-            <!-- Tài khoản & Đồng bộ -->
-            <div class="settings-section">
-              <h3 class="settings-section__title" style="display:flex;align-items:center;gap:6px;font-family:var(--font-pixel);font-size:11px;color:var(--color-accent);margin-bottom:8px;"><PhUserCircle :size="18"/> TÀI KHOẢN & ĐỒNG BỘ</h3>
-              <div class="settings-auth-card">
-                <template v-if="auth.isLoggedIn">
-                  <div class="auth-status logged-in">
-                    <div class="status-icon">✅</div>
-                    <div class="status-info">
-                      <div class="status-title">Đã kết nối</div>
-                      <div class="status-email">{{ auth.userEmail }}</div>
+            <!-- TAB: TÀI KHOẢN -->
+            <div v-if="settingsActiveTab === 'account'">
+              <div class="settings-section">
+                <div class="settings-auth-card">
+                  <template v-if="auth.isLoggedIn">
+                    <div class="auth-status logged-in">
+                      <div class="status-icon">✅</div>
+                      <div class="status-info">
+                        <div class="status-title">Đã kết nối</div>
+                        <div class="status-email">{{ auth.userEmail }}</div>
+                      </div>
                     </div>
-                  </div>
-                  <div class="auth-sync-status">
-                    <span v-if="game.pendingSync" class="sync-pending">⏳ Đang chờ đồng bộ...</span>
-                    <span v-else class="sync-done">☁ Đã đồng bộ lên Cloud</span>
-                  </div>
-                  <button class="btn-cancel btn-logout" style="width:100%;padding:10px;display:flex;align-items:center;justify-content:center;border-radius:8px;" @click="auth.logout()">
-                    <PhSignOut :size="18" style="margin-right:6px;" /> Đăng xuất
-                  </button>
-                </template>
-                <template v-else-if="auth.isGuest">
-                  <div class="auth-status guest">
-                    <div class="status-icon">👤</div>
-                    <div class="status-info">
-                      <div class="status-title">Chơi Khách (Guest)</div>
-                      <div class="status-desc">Dữ liệu chỉ lưu trên thiết bị này.</div>
+                    <div class="auth-sync-status">
+                      <span v-if="game.pendingSync" class="sync-pending">⏳ Đang chờ đồng bộ...</span>
+                      <span v-else class="sync-done">☁ Đã đồng bộ lên Cloud</span>
                     </div>
-                  </div>
-                  <button class="btn-guest btn-link-account" style="padding:10px;border-radius:8px;font-family:'Chakra Petch';" @click="$router.push('/auth')">
-                    <PhCloudArrowUp :size="18" /> Liên kết tài khoản
-                  </button>
-                </template>
+                    <button class="btn-cancel btn-logout" style="width:100%;padding:10px;display:flex;align-items:center;justify-content:center;border-radius:0;border:2px solid rgba(229,62,62,0.3);font-family:var(--font-pixel);font-size:10px;text-transform:uppercase;" @click="auth.logout()">
+                      <PhSignOut :size="18" style="margin-right:6px;" /> Đăng xuất
+                    </button>
+                  </template>
+                  <template v-else-if="auth.isGuest">
+                    <div class="auth-status guest">
+                      <div class="status-icon">👤</div>
+                      <div class="status-info">
+                        <div class="status-title">Chơi Khách (Guest)</div>
+                        <div class="status-desc">Dữ liệu chỉ lưu trên thiết bị này.</div>
+                      </div>
+                    </div>
+                    <button class="btn-guest btn-link-account" style="padding:10px;border-radius:0;font-family:var(--font-pixel);font-size:10px;text-transform:uppercase;border: 2px solid rgba(0,212,255,0.3);" @click="$router.push('/auth')">
+                      <PhCloudArrowUp :size="18" /> Liên kết tài khoản
+                    </button>
+                  </template>
+                </div>
               </div>
             </div>
 
-            <div class="settings-section-label" style="margin-top:24px;">ÂM THANH</div>
-            <div class="settings-desc">Điều chỉnh nhạc nền và hiệu ứng theo ý bạn. Cài đặt sẽ được lưu tự động.</div>
+            <!-- TAB: ÂM THANH -->
+            <div v-if="settingsActiveTab === 'audio'">
+              <div class="settings-desc">Điều chỉnh nhạc nền và hiệu ứng theo ý bạn. Cài đặt sẽ được lưu tự động.</div>
 
-            <div class="audio-row">
-              <label class="audio-toggle" for="audio-enabled">
-                <span class="audio-toggle__label"><PhSpeakerHigh :size="13" weight="bold" /> Bật âm thanh</span>
-                <span class="audio-switch">
-                  <input id="audio-enabled" type="checkbox" :checked="game.audioSettings.enabled" @change="setAudioEnabled(($event.target as HTMLInputElement).checked)" />
-                  <span class="audio-switch__track"></span>
-                </span>
-              </label>
+              <div class="audio-row">
+                <label class="audio-toggle" for="audio-enabled">
+                  <span class="audio-toggle__label"><PhSpeakerHigh :size="13" weight="bold" /> Bật âm thanh</span>
+                  <span class="audio-switch">
+                    <input id="audio-enabled" type="checkbox" :checked="game.audioSettings.enabled" @change="setAudioEnabled(($event.target as HTMLInputElement).checked)" />
+                    <span class="audio-switch__track"></span>
+                  </span>
+                </label>
 
-              <label class="audio-toggle" for="audio-music">
-                <span class="audio-toggle__label"><PhMusicNotes :size="13" weight="bold" /> Nhạc nền</span>
-                <span class="audio-switch">
-                  <input id="audio-music" type="checkbox" :checked="game.audioSettings.musicEnabled" :disabled="!game.audioSettings.enabled" @change="setMusicEnabled(($event.target as HTMLInputElement).checked)" />
-                  <span class="audio-switch__track"></span>
-                </span>
-              </label>
+                <label class="audio-toggle" for="audio-music">
+                  <span class="audio-toggle__label"><PhMusicNotes :size="13" weight="bold" /> Nhạc nền</span>
+                  <span class="audio-switch">
+                    <input id="audio-music" type="checkbox" :checked="game.audioSettings.musicEnabled" :disabled="!game.audioSettings.enabled" @change="setMusicEnabled(($event.target as HTMLInputElement).checked)" />
+                    <span class="audio-switch__track"></span>
+                  </span>
+                </label>
 
-              <label class="audio-toggle" for="audio-sfx">
-                <span class="audio-toggle__label"><PhSpeakerSlash :size="13" weight="bold" /> Hiệu ứng</span>
-                <span class="audio-switch">
-                  <input id="audio-sfx" type="checkbox" :checked="game.audioSettings.sfxEnabled" :disabled="!game.audioSettings.enabled" @change="setSfxEnabled(($event.target as HTMLInputElement).checked)" />
-                  <span class="audio-switch__track"></span>
-                </span>
-              </label>
-            </div>
-
-            <div class="audio-slider-wrap" :class="{ 'audio-slider-wrap--disabled': !game.audioSettings.enabled }">
-              <label class="audio-slider-label" for="audio-master">Âm lượng tổng: {{ Math.round(game.audioSettings.masterVolume * 100) }}%</label>
-              <input id="audio-master" class="audio-slider" type="range" min="0" max="100" step="1" :value="Math.round(game.audioSettings.masterVolume * 100)" :disabled="!game.audioSettings.enabled" @input="setMasterVolume" />
-
-              <label class="audio-slider-label" for="audio-music-volume">Âm lượng nhạc nền: {{ Math.round(game.audioSettings.musicVolume * 100) }}%</label>
-              <input id="audio-music-volume" class="audio-slider" type="range" min="0" max="100" step="1" :value="Math.round(game.audioSettings.musicVolume * 100)" :disabled="!game.audioSettings.enabled || !game.audioSettings.musicEnabled" @input="setMusicVolume" />
-
-              <label class="audio-slider-label" for="audio-sfx-volume">Âm lượng hiệu ứng: {{ Math.round(game.audioSettings.sfxVolume * 100) }}%</label>
-              <input id="audio-sfx-volume" class="audio-slider" type="range" min="0" max="100" step="1" :value="Math.round(game.audioSettings.sfxVolume * 100)" :disabled="!game.audioSettings.enabled || !game.audioSettings.sfxEnabled" @input="setSfxVolume" />
-            </div>
-
-            <div class="settings-divider"></div>
-
-            <!-- Save data section -->
-            <div class="settings-section-label">DỮ LIỆU GAME</div>
-            <div class="settings-desc">Xuất file lưu để bảo quản tiến trình, hoặc nạp lại từ file đã xuất trước đó.</div>
-
-            <button class="settings-btn settings-btn--export" @click="game.exportSave()">
-              <PhDownloadSimple :size="14" style="vertical-align:middle;margin-right:6px" weight="bold"/>Xuất File Lưu Game
-            </button>
-
-            <label class="settings-btn settings-btn--import">
-              <PhUploadSimple :size="14" style="vertical-align:middle;margin-right:6px" weight="bold"/>Nạp File Lưu Game
-              <input
-                type="file"
-                accept=".json,application/json"
-                style="display:none"
-                @change="onImportFile"
-              />
-            </label>
-
-            <Transition name="fade">
-              <div v-if="importStatus === 'success'" class="settings-status settings-status--ok">
-                <PhCheck :size="12" style="vertical-align:middle;margin-right:4px"/>Nạp dữ liệu thành công!
+                <label class="audio-toggle" for="audio-sfx">
+                  <span class="audio-toggle__label"><PhSpeakerSlash :size="13" weight="bold" /> Hiệu ứng</span>
+                  <span class="audio-switch">
+                    <input id="audio-sfx" type="checkbox" :checked="game.audioSettings.sfxEnabled" :disabled="!game.audioSettings.enabled" @change="setSfxEnabled(($event.target as HTMLInputElement).checked)" />
+                    <span class="audio-switch__track"></span>
+                  </span>
+                </label>
               </div>
-              <div v-else-if="importStatus === 'error'" class="settings-status settings-status--err">
-                <PhX :size="12" style="vertical-align:middle;margin-right:4px"/>File không hợp lệ, vui lòng thử lại.
+
+              <div class="audio-slider-wrap" :class="{ 'audio-slider-wrap--disabled': !game.audioSettings.enabled }">
+                <label class="audio-slider-label" for="audio-master">Âm lượng tổng: {{ Math.round(game.audioSettings.masterVolume * 100) }}%</label>
+                <input id="audio-master" class="audio-slider" type="range" min="0" max="100" step="1" :value="Math.round(game.audioSettings.masterVolume * 100)" :disabled="!game.audioSettings.enabled" @input="setMasterVolume" />
+
+                <label class="audio-slider-label" for="audio-music-volume">Âm lượng nhạc nền: {{ Math.round(game.audioSettings.musicVolume * 100) }}%</label>
+                <input id="audio-music-volume" class="audio-slider" type="range" min="0" max="100" step="1" :value="Math.round(game.audioSettings.musicVolume * 100)" :disabled="!game.audioSettings.enabled || !game.audioSettings.musicEnabled" @input="setMusicVolume" />
+
+                <label class="audio-slider-label" for="audio-sfx-volume">Âm lượng hiệu ứng: {{ Math.round(game.audioSettings.sfxVolume * 100) }}%</label>
+                <input id="audio-sfx-volume" class="audio-slider" type="range" min="0" max="100" step="1" :value="Math.round(game.audioSettings.sfxVolume * 100)" :disabled="!game.audioSettings.enabled || !game.audioSettings.sfxEnabled" @input="setSfxVolume" />
               </div>
-            </Transition>
+            </div>
           </div>
         </div>
       </div>
@@ -3458,9 +3420,9 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
 .audio-switch__track {
   position: absolute;
   inset: 0;
-  border: 2px solid rgba(255, 255, 255, 0.28);
-  background: rgba(0, 0, 0, 0.35);
-  border-radius: 999px;
+  border: 2px solid var(--color-border);
+  background: var(--color-panel-dark);
+  border-radius: 0;
   transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
 }
 .audio-switch__track::after {
@@ -3470,8 +3432,8 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   left: 2px;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
-  background: #8c9bb1;
+  border-radius: 0;
+  background: var(--color-text-dim);
   transition: transform 0.18s ease, background 0.18s ease;
 }
 .audio-switch input:checked + .audio-switch__track {
@@ -3508,52 +3470,70 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   margin-bottom: 6px;
 }
 .audio-slider {
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
-  margin-bottom: 10px;
+  margin-bottom: 15px;
+  background: transparent;
 }
 .audio-slider:last-child {
   margin-bottom: 0;
 }
-.settings-btn {
-  display: block;
+.audio-slider::-webkit-slider-runnable-track {
   width: 100%;
-  font-family: var(--font-pixel);
-  font-size: 8.5px;
-  letter-spacing: 1.5px;
-  padding: 11px 14px;
-  border: 2px solid transparent;
+  height: 8px;
+  background: var(--color-panel-dark);
+  border: 2px solid var(--color-border);
+  border-radius: 0;
+}
+.audio-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  width: 12px;
+  background: var(--color-accent);
+  border: 2px solid #fff;
+  border-radius: 0;
   cursor: pointer;
+  margin-top: -6px; /* align center with track */
+}
+.audio-slider:focus {
+  outline: none;
+}
+.audio-slider:focus::-webkit-slider-runnable-track {
+  border-color: rgba(0, 212, 255, 0.8);
+}
+.audio-slider:disabled::-webkit-slider-thumb {
+  background: var(--color-text-dim);
+  border-color: rgba(255,255,255,0.4);
+  cursor: not-allowed;
+}
+.settings-tabs {
+  display: flex;
+  background: var(--color-panel-dark);
+  border-bottom: 2px solid var(--color-border);
+}
+.settings-tab {
+  flex: 1;
+  padding: 14px 0;
   text-align: center;
-  margin-bottom: 10px;
-  transition: background 0.15s, border-color 0.15s, transform 0.1s;
-  text-transform: uppercase;
-  text-decoration: none;
-}
-.settings-btn:active { transform: scale(0.98); }
-.settings-btn--export {
-  background: #001a33;
-  border-color: #0088cc;
-  color: #00cfff;
-}
-.settings-btn--export:hover { background: #00253d; border-color: #00cfff; }
-.settings-btn--import {
-  background: #001a0a;
-  border-color: #00882b;
-  color: #44ff88;
-}
-.settings-btn--import:hover { background: #002514; border-color: #44ff88; }
-.settings-status {
   font-family: var(--font-pixel);
-  font-size: 8px;
-  padding: 8px 10px;
-  text-align: center;
-  border: 2px solid transparent;
-  margin-top: 4px;
+  font-size: 10px;
+  color: var(--color-text-dim);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
 }
-.settings-status--ok  { background: rgba(68, 255, 136, 0.1); border-color: #44ff88; color: #44ff88; }
-.settings-status--err { background: rgba(255, 80,  80,  0.1); border-color: #ff5050; color: #ff5050; }
-
-/* fade transition for status text */
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.settings-tab:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+.settings-tab--active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+  background: rgba(0, 212, 255, 0.1);
+}
 </style>

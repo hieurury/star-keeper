@@ -2177,6 +2177,27 @@ export const useGameStore = defineStore('game', () => {
     audioManager.setSettings(audioSettings.value)
   }
 
+  async function syncOnAccountLink(): Promise<void> {
+    const { useAuthStore } = await import('./authStore')
+    const auth = useAuthStore()
+    if (!auth.isLoggedIn || !auth.userId) return
+    if (!isOnline.value) { pendingSync.value = true; return }
+    const remote = await pullSave(auth.userId)
+    
+    if (remote && remote.payload) {
+      // Supabase is the source of truth. Overwrite local data entirely.
+      const localSaved = localStorage.getItem(SAVE_KEY)
+      if (localSaved) localStorage.setItem(SAVE_BACKUP_KEY, localSaved)
+      _applyDataToStore(remote.payload)
+      if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
+      saveProgress()
+      console.info('[Sync] Overwrote local data with cloud data on account link')
+    } else {
+      // Cloud is empty, push local progress to initialize it
+      void pushToSupabase()
+    }
+  }
+
   // Migration stubs — thêm case mới khi cấu trúc save thay đổi.
   // Mỗi hàm nhận raw object v(N) và trả ra object đã migrate lên v(N+1).
   function _migrateV0toV1(d: Record<string, unknown>): Record<string, unknown> {
@@ -2379,6 +2400,7 @@ export const useGameStore = defineStore('game', () => {
     chooseCard,
     saveProgress,
     loadProgress,
+    syncOnAccountLink,
     isUpdateNoticeSeen,
     markUpdateNoticeSeen,
     markAllUpdateNoticesSeen,

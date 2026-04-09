@@ -32,6 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
   // ─── Khôi phục phiên đăng nhập ────────────────────────────────────────────
   async function restoreSession(): Promise<void> {
     if (!isSupabaseConfigured()) return
+    let wasGuestFromRestore = false
     try {
       const { data } = await supabase.auth.getSession()
       session.value = data.session
@@ -41,6 +42,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (!hasChosen.value && !user.value && localStorage.getItem('ban-may-bay-save')) {
         setGuestMode()
       } else if (user.value) {
+        wasGuestFromRestore = isGuest.value
         setChosen()
         isGuest.value = false
         localStorage.removeItem('auth-mode-guest')
@@ -51,21 +53,26 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     // Lắng nghe thay đổi trạng thái auth
-    supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    supabase.auth.onAuthStateChange(async (event, newSession) => {
       session.value = newSession
       user.value = newSession?.user ?? null
       if (user.value) {
-        const wasGuest = isGuest.value
+        // If INITIAL_SESSION, use the flag captured during restoreSession, otherwise use current isGuest value
+        const wasGuest = event === 'INITIAL_SESSION' ? wasGuestFromRestore : isGuest.value
         isGuest.value = false
         localStorage.removeItem('auth-mode-guest')
         setChosen()
 
-        // Nếu người chơi vốn là khách (Guest) và giờ vừa đăng nhập, hãy đẩy dữ liệu của họ lên cloud
-        if (wasGuest) {
+        // Nếu người chơi vốn là khách (Guest) và giờ vừa đăng nhập, hãy hợp nhất dữ liệu của họ với cloud
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
           try {
             const { useGameStore } = await import('./gameStore')
             const game = useGameStore()
-            await game.pushToSupabase()
+            if (wasGuest) {
+              await game.syncOnAccountLink()
+            } else {
+              await game.pullFromSupabase()
+            }
           } catch (err) {
             console.warn('[Auth] Không thể sync data sau khi liên kết tài khoản', err)
           }
@@ -87,44 +94,6 @@ export const useAuthStore = defineStore('auth', () => {
         },
       })
       if (error) authError.value = error.message
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  // ─── Đăng nhập Email ───────────────────────────────────────────────────────
-  async function loginWithEmail(email: string, password: string): Promise<boolean> {
-    if (!isSupabaseConfigured()) return false
-    isLoading.value = true
-    authError.value = null
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) {
-        authError.value = error.message
-        return false
-      }
-      session.value = data.session
-      user.value = data.user
-      return true
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  // ─── Đăng ký Email ─────────────────────────────────────────────────────────
-  async function registerWithEmail(email: string, password: string): Promise<boolean> {
-    if (!isSupabaseConfigured()) return false
-    isLoading.value = true
-    authError.value = null
-    try {
-      const { data, error } = await supabase.auth.signUp({ email, password })
-      if (error) {
-        authError.value = error.message
-        return false
-      }
-      session.value = data.session
-      user.value = data.user
-      return true
     } finally {
       isLoading.value = false
     }
@@ -153,8 +122,6 @@ export const useAuthStore = defineStore('auth', () => {
     setChosen,
     restoreSession,
     loginWithGoogle,
-    loginWithEmail,
-    registerWithEmail,
     logout,
   }
 })
