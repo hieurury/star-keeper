@@ -1461,7 +1461,7 @@ function onShipNameKey(e: KeyboardEvent) {
                       <span v-if="game.pendingSync" class="sync-pending">⏳ Đang chờ đồng bộ...</span>
                       <span v-else class="sync-done">☁ Đã đồng bộ lên Cloud</span>
                     </div>
-                    <button class="btn-cancel btn-logout" style="width:100%;padding:10px;display:flex;align-items:center;justify-content:center;border-radius:0;border:2px solid rgba(229,62,62,0.3);font-family:var(--font-pixel);font-size:10px;text-transform:uppercase;" @click="auth.logout()">
+                    <button class="btn-cancel btn-logout" style="width:100%;padding:10px;display:flex;align-items:center;justify-content:center;border-radius:0;border:2px solid rgba(229,62,62,0.3);font-family:var(--font-pixel);font-size:10px;text-transform:uppercase;" @click="void auth.logout()">
                       <PhSignOut :size="18" style="margin-right:6px;" /> Đăng xuất
                     </button>
                   </template>
@@ -1477,6 +1477,19 @@ function onShipNameKey(e: KeyboardEvent) {
                       <PhCloudArrowUp :size="18" /> Liên kết tài khoản
                     </button>
                   </template>
+                  <template v-else>
+                    <div class="auth-status guest">
+                      <div class="status-icon">⚠️</div>
+                      <div class="status-info">
+                        <div class="status-title">Chưa đăng nhập</div>
+                        <div class="status-desc">Không xác định trạng thái tài khoản, vui lòng liên kết lại.</div>
+                      </div>
+                    </div>
+                    <button class="btn-guest btn-link-account" style="padding:10px;border-radius:0;font-family:var(--font-pixel);font-size:10px;text-transform:uppercase;border: 2px solid rgba(0,212,255,0.3);" @click="$router.push('/auth')">
+                      <PhCloudArrowUp :size="18" /> Liên kết tài khoản
+                    </button>
+                  </template>
+                  <div v-if="auth.authError" class="auth-inline-error">{{ auth.authError }}</div>
                 </div>
               </div>
             </div>
@@ -2540,6 +2553,13 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
 .btn-logout { background: rgba(229, 62, 62, 0.2); color: #fc8181; border: 1px solid rgba(229, 62, 62, 0.3); }
 .btn-logout:hover { background: rgba(229, 62, 62, 0.3); }
 .btn-link-account { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.auth-inline-error {
+  margin-top: 10px;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 11px;
+  color: #fca5a5;
+  line-height: 1.4;
+}
 
 .core-detail-lv {
   font-family: var(--font-pixel);

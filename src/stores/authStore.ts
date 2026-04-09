@@ -17,6 +17,12 @@ export const useAuthStore = defineStore('auth', () => {
   const userEmail = computed(() => user.value?.email ?? null)
   const userId = computed(() => user.value?.id ?? null)
 
+  function ensureConfigured(actionLabel: string): boolean {
+    if (isSupabaseConfigured()) return true
+    authError.value = `Supabase chưa được cấu hình (${actionLabel}). Kiểm tra VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY trên Vercel.`
+    return false
+  }
+
   function setGuestMode() {
     isGuest.value = true
     hasChosen.value = true
@@ -27,6 +33,14 @@ export const useAuthStore = defineStore('auth', () => {
   function setChosen() {
     hasChosen.value = true
     localStorage.setItem('auth-mode-chosen', '1')
+  }
+
+  function clearLocalAuthState() {
+    user.value = null
+    session.value = null
+    isLoading.value = false
+    authError.value = null
+    setGuestMode()
   }
 
   // ─── Khôi phục phiên đăng nhập ────────────────────────────────────────────
@@ -46,6 +60,9 @@ export const useAuthStore = defineStore('auth', () => {
         setChosen()
         isGuest.value = false
         localStorage.removeItem('auth-mode-guest')
+      } else if (hasChosen.value && !isGuest.value) {
+        // Tránh trạng thái "không login nhưng cũng không guest" làm UI tài khoản trống.
+        setGuestMode()
       }
 
     } catch (e) {
@@ -77,20 +94,24 @@ export const useAuthStore = defineStore('auth', () => {
             console.warn('[Auth] Không thể sync data sau khi liên kết tài khoản', err)
           }
         }
+      } else if (hasChosen.value) {
+        // Token hết hạn hoặc sign-out ở tab khác.
+        setGuestMode()
       }
     })
   }
 
   // ─── Đăng nhập Google ─────────────────────────────────────────────────────
   async function loginWithGoogle(): Promise<void> {
-    if (!isSupabaseConfigured()) return
+    if (!ensureConfigured('Đăng nhập Google')) return
     isLoading.value = true
     authError.value = null
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin,
+          // Redirect về route auth để tránh router đổi URL quá sớm trước khi đọc token.
+          redirectTo: `${window.location.origin}/auth`,
         },
       })
       if (error) authError.value = error.message
@@ -101,11 +122,20 @@ export const useAuthStore = defineStore('auth', () => {
 
   // ─── Đăng xuất ────────────────────────────────────────────────────────────
   async function logout(): Promise<void> {
+    // Luôn thoát local ngay để UI phản hồi tức thì, kể cả khi mạng lỗi.
+    clearLocalAuthState()
+
     if (!isSupabaseConfigured()) return
-    await supabase.auth.signOut()
-    user.value = null
-    session.value = null
-    setGuestMode() // Khi đăng xuất, trở lại làm khách (dữ liệu local vẫn giữ)
+
+    try {
+      // local scope đủ để xóa session trên thiết bị, tránh phụ thuộc request mạng.
+      const { error } = await supabase.auth.signOut({ scope: 'local' })
+      if (error) {
+        console.warn('[Auth] signOut local thất bại:', error.message)
+      }
+    } catch (err) {
+      console.warn('[Auth] signOut local lỗi:', err)
+    }
   }
 
   return {

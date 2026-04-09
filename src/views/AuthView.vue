@@ -46,11 +46,20 @@
 </template>
 
 <script setup lang="ts">
+import { watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+watch(
+  () => authStore.isLoggedIn,
+  (loggedIn) => {
+    if (loggedIn) router.replace('/')
+  },
+  { immediate: true },
+)
 
 function goAsGuest() {
   authStore.setGuestMode()
