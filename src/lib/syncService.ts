@@ -9,6 +9,13 @@ export interface RemoteSave {
   client_updated_at: string
 }
 
+function isUpsertConflictConstraintError(error: { code?: string | null, message?: string | null } | null): boolean {
+  if (!error) return false
+  if (error.code === '42P10') return true
+  const msg = (error.message ?? '').toLowerCase()
+  return msg.includes('on conflict') && msg.includes('constraint')
+}
+
 /**
  * Đẩy dữ liệu save lên Supabase (upsert vào bảng game_saves).
  * No-op nếu: chưa cấu hình Supabase, chưa đăng nhập, hoặc offline.
@@ -22,20 +29,48 @@ export async function pushSave(
   if (!isOnline.value) return false
 
   const clientUpdatedAt = new Date().toISOString()
-  const { error } = await supabase.from(TABLE).upsert(
-    {
-      user_id: userId,
-      save_version: saveVersion,
-      payload,
-      client_updated_at: clientUpdatedAt,
-    },
-    { onConflict: 'user_id' },
-  )
+  const row = {
+    user_id: userId,
+    save_version: saveVersion,
+    payload,
+    client_updated_at: clientUpdatedAt,
+  }
 
-  if (error) {
-    console.warn('[SyncService] pushSave thất bại:', error.message)
+  const { error } = await supabase.from(TABLE).upsert(row, { onConflict: 'user_id' })
+  if (!error) return true
+
+  if (!isUpsertConflictConstraintError(error)) {
+    console.warn('[SyncService] pushSave thất bại:', error.code ?? 'UNKNOWN', error.message)
     return false
   }
+
+  // Fallback for schemas where user_id is not declared UNIQUE (upsert cannot target conflict).
+  const { data: existing, error: selectErr } = await supabase
+    .from(TABLE)
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (selectErr) {
+    console.warn('[SyncService] pushSave fallback/select thất bại:', selectErr.code ?? 'UNKNOWN', selectErr.message)
+    return false
+  }
+
+  if (existing) {
+    const { error: updateErr } = await supabase.from(TABLE).update(row).eq('user_id', userId)
+    if (updateErr) {
+      console.warn('[SyncService] pushSave fallback/update thất bại:', updateErr.code ?? 'UNKNOWN', updateErr.message)
+      return false
+    }
+    return true
+  }
+
+  const { error: insertErr } = await supabase.from(TABLE).insert(row)
+  if (insertErr) {
+    console.warn('[SyncService] pushSave fallback/insert thất bại:', insertErr.code ?? 'UNKNOWN', insertErr.message)
+    return false
+  }
+
   return true
 }
 

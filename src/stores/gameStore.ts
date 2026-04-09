@@ -735,6 +735,7 @@ const SAVE_VERSION = 1
 const SAVE_KEY = 'ban-may-bay-save'
 const SAVE_BACKUP_KEY = 'ban-may-bay-save-backup'
 const SAVE_REJECTED_KEY = 'ban-may-bay-save-rejected'
+const PENDING_SYNC_KEY = 'ban-may-bay-sync-pending'
 const SAVE_ENVELOPE_VERSION = 1
 const SAVE_SIGNATURE_PEPPER_CURRENT = 'ban-may-bay::save-signature::2026'
 const SAVE_SIGNATURE_PEPPERS_LEGACY = [
@@ -1182,9 +1183,15 @@ export const useGameStore = defineStore('game', () => {
 
   // ─── Sync state ────────────────────────────────────────────────────────────────
   /** True khi có thay đổi chưa được đồng bộ lên Supabase */
-  const pendingSync = ref(false)
+  const pendingSync = ref(localStorage.getItem(PENDING_SYNC_KEY) === '1')
   /** Thời điểm client lần cuối lưu (ISO string), dùng cho conflict resolution */
   const saveUpdatedAt = ref<string | null>(null)
+
+  function setPendingSync(value: boolean) {
+    pendingSync.value = value
+    if (value) localStorage.setItem(PENDING_SYNC_KEY, '1')
+    else localStorage.removeItem(PENDING_SYNC_KEY)
+  }
 
   // Reconnect → tự động push pending save
   onReconnect(() => {
@@ -2051,6 +2058,18 @@ export const useGameStore = defineStore('game', () => {
     equippedArtifacts.value = nextEquip
   }
 
+  function persistLocalSave(payload: Record<string, unknown>, forcedUpdatedAt?: string) {
+    const updatedAt = forcedUpdatedAt ?? new Date().toISOString()
+    const normalizedPayload = { ...payload, saveUpdatedAt: updatedAt }
+    const envelope = buildSaveEnvelope(normalizedPayload)
+    const prev = localStorage.getItem(SAVE_KEY)
+    if (prev) localStorage.setItem(SAVE_BACKUP_KEY, prev)
+    const serialized = JSON.stringify(envelope)
+    localStorage.setItem(SAVE_KEY, serialized)
+    queueMirrorSave(serialized)
+    saveUpdatedAt.value = updatedAt
+  }
+
   function saveProgress() {
     const data = {
       version: SAVE_VERSION,
@@ -2086,35 +2105,41 @@ export const useGameStore = defineStore('game', () => {
       milestone5Claimed: milestone5Claimed.value,
       audioSettings: audioSettings.value,
     }
-    const envelope = buildSaveEnvelope(data as Record<string, unknown>)
-    const prev = localStorage.getItem(SAVE_KEY)
-    if (prev) localStorage.setItem(SAVE_BACKUP_KEY, prev)
-    const serialized = JSON.stringify(envelope)
-    localStorage.setItem(SAVE_KEY, serialized)
-    queueMirrorSave(serialized)
-    // Ghi timestamp để dùng cho conflict resolution
-    saveUpdatedAt.value = new Date().toISOString()
+    persistLocalSave(data as Record<string, unknown>)
     // Push lên Supabase nếu online, nếu không thì đặt cờ pendingSync
     void pushToSupabase()
   }
 
   /** Push dữ liệu save hiện tại lên Supabase (nội bộ hoặc khi liên kết). */
-  async function pushToSupabase(): Promise<void> {
+  async function pushToSupabase(): Promise<boolean> {
     // Import inline để tránh circular dependency với authStore
     const { useAuthStore } = await import('./authStore')
     const auth = useAuthStore()
-    if (!auth.isLoggedIn || !auth.userId) { pendingSync.value = true; return }
-    if (!isOnline.value) { pendingSync.value = true; return }
+    if (!auth.isLoggedIn || !auth.userId) return false
+    if (!isOnline.value) {
+      setPendingSync(true)
+      return false
+    }
     const saved = localStorage.getItem(SAVE_KEY)
-    if (!saved) return
+    if (!saved) {
+      setPendingSync(false)
+      return false
+    }
     let payload: Record<string, unknown>
-    try { payload = (JSON.parse(saved) as { payload: Record<string, unknown> }).payload } catch { return }
+    try {
+      payload = (JSON.parse(saved) as { payload: Record<string, unknown> }).payload
+    } catch {
+      setPendingSync(true)
+      return false
+    }
     const ok = await pushSave(auth.userId, SAVE_VERSION, payload)
     if (ok) {
-      pendingSync.value = false
+      setPendingSync(false)
       void ensureProfile(auth.userId, username.value, avatarId.value)
+      return true
     } else {
-      pendingSync.value = true
+      setPendingSync(true)
+      return false
     }
   }
 
@@ -2125,7 +2150,11 @@ export const useGameStore = defineStore('game', () => {
     if (!auth.isLoggedIn || !auth.userId) return
     if (!isOnline.value) return
     const remote = await pullSave(auth.userId)
-    if (!remote) return
+    if (!remote) {
+      // Cloud chưa có bản ghi: nếu local đã có save thì seed lên cloud.
+      if (localStorage.getItem(SAVE_KEY)) await pushToSupabase()
+      return
+    }
     const decision = resolveConflict(saveUpdatedAt.value, SAVE_VERSION, remote)
     if (decision === 'remote') {
       // Áp dụng dữ liệu từ server
@@ -2135,11 +2164,14 @@ export const useGameStore = defineStore('game', () => {
       if (localSaved) localStorage.setItem(SAVE_BACKUP_KEY, localSaved)
       _applyDataToStore(remotePayload)
       if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
-      saveProgress()
+      persistLocalSave(remotePayload, remote.client_updated_at)
+      setPendingSync(false)
       console.info('[Sync] Đã tải dữ liệu từ cloud (server mới hơn local).')
     } else if (decision === 'local') {
       // Local mới hơn → push lên server
-      void pushToSupabase()
+      await pushToSupabase()
+    } else {
+      setPendingSync(false)
     }
   }
 
@@ -2229,7 +2261,7 @@ export const useGameStore = defineStore('game', () => {
     const { useAuthStore } = await import('./authStore')
     const auth = useAuthStore()
     if (!auth.isLoggedIn || !auth.userId) return
-    if (!isOnline.value) { pendingSync.value = true; return }
+    if (!isOnline.value) { setPendingSync(true); return }
     const remote = await pullSave(auth.userId)
     
     if (remote && remote.payload) {
@@ -2238,11 +2270,12 @@ export const useGameStore = defineStore('game', () => {
       if (localSaved) localStorage.setItem(SAVE_BACKUP_KEY, localSaved)
       _applyDataToStore(remote.payload)
       if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
-      saveProgress()
+      persistLocalSave(remote.payload, remote.client_updated_at)
+      setPendingSync(false)
       console.info('[Sync] Overwrote local data with cloud data on account link')
     } else {
       // Cloud is empty, push local progress to initialize it
-      void pushToSupabase()
+      await pushToSupabase()
     }
   }
 
@@ -2272,6 +2305,7 @@ export const useGameStore = defineStore('game', () => {
       }
 
       if (!data) return false
+      saveUpdatedAt.value = typeof data.saveUpdatedAt === 'string' ? data.saveUpdatedAt : null
 
       // -- Migration chain -------------------------------------------------
       const ver = typeof data.version === 'number' ? data.version : 0
