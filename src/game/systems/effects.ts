@@ -221,3 +221,58 @@ export function spawnMissileWarning(ctx: GameContext, x: number, y: number): voi
   }
   ctx.app.ticker.add(tick)
 }
+
+export function spawnAlphaEvolutionEffect(
+  ctx: GameContext,
+  x: number,
+  y: number,
+  accent = 0xff8844,
+): void {
+  if (!ctx.app || !ctx.gameLayer) return
+
+  const ring = new Graphics()
+  ring.x = x
+  ring.y = y
+  ctx.gameLayer.addChild(ring)
+
+  const sparks = new Graphics()
+  sparks.x = x
+  sparks.y = y
+  ctx.gameLayer.addChild(sparks)
+
+  let frame = 0
+  const maxFrames = 42
+  const tick = () => {
+    frame++
+    const t = frame / maxFrames
+    const fade = Math.max(0, 1 - t)
+
+    ring.clear()
+    const r1 = 12 + t * 42
+    const r2 = 6 + t * 28
+    ring.circle(0, 0, r1).stroke({ color: accent, width: 3.2 - t * 1.8, alpha: 0.9 * fade })
+    ring.circle(0, 0, r2).stroke({ color: 0xffffff, width: 1.8, alpha: 0.7 * fade })
+
+    sparks.clear()
+    const burst = 10
+    for (let i = 0; i < burst; i++) {
+      const a = (i / burst) * Math.PI * 2 + t * 0.5
+      const inner = 6 + t * 10
+      const outer = inner + 10 + Math.sin((t + i) * 5) * 2
+      const x1 = Math.cos(a) * inner
+      const y1 = Math.sin(a) * inner
+      const x2 = Math.cos(a) * outer
+      const y2 = Math.sin(a) * outer
+      sparks.moveTo(x1, y1).lineTo(x2, y2).stroke({ color: accent, width: 1.6, alpha: 0.85 * fade })
+      sparks.circle(x2, y2, 1.6).fill({ color: 0xffffff, alpha: 0.8 * fade })
+    }
+
+    if (frame >= maxFrames) {
+      if (!ring.destroyed) ctx.gameLayer.removeChild(ring)
+      if (!sparks.destroyed) ctx.gameLayer.removeChild(sparks)
+      ctx.app?.ticker.remove(tick)
+    }
+  }
+
+  ctx.app.ticker.add(tick)
+}

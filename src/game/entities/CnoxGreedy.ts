@@ -78,6 +78,7 @@ export function spawnCnoxGreedy(ctx: GameContext, game: GameStore): void {
     cnoxBaseMaxHp: maxHp,
     cnoxBaseBarW: barW,
     cnoxBaseSize: size,
+    cnoxSplitDepth: 0,
   }
   ctx.enemies.push(e)
   game.stageEnemiesTotal++

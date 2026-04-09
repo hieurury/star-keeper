@@ -7,6 +7,15 @@ import { redrawHpBar } from '../utils'
 
 type GameStore = ReturnType<typeof useGameStore>
 
+function pioneerStageSpeedBonus(stage: number): number {
+  const s = Math.max(1, stage)
+  const early = Math.min(s - 1, 14) * 0.04
+  const mid = Math.min(Math.max(s - 15, 0), 20) * 0.018
+  const late = Math.min(Math.max(s - 35, 0), 30) * 0.008
+  const endgame = Math.max(s - 65, 0) * 0.003
+  return early + mid + late + endgame
+}
+
 // ─── Graphics ─────────────────────────────────────────────────────────────────
 export function drawPioneer(g: Graphics, size: number): void {
   g.clear()
@@ -121,11 +130,13 @@ export function spawnPioneerSquad(
 // ─── AI Update ────────────────────────────────────────────────────────────────
 /** Returns true if the enemy was removed from the array. */
 export function updatePioneer(ctx: GameContext, game: GameStore, e: Enemy, i: number, dt: number): boolean {
+  const speedBonus = pioneerStageSpeedBonus(game.currentStage)
+
   if (e.pioneerPhase === 'enter') {
     const dx = (e.enterTargetX ?? e.formTargetX ?? e.container.x) - e.container.x
     const dy = (e.enterTargetY ?? e.formTargetY ?? e.container.y) - e.container.y
     const dist = Math.sqrt(dx * dx + dy * dy)
-    const speed = 2.2 + game.currentStage * 0.05
+    const speed = 2.15 + speedBonus
     if (dist < speed * dt * 2) {
       e.container.x = e.enterTargetX ?? e.formTargetX ?? e.container.x
       e.container.y = e.enterTargetY ?? e.formTargetY ?? e.container.y
@@ -152,7 +163,7 @@ export function updatePioneer(ctx: GameContext, game: GameStore, e: Enemy, i: nu
       const dx = tx - e.container.x
       const dy = ty - e.container.y
       const d = Math.sqrt(dx * dx + dy * dy)
-      const speed = 1.6 + game.currentStage * 0.06
+      const speed = 1.55 + speedBonus * 0.9
       if (d > 3) {
         e.container.x += (dx / d) * speed * dt
         e.container.y += (dy / d) * speed * dt

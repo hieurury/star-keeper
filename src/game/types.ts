@@ -1,6 +1,6 @@
-import type { Graphics, Container, Text } from 'pixi.js'
+import type { Graphics, Container, Text, ColorMatrixFilter } from 'pixi.js'
 
-// ─── Entity types ──────────────────────────────────────────────────────────────
+// --- Entity types ---
 export interface Bullet {
   gfx: Graphics
   vy: number
@@ -20,7 +20,7 @@ export interface AllyDrone {
 
 export type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'
   | 'dai_lien' | 'thu_ho' | 'thuat_si' | 'boss_tinhvan' | 'boss_trumso'
-  | 'cnox_greedy' | 'cnox_shield' | 'cnox_spark' | 'boss_cnox_sun' | 'boss_cnox_moon'
+  | 'cnox_greedy' | 'cnox_shield' | 'cnox_spark' | 'boss_cnox_sun' | 'boss_cnox_outsider'
   | 'dnox_fire' | 'dnox_ice' | 'dnox_soil'
 export type KamiState = 'descend' | 'aim' | 'charge' | 'prexplode' | 'dead'
 export type BossAttack2State = 'ready' | 'locking'
@@ -98,7 +98,7 @@ export interface Enemy {
   formOffsetY?: number
   // boss_invader
   bossTurrets?: BossTurret[]
-  // dai_lien — reuses shootTimer, pioneerPhase, formTargetX/Y
+  // dai_lien - reuses shootTimer, pioneerPhase, formTargetX/Y
   // thu_ho (guardian)
   reflectCooldown?: number
   isReflecting?: boolean
@@ -116,18 +116,23 @@ export interface Enemy {
   cnoxBaseMaxHp?: number
   cnoxBaseBarW?: number
   cnoxBaseSize?: number
+  cnoxSplitDepth?: number
   // cnox_shield
   cnoxShields?: Graphics[]
   cnoxShieldAngle?: number
-  // Star Faster ultimate (Vết thương sâu)
+  cnoxAlphaBarrierGfx?: Graphics
+  cnoxAlphaBarrierHp?: number
+  cnoxAlphaBarrierMaxHp?: number
+  // Star Faster ultimate (Vet thuong sau)
   starFasterWoundBonus?: number
   // cnox_spark
   cnoxLaserGfx?: Graphics
   cnoxWarnGfx?: Graphics
-  cnoxLaserState?: 'idle' | 'warning' | 'firing' | 'link_warning' | 'link_firing'
+  cnoxLaserState?: 'idle' | 'warning' | 'firing' | 'link_warning' | 'link_firing' | 'alpha_warning' | 'alpha_firing'
   cnoxLaserTimer?: number
   cnoxLaserAngle?: number
   cnoxLinkOrder?: number
+  cnoxAlphaLaserAngles?: number[]
   // boss_tinhvan
   tinhVanGuns?: TinhVanGun[]
   blackHoles?: BlackHoleEntity[]
@@ -159,13 +164,34 @@ export interface Enemy {
   sunCoreLaserStartAngle?: number
   sunCoreLaserSweepSpan?: number
 
-  // boss_cnox_moon
+  // boss_cnox_outsider
   moonEnergy?: number
   moonMaxEnergy?: number
   moonRecoveryMode?: boolean
   moonWeapons?: MoonWeapon[]
   moonAttackQueue?: Array<'sword' | 'shield' | 'staff' | 'bow'>
   moonActiveWeapon?: 'sword' | 'shield' | 'staff' | 'bow' | null
+
+  // Dynamic threat/evolution runtime metadata
+  threatInitialized?: boolean
+  threatBossBoosted?: boolean
+  threatTier?: number
+  threatAlpha?: boolean
+  threatDamageMult?: number
+  threatMoveMult?: number
+  threatAge?: number
+  threatNextEvolveAt?: number
+  threatBaseVx?: number
+  threatBaseVy?: number
+  threatAura?: Graphics
+  threatSigil?: Graphics
+  threatAlphaShell?: Graphics
+  threatAlphaCore?: Graphics
+  threatAlphaScale?: number
+  threatAlphaVisualApplied?: boolean
+  threatAlphaAttackTimer?: number
+  threatColorFilter?: ColorMatrixFilter
+  threatPulse?: number
 
 }
 

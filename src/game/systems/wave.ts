@@ -19,6 +19,7 @@ import { spawnCnoxSparkGroup } from '../entities/CnoxSpark'
 import { spawnDnoxFireSquad } from '../entities/DnoxFire'
 import { spawnDnoxIce } from '../entities/DnoxIce'
 import { spawnDnoxSoilGroup } from '../entities/DnoxSoil'
+import { getThreatProfile, type ThreatProfile } from './threat'
 
 type GameStore = ReturnType<typeof useGameStore>
 
@@ -35,6 +36,20 @@ function finalizeWaveOrder(tankers: WaveSpawner[], regular: WaveSpawner[]): Wave
   return [...tankers, ...regular]
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function scaledCount(baseCount: number, cap: number, threat: ThreatProfile): number {
+  const scaled = Math.round(baseCount * (0.86 + threat.spawnMult * 0.34))
+  return Math.max(1, Math.min(cap, scaled))
+}
+
+function threatRoll(baseChance: number, threat: ThreatProfile): boolean {
+  const chance = clamp(baseChance * (0.8 + threat.spawnMult * 0.45), 0.02, 0.95)
+  return Math.random() < chance
+}
+
 // ─── Faction helpers ──────────────────────────────────────────────────────────
 const ALL_FACTIONS: Array<'anox' | 'bnox' | 'cnox' | 'dnox'> = ['anox', 'bnox', 'cnox', 'dnox']
 
@@ -46,10 +61,11 @@ function rotateFaction(ctx: GameContext): void {
 }
 
 // ─── Anox wave (pioneer / sniper / kamikaze) ──────────────────────────────────
-function buildAnoxWave(ctx: GameContext, game: GameStore, regular: WaveSpawner[]): void {
+function buildAnoxWave(ctx: GameContext, game: GameStore, regular: WaveSpawner[], threat: ThreatProfile): void {
   const stage = game.currentStage
 
-  const squadCount = Math.min(10, 2 + Math.floor(stage / 2))
+  const squadBase = Math.min(12, 2 + Math.floor(stage / 2))
+  const squadCount = scaledCount(squadBase, 15, threat)
   for (let i = 0; i < squadCount; i++) {
     const formations: Array<'line' | 'diamond' | 'box'> = ['line', 'diamond', 'box']
     const entries: Array<'top' | 'left' | 'right'> = ['top', 'left', 'right']
@@ -59,15 +75,17 @@ function buildAnoxWave(ctx: GameContext, game: GameStore, regular: WaveSpawner[]
   }
 
   if (stage >= 2) {
-    const sniperCount = Math.min(10, 2 + Math.floor(stage / 2))
+    const sniperBase = Math.min(11, 2 + Math.floor(stage / 2))
+    const sniperCount = scaledCount(sniperBase, 13, threat)
     for (let i = 0; i < sniperCount; i++) {
-      const withEscort = stage >= 3 && Math.random() < 0.65
+      const withEscort = stage >= 3 && threatRoll(0.65, threat)
       regular.push(() => spawnSniperGroup(ctx, game, withEscort))
     }
   }
 
   if (stage >= 4) {
-    const kamiCount = Math.min(6, stage - 3)
+    const kamiBase = Math.min(8, stage - 3)
+    const kamiCount = scaledCount(kamiBase, 10, threat)
     for (let i = 0; i < kamiCount; i++) {
       regular.push(() => spawnKamikaze(ctx, game))
     }
@@ -75,60 +93,100 @@ function buildAnoxWave(ctx: GameContext, game: GameStore, regular: WaveSpawner[]
 }
 
 // ─── Bnox wave (đại liên / thủ hộ / thuật sĩ) ────────────────────────────────
-function buildBnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[], regular: WaveSpawner[]): void {
+function buildBnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[], regular: WaveSpawner[], threat: ThreatProfile): void {
   const stage = game.currentStage
 
-  const dlCount = Math.min(3, 1 + Math.floor(stage / 5))
+  const dlBase = Math.min(4, 1 + Math.floor(stage / 5))
+  const dlCount = scaledCount(dlBase, 5, threat)
   for (let i = 0; i < dlCount; i++) {
     regular.push(() => spawnDaiLienPair(ctx, game))
   }
 
   tankers.push(() => spawnThuHoSwarm(ctx, game))
   tankers.push(() => spawnThuHoSwarm(ctx, game))
-  if (stage >= 4 && Math.random() < 0.55) {
+  if (stage >= 4 && threatRoll(0.55, threat)) {
     tankers.push(() => spawnThuHoSwarm(ctx, game))
   }
 
-  const tsCount = Math.min(7, 2 + Math.floor(stage / 3))
+  const tsBase = Math.min(9, 2 + Math.floor(stage / 3))
+  const tsCount = scaledCount(tsBase, 10, threat)
   for (let i = 0; i < tsCount; i++) {
     regular.push(() => spawnThuatSi(ctx, game))
   }
 }
 
-function buildCnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[], regular: WaveSpawner[]): void {
+function buildCnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[], regular: WaveSpawner[], threat: ThreatProfile): void {
   const stage = game.currentStage
 
-  const shieldGroups = 1 + (stage >= 6 ? 1 : 0)
+  const shieldGroups = 1 + (stage >= 6 ? 1 : 0) + (stage >= 18 && threatRoll(0.5, threat) ? 1 : 0)
   for (let i = 0; i < shieldGroups; i++) tankers.push(() => spawnCnoxShieldWall(ctx, game))
 
   if (stage >= 2) {
-    const greedyCount = 1 + (Math.random() < 0.55 ? 1 : 0) + (stage >= 7 && Math.random() < 0.28 ? 1 : 0)
+    const greedyCount = 1 + (threatRoll(0.55, threat) ? 1 : 0) + (stage >= 7 && threatRoll(0.28, threat) ? 1 : 0)
     for (let i = 0; i < greedyCount; i++) regular.push(() => spawnCnoxGreedy(ctx, game))
   }
 
   if (stage >= 3) {
-    const sparkGroups = 1 + (stage >= 8 && Math.random() < 0.45 ? 1 : 0)
+    const sparkGroups = 1 + (stage >= 8 && threatRoll(0.45, threat) ? 1 : 0)
     for (let i = 0; i < sparkGroups; i++) regular.push(() => spawnCnoxSparkGroup(ctx, game))
   }
 }
 
 // ─── Dnox wave (hoả chủng / băng lam / thổ nhưỡng) ───────────────────────────
-function buildDnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[], regular: WaveSpawner[]): void {
+function buildDnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[], regular: WaveSpawner[], threat: ThreatProfile): void {
   const stage = game.currentStage
 
   // Hoả chủng làm tank tuyến trước (nhiều đợt hơn ở màn cao)
   tankers.push(() => spawnDnoxFireSquad(ctx, game))
   if (stage >= 4) tankers.push(() => spawnDnoxFireSquad(ctx, game))
-  if (stage >= 8 && Math.random() < 0.7) tankers.push(() => spawnDnoxFireSquad(ctx, game))
+  if (stage >= 8 && threatRoll(0.7, threat)) tankers.push(() => spawnDnoxFireSquad(ctx, game))
 
   // Băng lam tấn công tầm trung (stage >= 1)
-  const iceCount = 1 + (Math.random() < 0.45 ? 1 : 0) + (stage >= 4 && Math.random() < 0.75 ? 1 : 0)
+  const iceCount = 1 + (threatRoll(0.45, threat) ? 1 : 0) + (stage >= 4 && threatRoll(0.75, threat) ? 1 : 0)
   for (let i = 0; i < iceCount; i++) regular.push(() => spawnDnoxIce(ctx, game))
 
   // Thổ nhưỡng ký sinh (stage >= 3, hiếm nhưng gây khó chịu)
-  if (stage >= 3 && Math.random() < 0.55) {
+  if (stage >= 3 && threatRoll(0.55, threat)) {
     regular.push(() => spawnDnoxSoilGroup(ctx, game))
-    if (stage >= 7 && Math.random() < 0.35) regular.push(() => spawnDnoxSoilGroup(ctx, game))
+    if (stage >= 7 && threatRoll(0.35, threat)) regular.push(() => spawnDnoxSoilGroup(ctx, game))
+  }
+}
+
+function addCrossFactionIncursion(
+  ctx: GameContext,
+  game: GameStore,
+  tankers: WaveSpawner[],
+  regular: WaveSpawner[],
+  threat: ThreatProfile,
+): void {
+  const stage = game.currentStage
+  if (stage < 18) return
+
+  const incursionWaves = Math.min(3, Math.floor((threat.spawnMult - 1) * 2.2) + (stage >= 30 ? 1 : 0))
+  if (incursionWaves <= 0) return
+
+  const secondary: WaveSpawner[] = []
+
+  if (ctx.activeFaction !== 'anox') {
+    secondary.push(() => spawnSniperGroup(ctx, game, stage >= 24 && threatRoll(0.6, threat)))
+    if (stage >= 24) secondary.push(() => spawnKamikaze(ctx, game))
+  }
+  if (ctx.activeFaction !== 'bnox') {
+    secondary.push(() => spawnDaiLienPair(ctx, game))
+    if (stage >= 26) secondary.push(() => spawnThuatSi(ctx, game))
+  }
+  if (ctx.activeFaction !== 'cnox') {
+    secondary.push(() => spawnCnoxSparkGroup(ctx, game))
+    if (stage >= 28) tankers.push(() => spawnCnoxShieldWall(ctx, game))
+  }
+  if (ctx.activeFaction !== 'dnox') {
+    secondary.push(() => spawnDnoxIce(ctx, game))
+    if (stage >= 30 && threatRoll(0.5, threat)) secondary.push(() => spawnDnoxSoilGroup(ctx, game))
+  }
+
+  shuffleInPlace(secondary)
+  for (let i = 0; i < Math.min(incursionWaves, secondary.length); i++) {
+    regular.push(secondary[i]!)
   }
 }
 
@@ -137,6 +195,7 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
   const stage = game.currentStage
   const tankers: WaveSpawner[] = []
   const regular: WaveSpawner[] = []
+  const threat = getThreatProfile(game)
 
   // ── Test mode override ───────────────────────────────────────────────────────
   if (game.testMode) {
@@ -151,10 +210,10 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
       return bossWave
     } else if (game.testMode.type === 'faction') {
       ctx.activeFaction = game.testMode.faction as 'anox' | 'bnox' | 'cnox' | 'dnox'
-      if (game.testMode.faction === 'bnox') buildBnoxWave(ctx, game, tankers, regular)
-      else if (game.testMode.faction === 'cnox') buildCnoxWave(ctx, game, tankers, regular)
-      else if ((game.testMode.faction as string) === 'dnox') buildDnoxWave(ctx, game, tankers, regular)
-      else buildAnoxWave(ctx, game, regular)
+      if (game.testMode.faction === 'bnox') buildBnoxWave(ctx, game, tankers, regular, threat)
+      else if (game.testMode.faction === 'cnox') buildCnoxWave(ctx, game, tankers, regular, threat)
+      else if ((game.testMode.faction as string) === 'dnox') buildDnoxWave(ctx, game, tankers, regular, threat)
+      else buildAnoxWave(ctx, game, regular, threat)
       return finalizeWaveOrder(tankers, regular)
     }
   }
@@ -185,14 +244,16 @@ export function buildWave(ctx: GameContext, game: GameStore): WaveSpawner[] {
 
   // ── Regular stage: spawn only active faction ─────────────────────────────────
   if (ctx.activeFaction === 'bnox') {
-    buildBnoxWave(ctx, game, tankers, regular)
+    buildBnoxWave(ctx, game, tankers, regular, threat)
   } else if (ctx.activeFaction === 'cnox') {
-    buildCnoxWave(ctx, game, tankers, regular)
+    buildCnoxWave(ctx, game, tankers, regular, threat)
   } else if ((ctx.activeFaction as string) === 'dnox') {
-    buildDnoxWave(ctx, game, tankers, regular)
+    buildDnoxWave(ctx, game, tankers, regular, threat)
   } else {
-    buildAnoxWave(ctx, game, regular)
+    buildAnoxWave(ctx, game, regular, threat)
   }
+
+  addCrossFactionIncursion(ctx, game, tankers, regular, threat)
 
   return finalizeWaveOrder(tankers, regular)
 }

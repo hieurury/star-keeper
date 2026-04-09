@@ -35,6 +35,7 @@ export function spawnCnoxShieldWall(ctx: GameContext, game: GameStore): void {
     drawCnoxShieldBody(body, size)
     const shieldA = new Graphics()
     const shieldB = new Graphics()
+    const alphaBarrier = new Graphics()
     drawCnoxShieldOrb(shieldA, size * 0.95)
     drawCnoxShieldOrb(shieldB, size * 0.95)
     const hpBarBg = new Graphics()
@@ -43,7 +44,7 @@ export function spawnCnoxShieldWall(ctx: GameContext, game: GameStore): void {
     hpBarBg.y = -size - 8
     hpBar.y = -size - 8
     const container = new Container()
-    container.addChild(body, shieldA, shieldB, hpBarBg, hpBar)
+    container.addChild(body, alphaBarrier, shieldA, shieldB, hpBarBg, hpBar)
     container.x = Math.random() < 0.5 ? -40 : GAME_W + 40
     container.y = targetY + (Math.random() - 0.5) * 10
     ctx.gameLayer.addChild(container)
@@ -62,6 +63,9 @@ export function spawnCnoxShieldWall(ctx: GameContext, game: GameStore): void {
       formTargetY: targetY,
       cnoxShields: [shieldA, shieldB],
       cnoxShieldAngle: Math.random() * Math.PI * 2,
+      cnoxAlphaBarrierGfx: alphaBarrier,
+      cnoxAlphaBarrierHp: 0,
+      cnoxAlphaBarrierMaxHp: 0,
     }
     ctx.enemies.push(e)
     game.stageEnemiesTotal++

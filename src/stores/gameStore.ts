@@ -27,6 +27,27 @@ export const ALL_ENEMY_KINDS: EnemyKind[] = [
   'dnox_soil',
 ]
 
+const RUN_GOLD_BASE_BY_KIND: Record<EnemyKind, number> = {
+  pioneer: 1,
+  kamikaze: 2,
+  sniper: 2,
+  dai_lien: 2,
+  thu_ho: 3,
+  thuat_si: 3,
+  cnox_greedy: 4,
+  cnox_shield: 3,
+  cnox_spark: 3,
+  dnox_fire: 3,
+  dnox_ice: 4,
+  dnox_soil: 3,
+  boss_stardestroyer: 20,
+  boss_invader: 22,
+  boss_tinhvan: 24,
+  boss_trumso: 24,
+  boss_cnox_sun: 28,
+  boss_cnox_outsider: 30,
+}
+
 // ─── Card System ──────────────────────────────────────────────────────────────
 export type CardType = 'attack' | 'support' | 'ultimate'
 
@@ -722,6 +743,8 @@ const SAVE_SIGNATURE_PEPPERS_LEGACY = [
   'ban-may-bay::save-signature',
 ]
 
+const POST_CARD_PICK_INVULNERABLE_MS = 1000
+
 interface SaveEnvelope {
   format: 'signed'
   envelopeVersion: number
@@ -912,6 +935,7 @@ export const useGameStore = defineStore('game', () => {
   // Level-up UI (card system)
   const levelUpCardChoices = ref<CardDef[]>([])
   const isLevelUpPending = ref(false)
+  const postCardPickInvulnerableUntilMs = ref(0)
 
   // Card system state
   const activeCards = ref<Record<string, number>>({})   // cardId → level (1‑5)
@@ -1193,6 +1217,17 @@ export const useGameStore = defineStore('game', () => {
   const sessionStartMs = ref(0)
   const isAdminMode = ref(false)
 
+  const stageGoldBonusThisRun = computed(() => Math.max(0, (currentStage.value - 1) * 6))
+  const projectedGoldEarnedThisRun = computed(() => goldEarnedThisRun.value + stageGoldBonusThisRun.value)
+
+  function getRunKillGold(kind: EnemyKind, stage: number, threatTier = 0, isAlpha = false): number {
+    const base = RUN_GOLD_BASE_BY_KIND[kind] ?? 1
+    const stageMult = 1 + Math.max(0, stage - 1) * 0.02
+    const tierMult = 1 + Math.max(0, threatTier) * 0.12
+    const alphaMult = isAlpha ? 1.45 : 1
+    return Math.max(1, Math.round(base * stageMult * tierMult * alphaMult))
+  }
+
   const isSkillReady = computed(() =>
     selectedShip.value === 'star_holder'
       ? fragmentCount.value >= 10
@@ -1394,6 +1429,7 @@ export const useGameStore = defineStore('game', () => {
     activeCards.value = { ...activeCards.value, [cardId]: currentLv + 1 }
     applyArmorPlatingHpBonus()
     sessionCardsChosen.value++
+    postCardPickInvulnerableUntilMs.value = Date.now() + POST_CARD_PICK_INVULNERABLE_MS
     isLevelUpPending.value = false
     isPaused.value = false
   }
@@ -1532,6 +1568,8 @@ export const useGameStore = defineStore('game', () => {
 
   function takeDamage(amount: number) {
     if (isGameOverSequence.value) return
+    if (isLevelUpPending.value) return
+    if (Date.now() < postCardPickInvulnerableUntilMs.value) return
     const reduction = artifactStats.value.damageTakenReduction
     const actualDmg = reduction > 0 ? Math.max(1, Math.round(amount * (1 - reduction))) : amount
     if (actualDmg > 0) audioManager.playPlayerHit()
@@ -1547,7 +1585,7 @@ export const useGameStore = defineStore('game', () => {
     isGameOverSequence.value = false
     // Tàu bị phá hủy: mất thêm độ bền
     consumeDurability(selectedShip.value, 15)
-    goldEarnedThisRun.value = Math.floor(currentStage.value * 5) + Math.floor(currentScore.value / 100)
+    goldEarnedThisRun.value = projectedGoldEarnedThisRun.value
     playerCoins.value += goldEarnedThisRun.value
 
     // Cộng account exp sau mỗi ván
@@ -1626,9 +1664,17 @@ export const useGameStore = defineStore('game', () => {
     saveProgress()
   }
 
-  function addKill() {
+  function addKill(kind?: EnemyKind, opts?: { threatTier?: number, isAlpha?: boolean }) {
     stageEnemiesKilled.value++
     sessionKillsTotal.value++
+    if (kind) {
+      goldEarnedThisRun.value += getRunKillGold(
+        kind,
+        currentStage.value,
+        opts?.threatTier ?? 0,
+        opts?.isAlpha ?? false,
+      )
+    }
   }
 
   function addBossKill() {
@@ -1714,6 +1760,7 @@ export const useGameStore = defineStore('game', () => {
     }
     levelUpCardChoices.value = []
     isLevelUpPending.value = false
+    postCardPickInvulnerableUntilMs.value = 0
     goldEarnedThisRun.value = 0
     isGameOverSequence.value = false
     skillCooldown.value = 0
@@ -1746,9 +1793,10 @@ export const useGameStore = defineStore('game', () => {
   function endGame() {
     pendingHealPopup.value = 0
     isGameOverSequence.value = false
+    postCardPickInvulnerableUntilMs.value = 0
     // Award gold/exp earned during this run when player exits manually
     if (isPlaying.value) {
-      goldEarnedThisRun.value = Math.floor(currentStage.value * 5) + Math.floor(currentScore.value / 100)
+      goldEarnedThisRun.value = projectedGoldEarnedThisRun.value
       playerCoins.value += goldEarnedThisRun.value
       const earnedAccountExp = currentStage.value * 10 + Math.floor(currentScore.value / 50)
       addAccountExp(earnedAccountExp)
@@ -2330,6 +2378,7 @@ export const useGameStore = defineStore('game', () => {
     playerCoins,
     playerRuby,
     goldEarnedThisRun,
+    projectedGoldEarnedThisRun,
     playerHp,
     playerMaxHp,
     highScore,
