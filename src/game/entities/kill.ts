@@ -12,6 +12,7 @@ import { cleanupDnoxFire } from './DnoxFire'
 import { cleanupDnoxIce } from './DnoxIce'
 import { cleanupDnoxSoil, getDnoxSoilCoreKind, removeDnoxSoilBonus, isDnoxSoilProtected } from './DnoxSoil'
 import { audioManager } from '../systems/audio'
+import { getEnemyRewardScale } from '../systems/threat'
 
 type GameStore = ReturnType<typeof useGameStore>
 
@@ -26,6 +27,8 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
     return
   }
 
+  const rewardScale = getEnemyRewardScale(e)
+
   if (e.kind === 'boss_stardestroyer') {
     spawnExplosion(ctx, e.container.x, e.container.y, 50, 0x4466ff, 0xaaccff)
     spawnExplosion(ctx, e.container.x - 30, e.container.y + 20, 28, 0xff4400, 0xffee44)
@@ -33,7 +36,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
     screenFlash(ctx, 0x4466ff, 0.65, 800)
     spawnEnemyOrbs(ctx, e.container.x, e.container.y, 'boss_stardestroyer')
     if (e.laserLine) e.laserLine.clear()
-    game.addScore(300 + game.currentStage * 50)
+    game.addScore(Math.round((300 + game.currentStage * 50) * rewardScale))
     game.addBossKill()
   } else if (e.kind === 'boss_invader') {
     spawnExplosion(ctx, e.container.x, e.container.y, 55, 0x2255ff, 0x88bbff)
@@ -44,7 +47,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
     spawnEnemyOrbs(ctx, e.container.x, e.container.y, 'boss_invader')
     if (e.laserLine) e.laserLine.clear()
     cleanupBossInvaderTurrets(ctx, e)
-    game.addScore(400 + game.currentStage * 60)
+    game.addScore(Math.round((400 + game.currentStage * 60) * rewardScale))
     game.addBossKill()
   } else if (e.kind === 'boss_tinhvan') {
     spawnExplosion(ctx, e.container.x, e.container.y, 70, 0x6600aa, 0xcc44ff)
@@ -55,7 +58,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
     screenFlash(ctx, 0x6600aa, 0.75, 1000)
     spawnEnemyOrbs(ctx, e.container.x, e.container.y, 'boss_tinhvan')
     cleanupBossTinhVan(ctx, e)
-    game.addScore(600 + game.currentStage * 80)
+    game.addScore(Math.round((600 + game.currentStage * 80) * rewardScale))
     game.addBossKill()
   } else if (e.kind === 'boss_trumso') {
     spawnExplosion(ctx, e.container.x, e.container.y, 60, 0x7700cc, 0xcc44ff)
@@ -65,7 +68,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
     screenFlash(ctx, 0x6600cc, 0.7, 900)
     spawnEnemyOrbs(ctx, e.container.x, e.container.y, 'boss_trumso')
     cleanupBossTrumSo(ctx, e)
-    game.addScore(500 + game.currentStage * 70)
+    game.addScore(Math.round((500 + game.currentStage * 70) * rewardScale))
     game.addBossKill()
   } else if (e.kind === 'boss_cnox_sun') {
     spawnExplosion(ctx, e.container.x, e.container.y, 82, 0xff8b2c, 0xffe2aa)
@@ -75,7 +78,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
     screenFlash(ctx, 0xff9d33, 0.82, 1000)
     spawnEnemyOrbs(ctx, e.container.x, e.container.y, 'boss_cnox_sun')
     cleanupBossCnoxSun(ctx, e)
-    game.addScore(980 + game.currentStage * 100)
+    game.addScore(Math.round((980 + game.currentStage * 100) * rewardScale))
     game.addBossKill()
   } else {
     // Thủ Hộ (guardian) dies with a gold flash
@@ -123,14 +126,14 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
       }
       spawnExplosion(ctx, e.container.x, e.container.y, 10, 0x88ff88, 0xffffff)
       spawnEnemyOrbs(ctx, e.container.x, e.container.y, 'thuat_si')
-      const pts = 18 + game.currentStage * 8
+      const pts = Math.round((18 + game.currentStage * 8) * rewardScale)
       game.addScore(pts)
       if (game.selectedShip === 'star_holder') {
         const dropChance = (laserKill && game.cardStats.laserKillDropsSoul) ? 1.0 : 0.75
         if (Math.random() < dropChance) spawnFragmentOrb(ctx, e.container.x, e.container.y)
       }
 
-      game.addKill()
+      game.addKill(e.kind, { threatTier: e.threatTier ?? 0, isAlpha: !!e.threatAlpha })
       audioManager.playEnemyKill()
       if (game.artifactStats.manaCoreActive) {
         ctx.manaCoreKillCount++
@@ -142,6 +145,16 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
 
     const explR = e.kind === 'kamikaze' ? 18 : 14
     spawnExplosion(ctx, e.container.x, e.container.y, explR)
+    if (e.threatAlpha) {
+      spawnExplosion(ctx, e.container.x, e.container.y, explR + 8, 0xffe8a6, 0xffffff)
+      spawnExpOrb(ctx, e.container.x, e.container.y, 'gold')
+    }
+    if ((e.threatTier ?? 0) >= 2) {
+      spawnExpOrb(ctx, e.container.x, e.container.y, 'purple')
+    }
+    if ((e.threatTier ?? 0) >= 3) {
+      spawnExpOrb(ctx, e.container.x, e.container.y, 'gold')
+    }
     spawnEnemyOrbs(ctx, e.container.x, e.container.y, e.kind)
     if (e.kind === 'cnox_greedy') {
       let remaining = Math.max(0, Math.round(e.cnoxStolenExp ?? 0))
@@ -178,7 +191,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
              : e.kind === 'dnox_ice'    ? 28 + game.currentStage * 10
              : e.kind === 'dnox_soil'   ? 22 + game.currentStage * 8
              :                          10 + game.currentStage * 5
-    game.addScore(pts)
+    game.addScore(Math.round(pts * rewardScale))
     // Star Holder: soul fragment drop
     if (game.selectedShip === 'star_holder') {
       const dropChance = (laserKill && game.cardStats.laserKillDropsSoul) ? 1.0 : 0.75
@@ -189,7 +202,7 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
 
   ctx.gameLayer.removeChild(e.container)
   ctx.enemies.splice(i, 1)
-  game.addKill()
+  game.addKill(e.kind, { threatTier: e.threatTier ?? 0, isAlpha: !!e.threatAlpha })
   audioManager.playEnemyKill()
 
   // Mana Core: track kills; DO NOT call activateManaCoreOverload here (avoids circular dep)

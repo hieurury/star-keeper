@@ -2,7 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { useGameStore, ALL_CARD_DEFS, ALL_ARTIFACT_DEFS, SHIP_DEFS } from '../../stores/gameStore'
 import type { CardDef, CardType } from '../../stores/gameStore'
-import { PhCrosshair, PhHouse, PhLightning, PhPlay, PhQuestion, PhSpiral } from '@phosphor-icons/vue'
+import { estimatePlayerCombatPower } from '../../game/systems/threat'
+import { PhCoins, PhCrosshair, PhHouse, PhLightning, PhPlay, PhQuestion, PhSpiral, PhSword } from '@phosphor-icons/vue'
 import ArtifactIcon from '../ui/ArtifactIcon.vue'
 import CardIcon from '../ui/CardIcon.vue'
 
@@ -109,6 +110,9 @@ watch(() => game.isSkillReady, (ready) => {
 const skillLabelHtml = computed(() => {
   return SHIP_DEFS[game.selectedShip as keyof typeof SHIP_DEFS]?.skill.hudLabelHtml ?? 'SÓNG<br/>NHIỆT'
 })
+
+const combatPower = computed(() => estimatePlayerCombatPower(game))
+const goldEarnedPreview = computed(() => game.projectedGoldEarnedThisRun)
 </script>
 
 <template>
@@ -117,18 +121,32 @@ const skillLabelHtml = computed(() => {
     <div class="hud__top" data-tour="hud-top">
       <!-- HP bar -->
       <div class="hud__hp" data-tour="hud-hp">
-        <div class="hud__hp-label">HP</div>
-        <div class="hud__hp-track">
-          <div
-            class="hud__hp-fill"
-            :style="{ width: game.hpPercent + '%' }"
-            :class="{
-              'hud__hp-fill--mid': game.hpPercent <= 50 && game.hpPercent > 25,
-              'hud__hp-fill--low': game.hpPercent <= 25,
-            }"
-          />
+        <div class="hud__hp-main">
+          <div class="hud__hp-label">HP</div>
+          <div class="hud__hp-track">
+            <div
+              class="hud__hp-fill"
+              :style="{ width: game.hpPercent + '%' }"
+              :class="{
+                'hud__hp-fill--mid': game.hpPercent <= 50 && game.hpPercent > 25,
+                'hud__hp-fill--low': game.hpPercent <= 25,
+              }"
+            />
+          </div>
+          <div class="hud__hp-num">{{ game.playerHp }}/{{ game.playerMaxHp }}</div>
         </div>
-        <div class="hud__hp-num">{{ game.playerHp }}/{{ game.playerMaxHp }}</div>
+        <div class="hud__hp-extra">
+          <span class="hud__hp-stat hud__hp-stat--power">
+            <PhSword :size="11" weight="fill" class="hud__hp-stat-icon" />
+            <span class="hud__hp-stat-sep">:</span>
+            <span class="hud__hp-stat-value">{{ combatPower.toLocaleString('vi-VN') }}</span>
+          </span>
+          <span class="hud__hp-stat hud__hp-stat--gold">
+            <PhCoins :size="11" weight="fill" class="hud__hp-stat-icon" />
+            <span class="hud__hp-stat-sep">:</span>
+            <span class="hud__hp-stat-value">{{ goldEarnedPreview.toLocaleString('vi-VN') }}</span>
+          </span>
+        </div>
       </div>
 
       <div class="hud__score" data-tour="hud-score">
@@ -350,21 +368,35 @@ const skillLabelHtml = computed(() => {
 
 /* Top bar */
 .hud__top {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.6);
-  border-bottom: 2px solid var(--color-border-dark);
-  backdrop-filter: blur(4px);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  backdrop-filter: none;
 }
 
 .hud__hp {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  flex: 1;
+  max-width: 216px;
+  padding: 5px 6px 6px;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(110, 150, 180, 0.45);
+  backdrop-filter: blur(2px);
+}
+.hud__hp-main {
+  display: flex;
   align-items: center;
   gap: 5px;
-  flex: 1;
-  max-width: 140px;
 }
 .hud__hp-label {
   font-size: 8px;
@@ -397,11 +429,45 @@ const skillLabelHtml = computed(() => {
   color: var(--color-text-dim);
   white-space: nowrap;
 }
+.hud__hp-extra {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 5px;
+}
+.hud__hp-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.hud__hp-stat--power {
+  color: #7cc9ff;
+}
+.hud__hp-stat--gold {
+  color: #f3c14b;
+}
+.hud__hp-stat-icon {
+  opacity: 0.95;
+}
+.hud__hp-stat-sep {
+  opacity: 0.8;
+}
+.hud__hp-stat-value {
+  font-size: 9px;
+}
 
 .hud__score, .hud__stage {
   display: flex;
   flex-direction: column;
   align-items: center;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(120, 140, 170, 0.45);
+  padding: 4px 6px;
+  min-width: 60px;
+  backdrop-filter: blur(2px);
 }
 .hud__score-label, .hud__stage-label {
   font-size: 8px;
@@ -422,6 +488,10 @@ const skillLabelHtml = computed(() => {
   align-items: center;
   gap: 2px;
   min-width: 72px;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(120, 140, 170, 0.45);
+  padding: 4px 6px;
+  backdrop-filter: blur(2px);
 }
 .hud__enemies-label {
   font-size: 7px;
@@ -728,12 +798,17 @@ const skillLabelHtml = computed(() => {
 
 /* EXP bar */
 .hud__exp-block {
+  position: absolute;
+  top: 66px;
+  left: 8px;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 4px 12px 6px;
-  background: rgba(0, 0, 0, 0.5);
-  border-bottom: 1px solid var(--color-border-dark);
+  width: 216px;
+  padding: 4px 6px 6px;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(100, 150, 120, 0.45);
+  backdrop-filter: blur(2px);
 }
 .hud__exp-row {
   display: flex;

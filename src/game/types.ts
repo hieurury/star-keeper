@@ -1,4 +1,4 @@
-import type { Graphics, Container, Text } from 'pixi.js'
+import type { Graphics, Container, Text, ColorMatrixFilter } from 'pixi.js'
 
 // ─── Entity types ──────────────────────────────────────────────────────────────
 export interface Bullet {
@@ -166,6 +166,27 @@ export interface Enemy {
   moonWeapons?: MoonWeapon[]
   moonAttackQueue?: Array<'sword' | 'shield' | 'staff' | 'bow'>
   moonActiveWeapon?: 'sword' | 'shield' | 'staff' | 'bow' | null
+
+  // Dynamic threat/evolution runtime metadata
+  threatInitialized?: boolean
+  threatBossBoosted?: boolean
+  threatTier?: number
+  threatAlpha?: boolean
+  threatDamageMult?: number
+  threatMoveMult?: number
+  threatAge?: number
+  threatNextEvolveAt?: number
+  threatBaseVx?: number
+  threatBaseVy?: number
+  threatAura?: Graphics
+  threatSigil?: Graphics
+  threatAlphaShell?: Graphics
+  threatAlphaCore?: Graphics
+  threatAlphaScale?: number
+  threatAlphaVisualApplied?: boolean
+  threatAlphaAttackTimer?: number
+  threatColorFilter?: ColorMatrixFilter
+  threatPulse?: number
 
 }
 

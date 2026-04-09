@@ -24,6 +24,33 @@ const BOSSES: Array<{ kind: string; label: string; emoji: string }> = [
   { kind: 'boss_cnox_sun',      label: 'Cnox - Mặt trời tối thượng', emoji: '☀️' },
 ]
 
+const MIN_TEST_STAGE = 1
+const MAX_TEST_STAGE = 999
+const desiredStage = ref(1)
+
+function clampStage(v: number): number {
+  if (!Number.isFinite(v)) return MIN_TEST_STAGE
+  return Math.max(MIN_TEST_STAGE, Math.min(MAX_TEST_STAGE, Math.floor(v)))
+}
+
+function bumpDesiredStage(delta: number) {
+  desiredStage.value = clampStage(desiredStage.value + delta)
+}
+
+function setDesiredStageFromInput(e: Event) {
+  const input = e.target as HTMLInputElement
+  const parsed = Number(input.value)
+  desiredStage.value = clampStage(Number.isNaN(parsed) ? desiredStage.value : parsed)
+}
+
+function applyDesiredStageToRun() {
+  const stage = clampStage(desiredStage.value)
+  game.currentStage = stage
+  game.stageEnemiesTotal = 0
+  game.stageEnemiesKilled = 0
+  game.stageComplete = false
+}
+
 // ── Game phase ─────────────────────────────────────────────────────────────────
 const phase = ref<'select' | 'playing'>('select')
 
@@ -34,11 +61,18 @@ function startTest() {
     game.testMode = { type: 'faction', faction: selectedFaction.value }
   }
   game.startGame()
+  applyDesiredStageToRun()
   phase.value = 'playing'
 }
 
 function restartTest() {
   game.startGame()
+  applyDesiredStageToRun()
+}
+
+function applyStageNow() {
+  if (phase.value !== 'playing') return
+  restartTest()
 }
 
 function backToSelect() {
@@ -74,6 +108,12 @@ onMounted(() => {
       <div class="test-view__bar-title">⚙ THỬ NGHIỆM</div>
       <div class="test-view__bar-actions">
         <template v-if="phase === 'playing'">
+          <div class="test-stage-inline">
+            <button class="test-stage-inline__btn" @click="bumpDesiredStage(-1)">−</button>
+            <span class="test-stage-inline__value">S{{ desiredStage }}</span>
+            <button class="test-stage-inline__btn" @click="bumpDesiredStage(1)">+</button>
+          </div>
+          <PixelButton label="↺ Áp Stage" variant="secondary" size="sm" @click="applyStageNow" />
           <PixelButton
             :label="game.isPaused ? '&#9654; Tiếp' : '&#9208; Dừng'"
             variant="secondary"
@@ -164,6 +204,24 @@ onMounted(() => {
           </div>
         </div>
 
+        <div class="test-section">
+          <div class="test-section__label">Stage Bắt Đầu</div>
+          <div class="stage-picker">
+            <button class="stage-step" @click="bumpDesiredStage(-10)">-10</button>
+            <button class="stage-step" @click="bumpDesiredStage(-1)">-1</button>
+            <input
+              class="stage-input"
+              type="number"
+              :min="MIN_TEST_STAGE"
+              :max="MAX_TEST_STAGE"
+              :value="desiredStage"
+              @input="setDesiredStageFromInput"
+            />
+            <button class="stage-step" @click="bumpDesiredStage(1)">+1</button>
+            <button class="stage-step" @click="bumpDesiredStage(10)">+10</button>
+          </div>
+        </div>
+
         <PixelButton label="▶ BẮT ĐẦU" size="lg" @click="startTest" />
       </div>
     </div>
@@ -223,6 +281,33 @@ onMounted(() => {
   align-items: center;
 }
 
+.test-stage-inline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border: 2px solid var(--color-border-dark);
+  background: var(--color-panel-dark, #161b22);
+}
+.test-stage-inline__btn {
+  border: none;
+  background: var(--color-panel, #0d1117);
+  color: var(--color-text);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  line-height: 1;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+.test-stage-inline__value {
+  min-width: 42px;
+  text-align: center;
+  color: var(--color-accent);
+  font-family: var(--font-pixel);
+  font-size: 9px;
+}
+
 /* ── Select panel ─────────────────────────────────────────────────────────── */
 .test-select {
   flex: 1;
@@ -277,6 +362,40 @@ onMounted(() => {
   font-size: 8px;
   color: var(--color-text-dim);
   letter-spacing: 2px;
+  text-align: center;
+}
+
+.stage-picker {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr 90px 1fr 1fr;
+  gap: 8px;
+}
+
+.stage-step {
+  height: 34px;
+  border: 2px solid var(--color-border-dark);
+  background: var(--color-panel);
+  color: var(--color-text);
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+
+.stage-step:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.stage-input {
+  width: 100%;
+  height: 34px;
+  border: 2px solid var(--color-border-dark);
+  background: var(--color-panel-dark, #12161b);
+  color: var(--color-accent);
+  font-family: var(--font-pixel);
+  font-size: 10px;
   text-align: center;
 }
 

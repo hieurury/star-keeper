@@ -27,6 +27,7 @@ import { drawCnoxGreedy } from '../../game/entities/CnoxGreedy'
 import { drawDnoxFire, updateDnoxFireHeat, updateDnoxFireAttack } from '../../game/entities/DnoxFire'
 import { drawDnoxIce, FREEZE_DURATION, FREEZE_TAP_BREAK } from '../../game/entities/DnoxIce'
 import { drawDnoxSoilAttached, getDnoxSoilCoreKind, applyDnoxSoilBonus } from '../../game/entities/DnoxSoil'
+import { getThreatProfile, initializeEnemyThreat, updateEnemyThreat, getEnemyDamageScale } from '../../game/systems/threat'
 import type { AllyDrone, Enemy, SunWeaponStar } from '../../game/types'
 
 const canvasWrapper = ref<HTMLDivElement>()
@@ -46,6 +47,8 @@ let freezeScreenGfx: Graphics | null = null
 let freezeBreakPulse = 0
 const INTRO_SHIP_START_Y = GAME_H + 70
 const INTRO_SHIP_END_Y = GAME_H * 0.67
+let cachedThreatProfile = getThreatProfile(game)
+let threatProfileTimer = 0
 
 // Zoom indicator (shows when boss zoom is changing)
 let zoomIndicatorText: Text | null = null
@@ -200,10 +203,14 @@ function getEnemyCollisionRadius(e: Enemy): number {
 }
 
 function getCollisionDamageToPlayer(e: Enemy, stage: number): number {
-  if (e.kind.startsWith('boss_')) return 24 + stage * 2
-  if (e.kind === 'cnox_spark') return 20 + stage
-  if (e.kind === 'cnox_shield') return 18 + stage
-  return 14 + stage
+  const base = e.kind.startsWith('boss_')
+    ? 24 + stage * 2
+    : e.kind === 'cnox_spark'
+      ? 20 + stage
+      : e.kind === 'cnox_shield'
+        ? 18 + stage
+        : 14 + stage
+  return Math.max(1, Math.round(base * getEnemyDamageScale(e, cachedThreatProfile)))
 }
 
 function getCollisionDamageToEnemy(gameDamage: number, e: Enemy): number {
@@ -221,15 +228,17 @@ function applyLaserHitToPlayer(dmg: number, opts?: {
   shieldOuterColor?: number
   shieldInnerColor?: number
   force?: boolean
+  sourceEnemy?: Enemy
 }) {
   if (!ctx.playerShip) return false
   if (!opts?.force && ctx.playerLaserDamageCd > 0) return false
+  const scaledDmg = Math.max(1, Math.round(dmg * (opts?.sourceEnemy ? getEnemyDamageScale(opts.sourceEnemy, cachedThreatProfile) : cachedThreatProfile.damageMult)))
 
   if (!game.absorbShieldHit()) {
-    game.takeDamage(dmg)
+    game.takeDamage(scaledDmg)
     if (opts?.flashColor !== undefined) screenFlash(ctx, opts.flashColor, opts.flashAlpha ?? 0.24, opts.flashMs ?? 120)
     else screenFlash(ctx)
-    spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
+    spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, scaledDmg)
   } else {
     spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 9, opts?.shieldOuterColor ?? 0x44aaff, opts?.shieldInnerColor ?? 0xffffff)
     if (opts?.flashColor !== undefined) screenFlash(ctx, opts.flashColor, Math.min(0.45, (opts.flashAlpha ?? 0.24) + 0.06), Math.max(120, opts.flashMs ?? 120))
@@ -294,6 +303,10 @@ function removeEnemyDetachedGraphics(e: Enemy) {
   removeDisplayObject(e.aimLine)
   removeDisplayObject(e.warnSign)
   removeDisplayObject(e.healBeamGfx)
+  removeDisplayObject(e.threatAura)
+  removeDisplayObject(e.threatSigil)
+  removeDisplayObject(e.threatAlphaShell)
+  removeDisplayObject(e.threatAlphaCore)
   removeDisplayObject(e.cnoxLaserGfx)
   removeDisplayObject(e.cnoxWarnGfx)
   removeDisplayObject(e.sunLinkGfx)
@@ -398,6 +411,144 @@ function drawCnoxCone(g: Graphics, ox: number, oy: number, angle: number, spread
   g.moveTo(ox, oy).lineTo(ox + Math.cos(angle + spread) * len, oy + Math.sin(angle + spread) * len).stroke({ color: 0xffb0ff, width: 2, alpha })
 }
 
+function spawnAlphaProjectile(
+  sx: number,
+  sy: number,
+  angle: number,
+  speed: number,
+  damage: number,
+  tint: number,
+  opts?: { homing?: boolean, homingLife?: number, homingSpeed?: number, aoe?: boolean, targetX?: number, targetY?: number },
+) {
+  const bg = new Graphics()
+  drawEnemyBullet(bg)
+  bg.tint = tint
+  bg.x = sx
+  bg.y = sy
+  ctx.gameLayer.addChild(bg)
+  ctx.enemyBullets.push({
+    gfx: bg,
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    damage,
+    homing: opts?.homing,
+    homingLife: opts?.homingLife,
+    homingSpeed: opts?.homingSpeed,
+    aoe: opts?.aoe,
+    targetX: opts?.targetX,
+    targetY: opts?.targetY,
+  })
+}
+
+function getAlphaAttackCooldownFrames(e: Enemy): number {
+  if (e.kind === 'dai_lien') return 82
+  if (e.kind === 'sniper') return 112
+  if (e.kind === 'kamikaze') return 96
+  if (e.kind === 'thu_ho') return 126
+  if (e.kind === 'thuat_si') return 128
+  if (e.kind === 'cnox_shield') return 116
+  if (e.kind === 'cnox_spark') return 98
+  if (e.kind === 'dnox_fire') return 94
+  if (e.kind === 'dnox_ice') return 106
+  if (e.kind === 'dnox_soil') return 110
+  return 98
+}
+
+function updateAlphaActiveAttack(e: Enemy, dt: number): void {
+  if (!e.threatAlpha || e.kind.startsWith('boss_') || !ctx.playerShip) return
+  if (e.isDyingMeteor) return
+  if (e.kind === 'kamikaze' && (e.kamiState === 'prexplode' || e.kamiState === 'dead')) return
+
+  const tier = e.threatTier ?? 0
+  const attackRate = 1 + tier * 0.12
+  e.threatAlphaAttackTimer = (e.threatAlphaAttackTimer ?? (110 + Math.random() * 110)) - dt * attackRate
+  if ((e.threatAlphaAttackTimer ?? 0) > 0) return
+
+  const sx = e.container.x
+  const sy = e.container.y + 8
+  const dx = ctx.playerShip.x - sx
+  const dy = ctx.playerShip.y - sy
+  const baseAngle = Math.atan2(dy, dx)
+  const stage = game.currentStage
+  const baseDamage = Math.max(7, Math.round(8 + stage * 0.82 + tier * 1.9))
+  const baseSpeed = 3.4 + tier * 0.28
+
+  if (e.kind === 'pioneer') {
+    for (const spread of [-0.18, 0, 0.18]) {
+      spawnAlphaProjectile(sx, sy, baseAngle + spread, baseSpeed + 0.7, baseDamage + 2, 0xff4d89)
+    }
+  } else if (e.kind === 'sniper') {
+    spawnAlphaProjectile(sx, sy, baseAngle, baseSpeed + 2.6, baseDamage + 8, 0x2ff07d)
+  } else if (e.kind === 'kamikaze') {
+    for (let n = 0; n < 5; n++) {
+      const a = baseAngle + (n - 2) * 0.24
+      spawnAlphaProjectile(sx, sy, a, baseSpeed + 1.4, baseDamage + 1, 0xff6b21)
+    }
+  } else if (e.kind === 'dai_lien') {
+    for (let n = 0; n < 5; n++) {
+      const spread = (n - 2) * 0.11
+      spawnAlphaProjectile(sx, sy, baseAngle + spread, baseSpeed + 1.1, baseDamage + 3, 0x43cbff)
+    }
+  } else if (e.kind === 'thu_ho') {
+    for (let n = 0; n < 6; n++) {
+      const a = (n / 6) * Math.PI * 2
+      spawnAlphaProjectile(sx, sy, a, baseSpeed + 0.4, baseDamage + 2, 0xffd447)
+    }
+  } else if (e.kind === 'thuat_si') {
+    spawnAlphaProjectile(sx, sy, baseAngle, baseSpeed + 0.9, baseDamage + 5, 0x57f2ad, {
+      homing: true,
+      homingLife: 180,
+      homingSpeed: baseSpeed + 1.2,
+    })
+  } else if (e.kind === 'cnox_greedy') {
+    spawnAlphaProjectile(sx, sy, baseAngle - 0.1, baseSpeed + 1.2, baseDamage + 4, 0xff8f3b)
+    spawnAlphaProjectile(sx, sy, baseAngle + 0.1, baseSpeed + 1.2, baseDamage + 4, 0xff8f3b)
+  } else if (e.kind === 'cnox_shield') {
+    for (let n = 0; n < 8; n++) {
+      const a = (n / 8) * Math.PI * 2
+      spawnAlphaProjectile(sx, sy, a, baseSpeed + 0.5, baseDamage + 2, 0x3fa7ff)
+    }
+  } else if (e.kind === 'cnox_spark') {
+    for (const spread of [-0.22, 0, 0.22]) {
+      spawnAlphaProjectile(sx, sy, baseAngle + spread, baseSpeed + 1.5, baseDamage + 4, 0xc36aff)
+    }
+  } else if (e.kind === 'dnox_fire') {
+    for (const spread of [-0.17, 0, 0.17]) {
+      spawnAlphaProjectile(sx, sy, baseAngle + spread, baseSpeed + 1.3, baseDamage + 5, 0xff6126)
+    }
+  } else if (e.kind === 'dnox_ice') {
+    spawnAlphaProjectile(sx, sy, baseAngle - 0.08, baseSpeed + 0.95, baseDamage + 3, 0x51c8ff, {
+      homing: true,
+      homingLife: 130,
+      homingSpeed: baseSpeed + 1,
+    })
+    spawnAlphaProjectile(sx, sy, baseAngle + 0.08, baseSpeed + 0.95, baseDamage + 3, 0x51c8ff, {
+      homing: true,
+      homingLife: 130,
+      homingSpeed: baseSpeed + 1,
+    })
+  } else if (e.kind === 'dnox_soil') {
+    if (e.cnoxLaserState === 'link_firing' && e.healTarget && ctx.enemies.includes(e.healTarget)) {
+      const hx = e.healTarget.container.x
+      const hy = e.healTarget.container.y
+      for (let n = 0; n < 5; n++) {
+        const a = baseAngle + (n - 2) * 0.2
+        spawnAlphaProjectile(hx, hy, a, baseSpeed + 0.8, baseDamage + 2, 0xd2a14c)
+      }
+    } else {
+      spawnAlphaProjectile(sx, sy, baseAngle - 0.12, baseSpeed + 0.9, baseDamage + 2, 0xd2a14c)
+      spawnAlphaProjectile(sx, sy, baseAngle + 0.12, baseSpeed + 0.9, baseDamage + 2, 0xd2a14c)
+    }
+  } else {
+    spawnAlphaProjectile(sx, sy, baseAngle - 0.12, baseSpeed + 1, baseDamage + 2, 0xff4b88)
+    spawnAlphaProjectile(sx, sy, baseAngle + 0.12, baseSpeed + 1, baseDamage + 2, 0xff4b88)
+  }
+
+  const cooldown = getAlphaAttackCooldownFrames(e)
+  const nextCd = cooldown * (1 - Math.min(0.18, tier * 0.045))
+  e.threatAlphaAttackTimer = Math.max(34, nextCd + (Math.random() * 20 - 10))
+}
+
 // --- Game loop ----------------------------------------------------------------
 function gameLoop(ticker: Ticker) {
   if (!app || !game.isPlaying || game.isGameOverSequence) return
@@ -405,6 +556,11 @@ function gameLoop(ticker: Ticker) {
   const hasActiveBoss = ctx.enemies.some((e) => e.kind.startsWith('boss_') && !e.isDyingMeteor)
   audioManager.setBossActive(hasActiveBoss)
   ctx.playerLaserDamageCd = Math.max(0, ctx.playerLaserDamageCd - dt)
+  threatProfileTimer += dt
+  if (threatProfileTimer >= 30) {
+    cachedThreatProfile = getThreatProfile(game)
+    threatProfileTimer = 0
+  }
 
   // Stars always scroll
   for (const s of ctx.stars) {
@@ -1077,7 +1233,7 @@ function gameLoop(ticker: Ticker) {
             spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 10, 0x44aaff, 0x88ddff)
             screenFlash(ctx, 0x4488ff, 0.28, 200)
           } else {
-            const dmg = b.damage ?? (20 + game.currentStage * 3)
+            const dmg = Math.max(1, Math.round((b.damage ?? (20 + game.currentStage * 3)) * cachedThreatProfile.damageMult))
             game.takeDamage(dmg); screenFlash(ctx)
             spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
           }
@@ -1092,7 +1248,7 @@ function gameLoop(ticker: Ticker) {
         spawnExplosion(ctx, b.gfx.x, b.gfx.y, 9, 0x44aaff, 0x88ddff)
         screenFlash(ctx, 0x4488ff, 0.28, 200)
       } else {
-        const dmg = b.damage ?? (15 + game.currentStage * 3)
+        const dmg = Math.max(1, Math.round((b.damage ?? (15 + game.currentStage * 3)) * cachedThreatProfile.damageMult))
         game.takeDamage(dmg)
         screenFlash(ctx)
         spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
@@ -1106,11 +1262,22 @@ function gameLoop(ticker: Ticker) {
   // Wave dispatch
   if (!ctx.waveIsClearing && ctx.waveQueue.length > 0) {
     ctx.waveDispatchTimer += dt
-    const dispatchInterval = Math.max(60, 180 - game.currentStage * 8)
+    const baseDispatchInterval = Math.max(60, 180 - game.currentStage * 8)
+    const dispatchInterval = Math.max(38, baseDispatchInterval / cachedThreatProfile.spawnMult)
     if (ctx.waveDispatchTimer >= dispatchInterval) {
       ctx.waveDispatchTimer = 0
+      const beforeCount = ctx.enemies.length
       const spawner = ctx.waveQueue.shift()!
       spawner()
+      if (ctx.enemies.length > beforeCount) {
+        let packId: number | undefined
+        for (let ni = beforeCount; ni < ctx.enemies.length; ni++) {
+          const ne = ctx.enemies[ni]!
+          if (ne.squadId !== undefined) continue
+          if (packId === undefined) packId = ctx.nextSquadId++
+          ne.squadId = packId
+        }
+      }
       if (ctx.waveQueue.length === 0) ctx.waveIsClearing = true
     }
   }
@@ -1324,6 +1491,8 @@ function gameLoop(ticker: Ticker) {
 
   for (let i = ctx.enemies.length - 1; i >= 0; i--) {
     const e = ctx.enemies[i]
+    initializeEnemyThreat(ctx, game, e, cachedThreatProfile)
+    updateEnemyThreat(ctx, e, dt, cachedThreatProfile)
     const enemyPrevX = e.container.x
     const enemyPrevY = e.container.y
     game.markEnemyEncountered(e.kind)
@@ -1335,6 +1504,8 @@ function gameLoop(ticker: Ticker) {
     if (!isBossIntro && ctx.bossAttackLockTimer > 0 && e.kind.startsWith('boss')) {
       continue
     }
+
+    updateAlphaActiveAttack(e, dt)
 
     if (e.kind === 'pioneer') {
       if (e.pioneerPhase === 'enter') {
@@ -1443,7 +1614,7 @@ function gameLoop(ticker: Ticker) {
         if (ctx.playerShip) {
           const d = Math.sqrt(dist2(e.container.x, e.container.y, ctx.playerShip.x, ctx.playerShip.y))
           if (d < 70) {
-            const aoe = Math.round(35 * (1 - d / 70))
+            const aoe = Math.max(1, Math.round(35 * (1 - d / 70) * getEnemyDamageScale(e, cachedThreatProfile)))
             game.takeDamage(aoe)
             screenFlash(ctx, 0xff6600, 0.5, 220)
             spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, aoe)
@@ -1597,8 +1768,9 @@ function gameLoop(ticker: Ticker) {
           if (game.absorbShieldHit()) {
             screenFlash(ctx, 0x88ff88, 0.25, 180)
           } else {
-            game.takeDamage(20); screenFlash(ctx)
-            spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, 20)
+            const meteorDmg = Math.max(1, Math.round(20 * getEnemyDamageScale(e, cachedThreatProfile)))
+            game.takeDamage(meteorDmg); screenFlash(ctx)
+            spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, meteorDmg)
           }
           spawnExplosion(ctx, e.container.x, e.container.y, 14, 0x886644, 0xff6600)
           if (!e.container.destroyed) ctx.gameLayer.removeChild(e.container)
@@ -3320,6 +3492,7 @@ function gameLoop(ticker: Ticker) {
               if (r < 0.45) { spawnDaiLienPair(ctx, game); spawnType = 'dai_lien' }
               else if (r < 0.75) { spawnThuatSi(ctx, game); spawnType = 'thuat_si' }
               else { spawnThuHoSwarm(ctx, game); spawnType = 'thu_ho' }
+              const summonedPackId = ctx.nextSquadId++
               // Teleport newly spawned enemies to portal, m?i lo?i gi? v? trï¿½ chi?n thu?t c?a mï¿½nh
               for (let ni = beforeCount; ni < ctx.enemies.length; ni++) {
                 const ne = ctx.enemies[ni]!
@@ -3337,7 +3510,7 @@ function gameLoop(ticker: Ticker) {
                 ne.formTargetX = atkX
                 ne.formTargetY = atkY
                 ne.pioneerPhase = 'enter'
-                ne.squadId = undefined  // no flock formation
+                ne.squadId = summonedPackId
               }
 
               if ((e.pendingMissiles ?? 0) === 0) {
@@ -3626,7 +3799,7 @@ function gameLoop(ticker: Ticker) {
             e.container.y += 18 * dt
             if (ctx.playerShip && dist2(e.container.x, e.container.y, ctx.playerShip.x, ctx.playerShip.y) < 52 * 52) {
               if (!game.absorbShieldHit()) {
-                const dmg = 25 + game.currentStage * 2
+                const dmg = Math.max(1, Math.round((25 + game.currentStage * 2) * getEnemyDamageScale(e, cachedThreatProfile)))
                 game.takeDamage(dmg); screenFlash(ctx)
                 spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, dmg)
               } else {
@@ -3792,7 +3965,7 @@ function gameLoop(ticker: Ticker) {
               spawnExplosion(ctx, ctx.playerShip.x, ctx.playerShip.y, 10, 0x44aaff, 0x88ddff)
               screenFlash(ctx, 0x4488ff, 0.2, 140)
             } else {
-              const pDmg = 12 + game.currentStage
+              const pDmg = Math.max(1, Math.round((12 + game.currentStage) * cachedThreatProfile.damageMult))
               game.takeDamage(pDmg)
               screenFlash(ctx)
               spawnDamageText(ctx, ctx.playerShip.x, ctx.playerShip.y - 20, pDmg)
@@ -4359,6 +4532,8 @@ watch(() => game.isGameOverSequence, (val) => {
 
 watch(() => game.isPlaying, (val, old) => {
   if (val && !old && app) {
+    cachedThreatProfile = getThreatProfile(game)
+    threatProfileTimer = 0
     for (const b of ctx.bullets) if (!b.gfx.destroyed) ctx.gameLayer?.removeChild(b.gfx)
     for (const d of ctx.allyDrones) if (!d.gfx.destroyed) ctx.gameLayer?.removeChild(d.gfx)
     for (const e of ctx.enemies) removeEnemyDetachedGraphics(e)
