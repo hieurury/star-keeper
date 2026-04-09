@@ -7,12 +7,14 @@ import { cleanupBossInvaderTurrets } from './BossInvader'
 import { cleanupBossTinhVan } from './BossTinhVan'
 import { cleanupBossTrumSo } from './BossTrumSo'
 import { cleanupBossCnoxSun } from './BossCnoxSun'
+import { spawnCnoxGreedy } from './CnoxGreedy'
 import { drawThuatSiMeteor } from './ThuatSi'
 import { cleanupDnoxFire } from './DnoxFire'
 import { cleanupDnoxIce } from './DnoxIce'
 import { cleanupDnoxSoil, getDnoxSoilCoreKind, removeDnoxSoilBonus, isDnoxSoilProtected } from './DnoxSoil'
 import { audioManager } from '../systems/audio'
 import { getEnemyRewardScale } from '../systems/threat'
+import { redrawHpBar } from '../utils'
 
 type GameStore = ReturnType<typeof useGameStore>
 
@@ -178,6 +180,40 @@ export function killEnemy(ctx: GameContext, game: GameStore, e: Enemy, i: number
         spawnExpOrb(ctx, e.container.x, e.container.y, 'white')
         const last = ctx.expOrbs[ctx.expOrbs.length - 1]
         if (last) last.amount = remaining
+      }
+
+      // Alpha Greedy splits once into 2 smaller alpha greedies.
+      if (e.threatAlpha && (e.cnoxSplitDepth ?? 0) < 1) {
+        const childDepth = (e.cnoxSplitDepth ?? 0) + 1
+        for (const offsetX of [-26, 26]) {
+          spawnCnoxGreedy(ctx, game)
+          const child = ctx.enemies[ctx.enemies.length - 1]
+          if (!child || child.kind !== 'cnox_greedy') continue
+
+          child.container.x = e.container.x + offsetX
+          child.container.y = e.container.y - 6
+          child.enterTargetX = child.container.x + (Math.random() - 0.5) * 26
+          child.enterTargetY = Math.max(72, e.container.y + 34 + Math.random() * 30)
+          child.formTargetX = child.enterTargetX
+          child.formTargetY = child.enterTargetY
+          child.pioneerPhase = 'enter'
+
+          child.cnoxSplitDepth = childDepth
+          child.threatInitialized = true
+          child.threatAlpha = true
+          child.threatTier = Math.max(1, e.threatTier ?? 1)
+          child.threatDamageMult = Math.max(1, (e.threatDamageMult ?? 1) * 0.9)
+          child.threatMoveMult = Math.max(1, (e.threatMoveMult ?? 1) * 0.92)
+
+          child.maxHp = Math.max(1, Math.round(e.maxHp * 0.52))
+          child.hp = child.maxHp
+          child.cnoxBaseMaxHp = child.maxHp
+          child.cnoxStolenExp = Math.round((e.cnoxStolenExp ?? 0) * 0.35)
+          child.barW *= 0.95
+          redrawHpBar(child.hpBarBg, child.hpBar, 1, child.barW)
+
+          spawnExplosion(ctx, child.container.x, child.container.y, 9, 0xffb36a, 0xfff0cf)
+        }
       }
     }
     const pts = e.kind === 'sniper'     ? 20 + game.currentStage * 7

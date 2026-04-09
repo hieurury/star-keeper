@@ -43,7 +43,7 @@ const RUN_GOLD_BASE_BY_KIND: Record<EnemyKind, number> = {
   boss_tinhvan: 24,
   boss_trumso: 24,
   boss_cnox_sun: 28,
-  boss_cnox_moon: 28,
+  boss_cnox_outsider: 30,
 }
 
 // ─── Card System ──────────────────────────────────────────────────────────────
@@ -681,6 +681,8 @@ const SAVE_SIGNATURE_PEPPERS_LEGACY = [
   'ban-may-bay::save-signature',
 ]
 
+const POST_CARD_PICK_INVULNERABLE_MS = 1000
+
 interface SaveEnvelope {
   format: 'signed'
   envelopeVersion: number
@@ -870,6 +872,7 @@ export const useGameStore = defineStore('game', () => {
   // Level-up UI (card system)
   const levelUpCardChoices = ref<CardDef[]>([])
   const isLevelUpPending = ref(false)
+  const postCardPickInvulnerableUntilMs = ref(0)
 
   // Card system state
   const activeCards = ref<Record<string, number>>({})   // cardId → level (1‑5)
@@ -1308,6 +1311,7 @@ export const useGameStore = defineStore('game', () => {
     activeCards.value = { ...activeCards.value, [cardId]: currentLv + 1 }
     applyArmorPlatingHpBonus()
     sessionCardsChosen.value++
+    postCardPickInvulnerableUntilMs.value = Date.now() + POST_CARD_PICK_INVULNERABLE_MS
     isLevelUpPending.value = false
     isPaused.value = false
   }
@@ -1446,6 +1450,8 @@ export const useGameStore = defineStore('game', () => {
 
   function takeDamage(amount: number) {
     if (isGameOverSequence.value) return
+    if (isLevelUpPending.value) return
+    if (Date.now() < postCardPickInvulnerableUntilMs.value) return
     const reduction = artifactStats.value.damageTakenReduction
     const actualDmg = reduction > 0 ? Math.max(1, Math.round(amount * (1 - reduction))) : amount
     if (actualDmg > 0) audioManager.playPlayerHit()
@@ -1627,6 +1633,7 @@ export const useGameStore = defineStore('game', () => {
     }
     levelUpCardChoices.value = []
     isLevelUpPending.value = false
+    postCardPickInvulnerableUntilMs.value = 0
     goldEarnedThisRun.value = 0
     isGameOverSequence.value = false
     skillCooldown.value = 0
@@ -1659,6 +1666,7 @@ export const useGameStore = defineStore('game', () => {
   function endGame() {
     pendingHealPopup.value = 0
     isGameOverSequence.value = false
+    postCardPickInvulnerableUntilMs.value = 0
     // Award gold/exp earned during this run when player exits manually
     if (isPlaying.value) {
       goldEarnedThisRun.value = projectedGoldEarnedThisRun.value

@@ -119,61 +119,67 @@ const goldEarnedPreview = computed(() => game.projectedGoldEarnedThisRun)
   <div class="hud">
     <!-- Top bar -->
     <div class="hud__top" data-tour="hud-top">
-      <!-- HP bar -->
-      <div class="hud__hp" data-tour="hud-hp">
-        <div class="hud__hp-main">
-          <div class="hud__hp-label">HP</div>
-          <div class="hud__hp-track">
-            <div
-              class="hud__hp-fill"
-              :style="{ width: game.hpPercent + '%' }"
-              :class="{
-                'hud__hp-fill--mid': game.hpPercent <= 50 && game.hpPercent > 25,
-                'hud__hp-fill--low': game.hpPercent <= 25,
-              }"
-            />
+      <div class="hud__top-shell">
+        <div class="hud__top-left">
+          <!-- HP / power / gold -->
+          <div class="hud__hp" data-tour="hud-hp">
+            <div class="hud__hp-main">
+              <div class="hud__hp-label">HP</div>
+              <div class="hud__hp-track">
+                <div
+                  class="hud__hp-fill"
+                  :style="{ width: game.hpPercent + '%' }"
+                  :class="{
+                    'hud__hp-fill--mid': game.hpPercent <= 50 && game.hpPercent > 25,
+                    'hud__hp-fill--low': game.hpPercent <= 25,
+                  }"
+                />
+              </div>
+              <div class="hud__hp-num">{{ game.playerHp }}/{{ game.playerMaxHp }}</div>
+            </div>
+            <div class="hud__hp-extra">
+              <span class="hud__hp-stat hud__hp-stat--power">
+                <PhSword :size="11" weight="fill" class="hud__hp-stat-icon" />
+                <span class="hud__hp-stat-sep">:</span>
+                <span class="hud__hp-stat-value">{{ combatPower.toLocaleString('vi-VN') }}</span>
+              </span>
+              <span class="hud__hp-stat hud__hp-stat--gold">
+                <PhCoins :size="11" weight="fill" class="hud__hp-stat-icon" />
+                <span class="hud__hp-stat-sep">:</span>
+                <span class="hud__hp-stat-value">{{ goldEarnedPreview.toLocaleString('vi-VN') }}</span>
+              </span>
+            </div>
           </div>
-          <div class="hud__hp-num">{{ game.playerHp }}/{{ game.playerMaxHp }}</div>
         </div>
-        <div class="hud__hp-extra">
-          <span class="hud__hp-stat hud__hp-stat--power">
-            <PhSword :size="11" weight="fill" class="hud__hp-stat-icon" />
-            <span class="hud__hp-stat-sep">:</span>
-            <span class="hud__hp-stat-value">{{ combatPower.toLocaleString('vi-VN') }}</span>
-          </span>
-          <span class="hud__hp-stat hud__hp-stat--gold">
-            <PhCoins :size="11" weight="fill" class="hud__hp-stat-icon" />
-            <span class="hud__hp-stat-sep">:</span>
-            <span class="hud__hp-stat-value">{{ goldEarnedPreview.toLocaleString('vi-VN') }}</span>
-          </span>
+
+        <div class="hud__top-right">
+          <div class="hud__score" data-tour="hud-score">
+            <span class="hud__score-label">ĐIỂM</span>
+            <span class="hud__score-value">{{ game.currentScore }}</span>
+          </div>
+          <div class="hud__stage">
+            <span class="hud__stage-label">MÀN</span>
+            <span class="hud__stage-value">{{ game.currentStage }}</span>
+          </div>
+          <div class="hud__enemies" data-tour="hud-enemies">
+            <span class="hud__enemies-label">KẺ ĐỊCH</span>
+            <div class="hud__enemies-track">
+              <div class="hud__enemies-fill" :style="{ width: game.stageProgress + '%' }" />
+            </div>
+            <span class="hud__enemies-num">{{ game.stageEnemiesKilled }}/{{ game.stageEnemiesTotal }}</span>
+          </div>
         </div>
       </div>
 
-      <div class="hud__score" data-tour="hud-score">
-        <span class="hud__score-label">SCORE</span>
-        <span class="hud__score-value">{{ game.currentScore }}</span>
-      </div>
-      <div class="hud__stage">
-        <span class="hud__stage-label">STAGE</span>
-        <span class="hud__stage-value">{{ game.currentStage }}</span>
-      </div>
-      <div class="hud__enemies" data-tour="hud-enemies">
-        <span class="hud__enemies-label">TIÊU DIỆT</span>
-        <div class="hud__enemies-track">
-          <div class="hud__enemies-fill" :style="{ width: game.stageProgress + '%' }" />
+      <!-- EXP bar (directly below top bar) -->
+      <div class="hud__exp-block" data-tour="hud-exp">
+        <div class="hud__exp-row">
+          <span class="hud__exp-label">LV{{ game.playerLevel }}</span>
+          <div class="hud__exp-track">
+            <div class="hud__exp-fill" :style="{ width: game.expPercent + '%' }" />
+          </div>
+          <span class="hud__exp-num">{{ game.playerExp }}/{{ game.expToNextLevel }}</span>
         </div>
-        <span class="hud__enemies-num">{{ game.stageEnemiesKilled }}/{{ game.stageEnemiesTotal }}</span>
-      </div>
-    </div>
-
-    <!-- EXP bar (below top bar) -->
-    <div class="hud__exp-block" data-tour="hud-exp">
-      <div class="hud__exp-row">
-        <span class="hud__exp-label">LV{{ game.playerLevel }}</span>
-        <div class="hud__exp-track">
-          <div class="hud__exp-fill" :style="{ width: game.expPercent + '%' }" />
-        </div>
-        <span class="hud__exp-num">{{ game.playerExp }}/{{ game.expToNextLevel }}</span>
       </div>
     </div>
 
@@ -369,46 +375,68 @@ const goldEarnedPreview = computed(() => game.projectedGoldEarnedThisRun)
 /* Top bar */
 .hud__top {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  right: 8px;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  backdrop-filter: none;
+  flex-direction: column;
+  gap: 0;
+}
+
+.hud__top-shell {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 6px 8px;
+  background: linear-gradient(180deg, rgba(4, 10, 19, 0.9), rgba(8, 16, 26, 0.88));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(3px);
+}
+
+.hud__top-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.hud__top-right {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
+.hud__top-right > * {
+  padding: 0 8px;
+}
+
+.hud__top-right > * + * {
+  margin-left: 2px;
 }
 
 .hud__hp {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
-  flex: 1;
-  max-width: 216px;
-  padding: 5px 6px 6px;
-  background: rgba(0, 0, 0, 0.42);
-  border: 1px solid rgba(110, 150, 180, 0.45);
-  backdrop-filter: blur(2px);
+  gap: 3px;
+  width: 100%;
 }
 .hud__hp-main {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
 }
 .hud__hp-label {
-  font-size: 8px;
+  font-size: 7px;
   color: #e74c3c;
   letter-spacing: 1px;
   white-space: nowrap;
 }
 .hud__hp-track {
   flex: 1;
-  height: 10px;
+  height: 9px;
   background: #1a0a0a;
-  border: 2px solid #5a1010;
+  border: 1px solid #5a1010;
   overflow: hidden;
 }
 .hud__hp-fill {
@@ -428,12 +456,14 @@ const goldEarnedPreview = computed(() => game.projectedGoldEarnedThisRun)
   font-size: 7px;
   color: var(--color-text-dim);
   white-space: nowrap;
+  min-width: 0;
+  text-align: left;
 }
 .hud__hp-extra {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
-  gap: 5px;
+  gap: 10px;
 }
 .hud__hp-stat {
   display: inline-flex;
@@ -462,36 +492,32 @@ const goldEarnedPreview = computed(() => game.projectedGoldEarnedThisRun)
 .hud__score, .hud__stage {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
-  background: rgba(0, 0, 0, 0.42);
-  border: 1px solid rgba(120, 140, 170, 0.45);
-  padding: 4px 6px;
-  min-width: 60px;
-  backdrop-filter: blur(2px);
+  min-width: 52px;
 }
 .hud__score-label, .hud__stage-label {
-  font-size: 8px;
+  font-size: 7px;
   color: var(--color-text-dim);
   letter-spacing: 1px;
 }
 .hud__score-value {
-  font-size: 16px;
+  font-size: 13px;
   color: var(--color-accent);
+  line-height: 1.1;
 }
 .hud__stage-value {
-  font-size: 16px;
+  font-size: 13px;
   color: #f1c40f;
+  line-height: 1.1;
 }
 .hud__enemies {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 2px;
-  min-width: 72px;
-  background: rgba(0, 0, 0, 0.42);
-  border: 1px solid rgba(120, 140, 170, 0.45);
-  padding: 4px 6px;
-  backdrop-filter: blur(2px);
+  gap: 1px;
+  min-width: 70px;
 }
 .hud__enemies-label {
   font-size: 7px;
@@ -499,7 +525,7 @@ const goldEarnedPreview = computed(() => game.projectedGoldEarnedThisRun)
   letter-spacing: 1px;
 }
 .hud__enemies-track {
-  width: 64px;
+  width: 60px;
   height: 6px;
   background: #111;
   border: 1px solid #444;
@@ -513,6 +539,38 @@ const goldEarnedPreview = computed(() => game.projectedGoldEarnedThisRun)
 .hud__enemies-num {
   font-size: 7px;
   color: #aaa;
+}
+
+@media (max-width: 390px) {
+  .hud__top-shell {
+    gap: 8px;
+    padding: 6px;
+  }
+
+  .hud__top-right > * {
+    padding: 0 6px;
+  }
+
+  .hud__score, .hud__stage {
+    min-width: 48px;
+  }
+
+  .hud__score-value,
+  .hud__stage-value {
+    font-size: 12px;
+  }
+
+  .hud__enemies {
+    min-width: 64px;
+  }
+
+  .hud__enemies-track {
+    width: 54px;
+  }
+
+  .hud__hp-extra {
+    gap: 8px;
+  }
 }
 
 
@@ -798,16 +856,13 @@ const goldEarnedPreview = computed(() => game.projectedGoldEarnedThisRun)
 
 /* EXP bar */
 .hud__exp-block {
-  position: absolute;
-  top: 66px;
-  left: 8px;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  width: 216px;
+  width: 100%;
   padding: 4px 6px 6px;
-  background: rgba(0, 0, 0, 0.42);
-  border: 1px solid rgba(100, 150, 120, 0.45);
+  background: linear-gradient(180deg, rgba(7, 20, 14, 0.86), rgba(8, 16, 20, 0.84));
   backdrop-filter: blur(2px);
 }
 .hud__exp-row {
