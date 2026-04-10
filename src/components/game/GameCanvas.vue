@@ -24,6 +24,7 @@ import { drawDaiLienBullet, spawnDaiLienPair } from '../../game/entities/DaiLien
 import { drawThuHo, spawnThuHoSwarm } from '../../game/entities/ThuHo'
 import { drawHealBeam, spawnThuatSi } from '../../game/entities/ThuatSi'
 import { drawCnoxGreedy } from '../../game/entities/CnoxGreedy'
+import { drawCnoxShieldOrb } from '../../game/entities/CnoxShield'
 import { drawDnoxFire, updateDnoxFireHeat, updateDnoxFireAttack } from '../../game/entities/DnoxFire'
 import { drawDnoxIce, FREEZE_DURATION, FREEZE_TAP_BREAK } from '../../game/entities/DnoxIce'
 import { drawDnoxSoilAttached, getDnoxSoilCoreKind, applyDnoxSoilBonus } from '../../game/entities/DnoxSoil'
@@ -49,6 +50,16 @@ const INTRO_SHIP_START_Y = GAME_H + 70
 const INTRO_SHIP_END_Y = GAME_H * 0.67
 let cachedThreatProfile = getThreatProfile(game)
 let threatProfileTimer = 0
+const MAX_ENEMIES_ON_SCREEN_BASE = 42
+const MAX_ENEMY_BULLETS_BASE = 280
+
+function getEnemyCountCap(stage: number): number {
+  return Math.min(70, MAX_ENEMIES_ON_SCREEN_BASE + Math.floor(stage * 1.2))
+}
+
+function getEnemyBulletCap(stage: number): number {
+  return Math.min(420, MAX_ENEMY_BULLETS_BASE + stage * 4)
+}
 
 // Zoom indicator (shows when boss zoom is changing)
 let zoomIndicatorText: Text | null = null
@@ -430,7 +441,7 @@ function clearTransientCombatGraphics() {
 function updateCnoxGreedyEvolution(e: Enemy): void {
   const stolen = Math.min(300, e.cnoxStolenExp ?? 0)
   const powerMult = 1 + Math.min(7, stolen / 40)
-  const sizeMult = 1 + Math.min(2.8, stolen / 90)
+  const sizeMult = 1 + Math.min(1.45, stolen / 165)
   const baseMaxHp = e.cnoxBaseMaxHp ?? e.maxHp
   const nextMaxHp = Math.round(baseMaxHp * powerMult)
   const hpDelta = nextMaxHp - e.maxHp
@@ -460,9 +471,22 @@ function drawCnoxCone(g: Graphics, ox: number, oy: number, angle: number, spread
   g.moveTo(ox, oy).lineTo(ox + Math.cos(angle + spread) * len, oy + Math.sin(angle + spread) * len).stroke({ color: 0xffb0ff, width: 2, alpha })
 }
 
-const CNOX_ALPHA_BARRIER_HALF_W = 62
-const CNOX_ALPHA_BARRIER_HALF_H = 7
-const CNOX_ALPHA_BARRIER_OFFSET_Y = 24
+function ensureCnoxShieldOrbitCount(e: Enemy, count: number): void {
+  if (e.kind !== 'cnox_shield') return
+  if (!e.cnoxShields) e.cnoxShields = []
+
+  const estSize = Math.max(9, Math.min(16, Math.abs((e.hpBar.y ?? -20) + 8)))
+  while (e.cnoxShields.length < count) {
+    const orb = new Graphics()
+    drawCnoxShieldOrb(orb, estSize * 0.95)
+    e.container.addChild(orb)
+    e.cnoxShields.push(orb)
+  }
+  while (e.cnoxShields.length > count) {
+    const removed = e.cnoxShields.pop()
+    removeDisplayObject(removed)
+  }
+}
 
 function pickCnoxSparkAlphaAngles(baseAngle: number): number[] {
   const angles: number[] = []
@@ -474,45 +498,9 @@ function pickCnoxSparkAlphaAngles(baseAngle: number): number[] {
   return angles
 }
 
-function drawCnoxShieldAlphaBarrier(e: Enemy): void {
-  const g = e.cnoxAlphaBarrierGfx
-  if (!g) return
-  const hp = Math.max(0, e.cnoxAlphaBarrierHp ?? 0)
-  const maxHp = Math.max(1, e.cnoxAlphaBarrierMaxHp ?? 1)
-  const ratio = Math.max(0, Math.min(1, hp / maxHp))
-  g.clear()
-  if (ratio <= 0) return
-
-  const w = CNOX_ALPHA_BARRIER_HALF_W * 2
-  const h = CNOX_ALPHA_BARRIER_HALF_H * 2
-  const top = CNOX_ALPHA_BARRIER_OFFSET_Y - CNOX_ALPHA_BARRIER_HALF_H
-  const pulse = 0.55 + Math.abs(Math.sin(Date.now() * 0.01 + e.container.x * 0.01)) * 0.4
-
-  g.roundRect(-CNOX_ALPHA_BARRIER_HALF_W, top, w, h, 3).fill({ color: 0x4f8dff, alpha: 0.12 + 0.12 * pulse })
-  g.roundRect(-CNOX_ALPHA_BARRIER_HALF_W, top, w * ratio, h, 3).fill({ color: 0x95d3ff, alpha: 0.25 + 0.2 * pulse })
-  g.roundRect(-CNOX_ALPHA_BARRIER_HALF_W, top, w, h, 3).stroke({ color: 0xc9ecff, width: 1.4, alpha: 0.55 + 0.25 * pulse })
-}
-
-function hitCnoxShieldAlphaBarrier(e: Enemy, hitX: number, hitY: number, damage: number): boolean {
-  if (e.kind !== 'cnox_shield' || !e.threatAlpha) return false
-  const hp = e.cnoxAlphaBarrierHp ?? 0
-  if (hp <= 0) return false
-
-  const worldX = e.container.x
-  const worldY = e.container.y + CNOX_ALPHA_BARRIER_OFFSET_Y
-  if (Math.abs(hitX - worldX) > CNOX_ALPHA_BARRIER_HALF_W || Math.abs(hitY - worldY) > CNOX_ALPHA_BARRIER_HALF_H + 2) {
-    return false
-  }
-
-  const dealt = Math.max(1, Math.round(damage))
-  e.cnoxAlphaBarrierHp = Math.max(0, hp - dealt)
-  spawnExplosion(ctx, hitX, hitY, 8, 0x77b9ff, 0xf0fbff)
-  spawnDamageText(ctx, worldX, worldY - 8, dealt)
-  drawCnoxShieldAlphaBarrier(e)
-  if ((e.cnoxAlphaBarrierHp ?? 0) <= 0) {
-    spawnExplosion(ctx, worldX, worldY, 14, 0x66aaff, 0xffffff)
-  }
-  return true
+function hitCnoxShieldAlphaBarrier(_e: Enemy, _hitX: number, _hitY: number, _damage: number): boolean {
+  // Alpha Cnox Shield no longer uses a horizontal barrier.
+  return false
 }
 
 function spawnAlphaProjectile(
@@ -524,9 +512,12 @@ function spawnAlphaProjectile(
   tint: number,
   opts?: { homing?: boolean, homingLife?: number, homingSpeed?: number, aoe?: boolean, targetX?: number, targetY?: number },
 ) {
+  if (ctx.enemyBullets.length >= getEnemyBulletCap(game.currentStage)) return
   const bg = new Graphics()
   drawEnemyBullet(bg)
   bg.tint = tint
+  bg.circle(0, 0, 1.5).fill({ color: 0xffffff, alpha: 0.85 })
+  bg.scale.set(1.08)
   bg.x = sx
   bg.y = sy
   ctx.gameLayer.addChild(bg)
@@ -545,7 +536,7 @@ function spawnAlphaProjectile(
 }
 
 function getAlphaAttackCooldownFrames(e: Enemy): number {
-  if (e.kind === 'dai_lien') return 82
+  if (e.kind === 'dai_lien') return 132
   if (e.kind === 'sniper') return 112
   if (e.kind === 'kamikaze') return 96
   if (e.kind === 'thu_ho') return 126
@@ -589,9 +580,9 @@ function updateAlphaActiveAttack(e: Enemy, dt: number): void {
       spawnAlphaProjectile(sx, sy, a, baseSpeed + 1.4, baseDamage + 1, 0xff6b21)
     }
   } else if (e.kind === 'dai_lien') {
-    for (let n = 0; n < 5; n++) {
-      const spread = (n - 2) * 0.11
-      spawnAlphaProjectile(sx, sy, baseAngle + spread, baseSpeed + 1.1, baseDamage + 3, 0x43cbff)
+    for (let n = 0; n < 3; n++) {
+      const spread = (n - 1) * 0.13
+      spawnAlphaProjectile(sx, sy, baseAngle + spread, baseSpeed + 0.9, baseDamage + 2, 0xffc56a)
     }
   } else if (e.kind === 'thu_ho') {
     for (let n = 0; n < 6; n++) {
@@ -1505,6 +1496,16 @@ function gameLoop(ticker: Ticker) {
     }
   }
 
+  // Keep enemy bullet count bounded to avoid frame drops when multiple packs overlap.
+  const enemyBulletCap = getEnemyBulletCap(game.currentStage)
+  if (ctx.enemyBullets.length > enemyBulletCap) {
+    const removeCount = ctx.enemyBullets.length - enemyBulletCap
+    for (let ri = 0; ri < removeCount; ri++) {
+      const removed = ctx.enemyBullets.shift()
+      if (removed && !removed.gfx.destroyed) ctx.gameLayer.removeChild(removed.gfx)
+    }
+  }
+
   // Move enemy bullets
   for (let i = ctx.enemyBullets.length - 1; i >= 0; i--) {
     const b = ctx.enemyBullets[i]
@@ -1620,7 +1621,8 @@ function gameLoop(ticker: Ticker) {
     ctx.waveDispatchTimer += dt
     const baseDispatchInterval = Math.max(60, 180 - game.currentStage * 8)
     const dispatchInterval = Math.max(38, baseDispatchInterval / cachedThreatProfile.spawnMult)
-    if (ctx.waveDispatchTimer >= dispatchInterval) {
+    const enemyCap = getEnemyCountCap(game.currentStage)
+    if (ctx.waveDispatchTimer >= dispatchInterval && ctx.enemies.length < enemyCap) {
       ctx.waveDispatchTimer = 0
       const beforeCount = ctx.enemies.length
       const spawner = ctx.waveQueue.shift()!
@@ -1635,6 +1637,9 @@ function gameLoop(ticker: Ticker) {
         }
       }
       if (ctx.waveQueue.length === 0) ctx.waveIsClearing = true
+    } else if (ctx.enemies.length >= enemyCap) {
+      // Keep queue pending while too many enemies are still alive.
+      ctx.waveDispatchTimer = Math.min(ctx.waveDispatchTimer, dispatchInterval * 0.85)
     }
   }
 
@@ -1962,7 +1967,8 @@ function gameLoop(ticker: Ticker) {
         }
       }
       else if (e.kamiState === 'prexplode') {
-        e.body.alpha = Math.floor(e.kamiTimer / 4) % 2 === 0 ? 1 : 0.12
+        const lowAlpha = e.threatAlpha || (e.threatTier ?? 0) > 0 ? 0.72 : 0.12
+        e.body.alpha = Math.floor(e.kamiTimer / 4) % 2 === 0 ? 1 : lowAlpha
         if (e.kamiTimer >= 30) { e.body.alpha = 1; e.kamiState = 'dead' }
       }
       if (e.kamiState === 'dead') {
@@ -2089,7 +2095,10 @@ function gameLoop(ticker: Ticker) {
       // Fast burst fire (-30% fire rate)
       e.shootTimer = (e.shootTimer ?? 25) - dt
       if (e.shootTimer <= 0 && ctx.playerShip) {
-      e.shootTimer = (20 + Math.random() * 12 + Math.max(0, 10 - game.currentStage)) * 2.05
+      e.shootTimer = (24 + Math.random() * 16 + Math.max(0, 12 - game.currentStage)) * 2.95
+        if (ctx.enemyBullets.length >= getEnemyBulletCap(game.currentStage) * 0.92) {
+          continue
+        }
         const bg = new Graphics()
         drawDaiLienBullet(bg)
         bg.x = e.container.x
@@ -2098,7 +2107,7 @@ function gameLoop(ticker: Ticker) {
         const tx = ctx.playerShip.x - e.container.x
         const ty = ctx.playerShip.y - e.container.y
         const mag = Math.sqrt(tx * tx + ty * ty) || 1
-        const spd = 4.5 + game.currentStage * 0.1
+        const spd = 3.85 + game.currentStage * 0.075
         ctx.enemyBullets.push({ gfx: bg, vx: (tx / mag) * spd, vy: (ty / mag) * spd })
       }
       if (e.container.y > GAME_H + 50) {
@@ -2416,30 +2425,26 @@ function gameLoop(ticker: Ticker) {
         e.formTargetY = targetY
       }
 
-      if (e.threatAlpha) {
-        if ((e.cnoxAlphaBarrierMaxHp ?? 0) <= 0) {
-          const barrierHp = Math.max(1, Math.round(e.maxHp * 0.5))
-          e.cnoxAlphaBarrierMaxHp = barrierHp
-          e.cnoxAlphaBarrierHp = barrierHp
-        }
-        if (e.cnoxShields?.length) {
-          for (const orb of e.cnoxShields) orb.visible = false
-        }
-        drawCnoxShieldAlphaBarrier(e)
-      } else {
-        const shieldSpinSpeed = starFasterSkillActive ? 0.05 * enemyTimeScale : 0.05
-        e.cnoxShieldAngle = (e.cnoxShieldAngle ?? 0) + shieldSpinSpeed * dt
-        if (e.cnoxShields?.length) {
-          const radius = 22
-          const shieldCount = Math.max(1, e.cnoxShields.length)
-          const step = (Math.PI * 2) / shieldCount
-          for (let si = 0; si < e.cnoxShields.length; si++) {
-            const angle = (e.cnoxShieldAngle ?? 0) + (si * step)
-            e.cnoxShields[si].visible = true
-            e.cnoxShields[si].x = Math.cos(angle) * radius
-            e.cnoxShields[si].y = Math.sin(angle) * radius
-            e.cnoxShields[si].rotation = angle
-          }
+      const desiredShieldCount = e.threatAlpha ? 3 : 2
+      ensureCnoxShieldOrbitCount(e, desiredShieldCount)
+      if (e.cnoxAlphaBarrierGfx) e.cnoxAlphaBarrierGfx.clear()
+      e.cnoxAlphaBarrierHp = 0
+      e.cnoxAlphaBarrierMaxHp = 0
+
+      const shieldSpinSpeedBase = starFasterSkillActive ? 0.05 * enemyTimeScale : 0.05
+      const shieldSpinSpeed = e.threatAlpha ? shieldSpinSpeedBase * 1.22 : shieldSpinSpeedBase
+      e.cnoxShieldAngle = (e.cnoxShieldAngle ?? 0) + shieldSpinSpeed * dt
+      if (e.cnoxShields?.length) {
+        const radius = e.threatAlpha ? 28 : 22
+        const shieldCount = Math.max(1, e.cnoxShields.length)
+        const step = (Math.PI * 2) / shieldCount
+        for (let si = 0; si < e.cnoxShields.length; si++) {
+          const angle = (e.cnoxShieldAngle ?? 0) + (si * step)
+          e.cnoxShields[si].visible = true
+          e.cnoxShields[si].x = Math.cos(angle) * radius
+          e.cnoxShields[si].y = Math.sin(angle) * radius
+          e.cnoxShields[si].rotation = angle
+          e.cnoxShields[si].scale.set(e.threatAlpha ? 1.08 : 1)
         }
       }
       if (e.container.y > (GAME_H * (1 + 1 / ctx.bossZoom) / 2) + 60) {
@@ -3969,6 +3974,10 @@ function gameLoop(ticker: Ticker) {
             if ((e.missileFireTimer ?? 0) <= 0) {
               e.missileFireTimer = 22
               e.pendingMissiles!--
+              if (ctx.enemies.length >= getEnemyCountCap(game.currentStage)) {
+                e.missileFireTimer = 28
+                continue
+              }
               // Pick a random portal position and spawn enemies from it
               const portals = (e.blackHoles ?? []).filter(bh => bh.portal)
               const portal = portals[Math.floor(Math.random() * portals.length)]
@@ -3977,8 +3986,8 @@ function gameLoop(ticker: Ticker) {
               const beforeCount = ctx.enemies.length
               const r = Math.random()
               let spawnType: string
-              if (r < 0.45) { spawnDaiLienPair(ctx, game); spawnType = 'dai_lien' }
-              else if (r < 0.75) { spawnThuatSi(ctx, game); spawnType = 'thuat_si' }
+              if (r < 0.3) { spawnDaiLienPair(ctx, game); spawnType = 'dai_lien' }
+              else if (r < 0.72) { spawnThuatSi(ctx, game); spawnType = 'thuat_si' }
               else { spawnThuHoSwarm(ctx, game); spawnType = 'thu_ho' }
               const summonedPackId = ctx.nextSquadId++
               // Teleport newly spawned enemies to portal, m?i lo?i gi? v? tr├»┬┐┬╜ chi?n thu?t c?a m├»┬┐┬╜nh
@@ -4465,16 +4474,7 @@ function gameLoop(ticker: Ticker) {
         }
       }
     } else if (e.kind === 'cnox_shield') {
-      if (e.threatAlpha && (e.cnoxAlphaBarrierHp ?? 0) > 0) {
-        for (let j = ctx.bullets.length - 1; j >= 0; j--) {
-          const bullet = ctx.bullets[j]!
-          const bulletBaseDmg = bullet.damage ?? bulletDmg
-          if (hitCnoxShieldAlphaBarrier(e, bullet.gfx.x, bullet.gfx.y, bulletBaseDmg)) {
-            if (!bullet.gfx.destroyed) ctx.gameLayer.removeChild(bullet.gfx)
-            ctx.bullets.splice(j, 1)
-          }
-        }
-      } else if (e.cnoxShields?.length) {
+      if (e.cnoxShields?.length) {
         for (let j = ctx.bullets.length - 1; j >= 0; j--) {
           const bullet = ctx.bullets[j]!
           let blocked = false

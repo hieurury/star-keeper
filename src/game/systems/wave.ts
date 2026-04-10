@@ -96,8 +96,9 @@ function buildAnoxWave(ctx: GameContext, game: GameStore, regular: WaveSpawner[]
 function buildBnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[], regular: WaveSpawner[], threat: ThreatProfile): void {
   const stage = game.currentStage
 
-  const dlBase = Math.min(4, 1 + Math.floor(stage / 5))
-  const dlCount = scaledCount(dlBase, 5, threat)
+  // Dai Lien is a high-pressure rapid-fire unit; keep growth slower to avoid screen saturation.
+  const dlBase = Math.min(3, 1 + Math.floor(stage / 8))
+  const dlCount = Math.max(1, Math.min(3, Math.round(dlBase * (0.78 + threat.spawnMult * 0.18))))
   for (let i = 0; i < dlCount; i++) {
     regular.push(() => spawnDaiLienPair(ctx, game))
   }
@@ -108,8 +109,8 @@ function buildBnoxWave(ctx: GameContext, game: GameStore, tankers: WaveSpawner[]
     tankers.push(() => spawnThuHoSwarm(ctx, game))
   }
 
-  const tsBase = Math.min(9, 2 + Math.floor(stage / 3))
-  const tsCount = scaledCount(tsBase, 10, threat)
+  const tsBase = Math.min(7, 1 + Math.floor(stage / 4))
+  const tsCount = scaledCount(tsBase, 8, threat)
   for (let i = 0; i < tsCount; i++) {
     regular.push(() => spawnThuatSi(ctx, game))
   }

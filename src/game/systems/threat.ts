@@ -19,8 +19,6 @@ export interface ThreatProfile {
   bossDamageMult: number
 }
 
-const EVOLUTION_COLORS = [0xffffff, 0x5fa1ff, 0xff7b5b, 0x8e5cff]
-
 interface EvolutionStyle {
   hue: number
   saturation: number
@@ -29,6 +27,104 @@ interface EvolutionStyle {
   tint: number
   aura: number
   accent: number
+}
+
+interface AlphaPalette {
+  base: number
+  shadow: number
+  accent: number
+  glow: number
+}
+
+interface AlphaBodyMorph {
+  sx: number
+  sy: number
+  skewX: number
+  skewY: number
+  rotation: number
+}
+
+interface EnemyThreatPalette {
+  evolved: EvolutionStyle
+  alpha: AlphaPalette
+}
+
+const BASE_STYLE: EvolutionStyle = {
+  hue: 0,
+  saturation: 0,
+  contrast: 1,
+  brightness: 1,
+  tint: 0xffffff,
+  aura: 0x7aa6ff,
+  accent: 0xc9dcff,
+}
+
+const DEFAULT_EVOLVED_STYLE: EvolutionStyle = {
+  hue: 18,
+  saturation: 0.08,
+  contrast: 1.04,
+  brightness: 1,
+  tint: 0xd9e4f4,
+  aura: 0x7f9dbd,
+  accent: 0xc8d8eb,
+}
+
+const DEFAULT_ALPHA_PALETTE: AlphaPalette = {
+  base: 0x2f4059,
+  shadow: 0x111924,
+  accent: 0x4e688e,
+  glow: 0x8aa5cb,
+}
+
+const ENEMY_THREAT_PALETTES: Record<string, EnemyThreatPalette> = {
+  pioneer: {
+    evolved: { hue: 8, saturation: 0.08, contrast: 1.04, brightness: 1.0, tint: 0xdcaac8, aura: 0xa9678a, accent: 0xe8c7da },
+    alpha: { base: 0x5a2342, shadow: 0x1f0d18, accent: 0x8c4d71, glow: 0xc885a8 },
+  },
+  sniper: {
+    evolved: { hue: 14, saturation: 0.07, contrast: 1.04, brightness: 1.01, tint: 0xbfd9c9, aura: 0x5f9a76, accent: 0xd3e9dd },
+    alpha: { base: 0x214632, shadow: 0x0b1911, accent: 0x3d7458, glow: 0x76b594 },
+  },
+  kamikaze: {
+    evolved: { hue: -4, saturation: 0.09, contrast: 1.05, brightness: 1.0, tint: 0xe6b188, aura: 0xb56e47, accent: 0xf0ceb4 },
+    alpha: { base: 0x5a2a16, shadow: 0x1c0d08, accent: 0x8a4b2f, glow: 0xca875f },
+  },
+  dai_lien: {
+    evolved: { hue: 10, saturation: 0.08, contrast: 1.04, brightness: 1.01, tint: 0xbcd7e8, aura: 0x628eaf, accent: 0xd5e6f2 },
+    alpha: { base: 0x1f3f57, shadow: 0x0b1622, accent: 0x3c6582, glow: 0x79aacb },
+  },
+  thu_ho: {
+    evolved: { hue: -4, saturation: 0.08, contrast: 1.03, brightness: 0.95, tint: 0xd2a678, aura: 0xb07342, accent: 0xe7c39e },
+    alpha: { base: 0x5a4a20, shadow: 0x1d170a, accent: 0x8c7537, glow: 0xc7b068 },
+  },
+  thuat_si: {
+    evolved: { hue: 16, saturation: 0.07, contrast: 1.03, brightness: 1.01, tint: 0xc8d9cf, aura: 0x6c9d87, accent: 0xdcebe3 },
+    alpha: { base: 0x26463d, shadow: 0x0d1916, accent: 0x427165, glow: 0x82b8a8 },
+  },
+  cnox_greedy: {
+    evolved: { hue: 6, saturation: 0.08, contrast: 1.04, brightness: 1.0, tint: 0xd8b694, aura: 0xa8754f, accent: 0xe9d1bd },
+    alpha: { base: 0x553321, shadow: 0x1b100b, accent: 0x80563c, glow: 0xb58a6c },
+  },
+  cnox_shield: {
+    evolved: { hue: 14, saturation: 0.08, contrast: 1.05, brightness: 1.0, tint: 0xc0cde3, aura: 0x667ca5, accent: 0xd8deef },
+    alpha: { base: 0x223556, shadow: 0x0a1220, accent: 0x3f5e89, glow: 0x7d9fcb },
+  },
+  cnox_spark: {
+    evolved: { hue: 10, saturation: 0.08, contrast: 1.05, brightness: 1.0, tint: 0xd2c3e5, aura: 0x7d62a8, accent: 0xe4d9f2 },
+    alpha: { base: 0x332353, shadow: 0x110b1c, accent: 0x5b4186, glow: 0x9a7bc7 },
+  },
+  dnox_fire: {
+    evolved: { hue: 0, saturation: 0.03, contrast: 1.03, brightness: 0.99, tint: 0xffffff, aura: 0xb16a4f, accent: 0xf1d4c4 },
+    alpha: { base: 0x5c2c1c, shadow: 0x1e0f09, accent: 0x8e5139, glow: 0xc48768 },
+  },
+  dnox_ice: {
+    evolved: { hue: 8, saturation: 0.07, contrast: 1.04, brightness: 1.01, tint: 0xbad3e8, aura: 0x5f8eaf, accent: 0xd2e4f2 },
+    alpha: { base: 0x203d57, shadow: 0x0a1622, accent: 0x3f6586, glow: 0x79a8c7 },
+  },
+  dnox_soil: {
+    evolved: { hue: 10, saturation: 0.07, contrast: 1.04, brightness: 1.0, tint: 0xc9bd9f, aura: 0x8b7d59, accent: 0xe2d8c2 },
+    alpha: { base: 0x4a3a27, shadow: 0x18130d, accent: 0x72604a, glow: 0xa79478 },
+  },
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -54,62 +150,46 @@ function getEnemyBaseRadius(enemy: Enemy): number {
   return 16
 }
 
-function getAlphaPalette(enemy: Enemy): { base: number, shadow: number, accent: number, glow: number } {
-  if (enemy.kind === 'dnox_fire') return { base: 0x8a210d, shadow: 0x2a0904, accent: 0xc93f22, glow: 0xff7a33 }
-  if (enemy.kind === 'dnox_ice') return { base: 0x175f8f, shadow: 0x041c2d, accent: 0x2e89c9, glow: 0x61c8ff }
-  if (enemy.kind === 'dnox_soil') return { base: 0x6d451a, shadow: 0x241608, accent: 0xa77733, glow: 0xd6ad5a }
-  if (enemy.kind === 'cnox_shield') return { base: 0x0f4d8d, shadow: 0x061a33, accent: 0x2479c9, glow: 0x56b8ff }
-  if (enemy.kind === 'cnox_spark') return { base: 0x53207a, shadow: 0x180726, accent: 0x8a3bc7, glow: 0xc170ff }
-  if (enemy.kind === 'cnox_greedy') return { base: 0x8a3f11, shadow: 0x281306, accent: 0xc96f2e, glow: 0xffaa5f }
-  if (enemy.kind === 'thu_ho') return { base: 0x7c6218, shadow: 0x2a1f08, accent: 0xb3962f, glow: 0xe4c85c }
-  if (enemy.kind === 'thuat_si') return { base: 0x1f6a4a, shadow: 0x0a2519, accent: 0x32a873, glow: 0x72e6ae }
-  if (enemy.kind === 'dai_lien') return { base: 0x1c5f8a, shadow: 0x072131, accent: 0x3596c7, glow: 0x72d2ff }
-  if (enemy.kind === 'kamikaze') return { base: 0x8e290d, shadow: 0x2b0904, accent: 0xce4a25, glow: 0xff8a3a }
-  if (enemy.kind === 'sniper') return { base: 0x1f6f31, shadow: 0x09230f, accent: 0x33aa52, glow: 0x6fe494 }
-  return { base: 0x7a1f49, shadow: 0x250914, accent: 0xb53b72, glow: 0xe36eac }
+function getThreatPalette(enemy: Enemy): EnemyThreatPalette {
+  return ENEMY_THREAT_PALETTES[enemy.kind] ?? {
+    evolved: DEFAULT_EVOLVED_STYLE,
+    alpha: DEFAULT_ALPHA_PALETTE,
+  }
+}
+
+function getAlphaPalette(enemy: Enemy): AlphaPalette {
+  return getThreatPalette(enemy).alpha
 }
 
 function getEvolutionTint(enemy: Enemy, tier: number): number {
-  const t = clamp(tier, 0, 3)
-  if (t <= 0) return 0xffffff
-  if (enemy.kind === 'sniper') return [0xffffff, 0x59c47c, 0x2f9753, 0x1d6f3b][t]!
-  if (enemy.kind === 'kamikaze') return [0xffffff, 0xff7a38, 0xd94c22, 0xb13212][t]!
-  if (enemy.kind === 'dai_lien') return [0xffffff, 0x66bfff, 0x4095da, 0x2c6fb2][t]!
-  if (enemy.kind === 'thu_ho') return [0xffffff, 0xe0bd48, 0xb49432, 0x8f6f22][t]!
-  if (enemy.kind === 'thuat_si') return [0xffffff, 0x67d59a, 0x3ead74, 0x2d8759][t]!
-  if (enemy.kind === 'cnox_greedy') return [0xffffff, 0xf0914b, 0xc7682e, 0x9f4a20][t]!
-  if (enemy.kind === 'cnox_shield') return [0xffffff, 0x61afff, 0x347cc4, 0x235a9a][t]!
-  if (enemy.kind === 'cnox_spark') return [0xffffff, 0xad72ff, 0x7f47d2, 0x5d2ea6][t]!
-  if (enemy.kind === 'dnox_fire') return [0xffffff, 0xff7a42, 0xd84a25, 0xad3017][t]!
-  if (enemy.kind === 'dnox_ice') return [0xffffff, 0x72ceff, 0x46a6d7, 0x2e7fae][t]!
-  if (enemy.kind === 'dnox_soil') return [0xffffff, 0xc48c4c, 0x9a6a35, 0x774f27][t]!
-  return EVOLUTION_COLORS[t]!
-}
-
-function getEvolutionHue(enemy: Enemy, tier: number): number {
-  const t = clamp(tier, 0, 3)
-  if (t <= 0) return 0
-  if (enemy.kind === 'pioneer') return [0, 135, 215, 286][t]!
-  if (enemy.kind === 'sniper') return [0, 48, 92, 128][t]!
-  if (enemy.kind === 'kamikaze') return [0, -18, -42, -68][t]!
-  if (enemy.kind === 'dai_lien') return [0, 24, 66, 106][t]!
-  if (enemy.kind === 'thu_ho') return [0, -12, 18, 42][t]!
-  if (enemy.kind === 'thuat_si') return [0, 38, 88, 132][t]!
-  if (enemy.kind === 'cnox_greedy') return [0, -8, 28, 54][t]!
-  if (enemy.kind === 'cnox_shield') return [0, 24, 60, 96][t]!
-  if (enemy.kind === 'cnox_spark') return [0, 18, 44, 74][t]!
-  if (enemy.kind === 'dnox_fire') return [0, -16, -36, -58][t]!
-  if (enemy.kind === 'dnox_ice') return [0, 12, 32, 56][t]!
-  if (enemy.kind === 'dnox_soil') return [0, -10, 24, 44][t]!
-  return [0, 40, 84, 132][t]!
+  if (tier <= 0) return 0xffffff
+  return getThreatPalette(enemy).evolved.tint
 }
 
 function getAlphaScale(enemy: Enemy): number {
-  if (enemy.kind === 'kamikaze') return 1.2
+  if (enemy.kind === 'kamikaze') return 1.22
   if (enemy.kind === 'thu_ho' || enemy.kind === 'cnox_shield') return 1.34
   if (enemy.kind === 'dnox_fire' || enemy.kind === 'dnox_soil') return 1.3
+  if (enemy.kind === 'dnox_ice') return 1.22
+  if (enemy.kind === 'cnox_spark') return 1.26
   if (enemy.kind === 'thuat_si') return 1.26
   return 1.24
+}
+
+function getAlphaBodyMorph(enemy: Enemy): AlphaBodyMorph {
+  if (enemy.kind === 'pioneer') return { sx: 1.12, sy: 0.95, skewX: -0.06, skewY: 0, rotation: -0.03 }
+  if (enemy.kind === 'sniper') return { sx: 0.9, sy: 1.2, skewX: 0.02, skewY: 0, rotation: 0 }
+  if (enemy.kind === 'kamikaze') return { sx: 1.18, sy: 0.9, skewX: 0, skewY: 0.01, rotation: 0.03 }
+  if (enemy.kind === 'dai_lien') return { sx: 1.16, sy: 0.96, skewX: 0, skewY: 0.05, rotation: 0 }
+  if (enemy.kind === 'thu_ho') return { sx: 1.22, sy: 1.02, skewX: 0, skewY: 0, rotation: 0 }
+  if (enemy.kind === 'thuat_si') return { sx: 0.95, sy: 1.22, skewX: 0.04, skewY: 0, rotation: 0 }
+  if (enemy.kind === 'cnox_greedy') return { sx: 1.16, sy: 1.08, skewX: 0.01, skewY: 0, rotation: 0 }
+  if (enemy.kind === 'cnox_shield') return { sx: 1.28, sy: 0.92, skewX: 0, skewY: 0, rotation: 0 }
+  if (enemy.kind === 'cnox_spark') return { sx: 1.08, sy: 1.12, skewX: 0, skewY: 0, rotation: 0.08 }
+  if (enemy.kind === 'dnox_fire') return { sx: 1.14, sy: 1.06, skewX: 0.03, skewY: 0, rotation: 0 }
+  if (enemy.kind === 'dnox_ice') return { sx: 0.92, sy: 1.2, skewX: 0, skewY: 0, rotation: 0 }
+  if (enemy.kind === 'dnox_soil') return { sx: 1.2, sy: 0.97, skewX: 0, skewY: -0.04, rotation: 0 }
+  return { sx: 1.08, sy: 1.08, skewX: 0, skewY: 0, rotation: 0 }
 }
 
 function isBoss(enemy: Enemy): boolean {
@@ -153,13 +233,18 @@ function retimeEnemyCombatLoops(enemy: Enemy, speedupMult: number): void {
 }
 
 function ensureAlphaMorphLayers(enemy: Enemy): void {
+  const childCount = enemy.container.children.length
+  const bodyIdx = enemy.container.getChildIndex(enemy.body)
+  const shellIndex = Math.min(bodyIdx + 1, childCount)
+  const coreIndex = Math.min(bodyIdx + 2, childCount + 1)
+
   if (enemy.threatAlpha && !enemy.threatAlphaShell) {
     enemy.threatAlphaShell = new Graphics()
-    enemy.container.addChildAt(enemy.threatAlphaShell, 0)
+    enemy.container.addChildAt(enemy.threatAlphaShell, shellIndex)
   }
   if (enemy.threatAlpha && !enemy.threatAlphaCore) {
     enemy.threatAlphaCore = new Graphics()
-    enemy.container.addChild(enemy.threatAlphaCore)
+    enemy.container.addChildAt(enemy.threatAlphaCore, coreIndex)
   }
 }
 
@@ -172,95 +257,15 @@ function clearThreatDecor(enemy: Enemy): void {
 
 function getEvolutionStyle(enemy: Enemy, tier: number): EvolutionStyle {
   const t = clamp(tier, 0, 3)
-  if (t <= 0) {
-    return {
-      hue: 0,
-      saturation: 0,
-      contrast: 1,
-      brightness: 1,
-      tint: 0xffffff,
-      aura: 0x7aa6ff,
-      accent: 0xc9dcff,
-    }
-  }
-
-  const styleByKind: Record<string, [EvolutionStyle, EvolutionStyle, EvolutionStyle]> = {
-    pioneer: [
-      { hue: 76, saturation: 0.1, contrast: 1.03, brightness: 1.02, tint: 0xdff7e8, aura: 0x5ebd8f, accent: 0xb5efd2 },
-      { hue: 118, saturation: 0.16, contrast: 1.06, brightness: 1.02, tint: 0xd2f0ff, aura: 0x55a8d8, accent: 0xaee3ff },
-      { hue: 168, saturation: 0.2, contrast: 1.1, brightness: 1.01, tint: 0xe3dcff, aura: 0x8373ce, accent: 0xd4c6ff },
-    ],
-    sniper: [
-      { hue: 42, saturation: 0.1, contrast: 1.03, brightness: 1.02, tint: 0xe4f7dc, aura: 0x7fb56a, accent: 0xd4efc7 },
-      { hue: 74, saturation: 0.15, contrast: 1.06, brightness: 1.02, tint: 0xdcf4ec, aura: 0x69b795, accent: 0xc2ebdc },
-      { hue: 110, saturation: 0.19, contrast: 1.1, brightness: 1.01, tint: 0xd6e9ff, aura: 0x6a95cf, accent: 0xc7ddff },
-    ],
-    kamikaze: [
-      { hue: -10, saturation: 0.1, contrast: 1.03, brightness: 1.01, tint: 0xffe6d7, aura: 0xcc8f5f, accent: 0xffd0b0 },
-      { hue: -22, saturation: 0.15, contrast: 1.07, brightness: 1.0, tint: 0xffdfd2, aura: 0xc17c67, accent: 0xffc7b4 },
-      { hue: -36, saturation: 0.2, contrast: 1.1, brightness: 0.99, tint: 0xffd8da, aura: 0xb86f82, accent: 0xffc3cf },
-    ],
-    dai_lien: [
-      { hue: 18, saturation: 0.1, contrast: 1.03, brightness: 1.02, tint: 0xdff3ff, aura: 0x6eaed0, accent: 0xc5e9ff },
-      { hue: 42, saturation: 0.15, contrast: 1.06, brightness: 1.01, tint: 0xd9ecff, aura: 0x6b95c7, accent: 0xc1dcff },
-      { hue: 68, saturation: 0.19, contrast: 1.1, brightness: 1.0, tint: 0xe0e3ff, aura: 0x7974c8, accent: 0xcfcbff },
-    ],
-    thu_ho: [
-      { hue: -8, saturation: 0.1, contrast: 1.03, brightness: 1.02, tint: 0xfff0d8, aura: 0xc1a55c, accent: 0xffe0a8 },
-      { hue: 14, saturation: 0.15, contrast: 1.06, brightness: 1.01, tint: 0xf4efda, aura: 0xa8b06a, accent: 0xe2e7b8 },
-      { hue: 30, saturation: 0.18, contrast: 1.09, brightness: 1.0, tint: 0xe4f0de, aura: 0x7fae7d, accent: 0xc8e4c8 },
-    ],
-    thuat_si: [
-      { hue: 30, saturation: 0.1, contrast: 1.03, brightness: 1.02, tint: 0xe2f9ef, aura: 0x65ba92, accent: 0xbeefda },
-      { hue: 56, saturation: 0.15, contrast: 1.06, brightness: 1.01, tint: 0xdff4ff, aura: 0x69a8cb, accent: 0xc2e6ff },
-      { hue: 82, saturation: 0.19, contrast: 1.1, brightness: 1.0, tint: 0xe3e3ff, aura: 0x7878c9, accent: 0xceceff },
-    ],
-    cnox_greedy: [
-      { hue: -6, saturation: 0.1, contrast: 1.03, brightness: 1.01, tint: 0xffead8, aura: 0xc58a63, accent: 0xffcfb0 },
-      { hue: 16, saturation: 0.15, contrast: 1.06, brightness: 1.0, tint: 0xf8e8d8, aura: 0xb49a70, accent: 0xe9d8b8 },
-      { hue: 36, saturation: 0.19, contrast: 1.09, brightness: 0.99, tint: 0xe8eadf, aura: 0x94a27b, accent: 0xd7dfc5 },
-    ],
-    cnox_shield: [
-      { hue: 18, saturation: 0.1, contrast: 1.03, brightness: 1.02, tint: 0xe0efff, aura: 0x6f96cb, accent: 0xc5dbff },
-      { hue: 38, saturation: 0.15, contrast: 1.06, brightness: 1.01, tint: 0xdfe7ff, aura: 0x747fc7, accent: 0xc9ceff },
-      { hue: 60, saturation: 0.19, contrast: 1.1, brightness: 1.0, tint: 0xe7ddff, aura: 0x8769c2, accent: 0xdac4ff },
-    ],
-    cnox_spark: [
-      { hue: 12, saturation: 0.1, contrast: 1.03, brightness: 1.02, tint: 0xe9e2ff, aura: 0x8371c9, accent: 0xd7cbff },
-      { hue: 34, saturation: 0.15, contrast: 1.06, brightness: 1.01, tint: 0xede0ff, aura: 0x9d6ac9, accent: 0xe2c5ff },
-      { hue: 56, saturation: 0.19, contrast: 1.1, brightness: 1.0, tint: 0xf0dbff, aura: 0xb46ec8, accent: 0xebc7ff },
-    ],
-    dnox_fire: [
-      { hue: -14, saturation: 0.1, contrast: 1.03, brightness: 1.01, tint: 0xffe4d7, aura: 0xc77f63, accent: 0xffc5ae },
-      { hue: -30, saturation: 0.15, contrast: 1.06, brightness: 1.0, tint: 0xffddd5, aura: 0xbf6f6f, accent: 0xffbfc0 },
-      { hue: -46, saturation: 0.19, contrast: 1.1, brightness: 0.99, tint: 0xffd9df, aura: 0xb66483, accent: 0xffbfd2 },
-    ],
-    dnox_ice: [
-      { hue: 10, saturation: 0.1, contrast: 1.03, brightness: 1.02, tint: 0xdff6ff, aura: 0x6bb5d2, accent: 0xc2ecff },
-      { hue: 26, saturation: 0.15, contrast: 1.06, brightness: 1.01, tint: 0xe0f0ff, aura: 0x6f9dc7, accent: 0xc5ddff },
-      { hue: 44, saturation: 0.19, contrast: 1.1, brightness: 1.0, tint: 0xe6e5ff, aura: 0x807cc1, accent: 0xd0ccff },
-    ],
-    dnox_soil: [
-      { hue: -6, saturation: 0.1, contrast: 1.03, brightness: 1.01, tint: 0xf8ebda, aura: 0xbf9468, accent: 0xe6d0af },
-      { hue: 12, saturation: 0.15, contrast: 1.06, brightness: 1.0, tint: 0xefe9d9, aura: 0xa8a071, accent: 0xd8d3b9 },
-      { hue: 28, saturation: 0.19, contrast: 1.1, brightness: 0.99, tint: 0xe2eada, aura: 0x8ea482, accent: 0xcde0c8 },
-    ],
-  }
-
-  const tiers = styleByKind[enemy.kind]
-  if (tiers) return tiers[t - 1]!
-
-  return [
-    { hue: 28, saturation: 0.1, contrast: 1.03, brightness: 1.02, tint: 0xe2f1ff, aura: 0x6fa2d0, accent: 0xc5ddf7 },
-    { hue: 56, saturation: 0.15, contrast: 1.06, brightness: 1.01, tint: 0xe6e6ff, aura: 0x7f82c2, accent: 0xd2d3ff },
-    { hue: 84, saturation: 0.19, contrast: 1.1, brightness: 1.0, tint: 0xeadfff, aura: 0x8f74bc, accent: 0xdcc8ff },
-  ][t - 1]!
+  if (t <= 0) return BASE_STYLE
+  return getThreatPalette(enemy).evolved
 }
 
 function applyEvolutionMorph(enemy: Enemy, tier: number): void {
   if (enemy.threatAlpha || tier <= 0) {
     enemy.body.scale.set(1)
     enemy.body.skew.set(0, 0)
+    enemy.body.rotation = 0
     return
   }
 
@@ -317,6 +322,7 @@ function applyEvolutionMorph(enemy: Enemy, tier: number): void {
 
   enemy.body.scale.set(sx, sy)
   enemy.body.skew.set(skewX, skewY)
+  enemy.body.rotation = 0
 }
 
 function drawEvolutionAccent(enemy: Enemy): void {
@@ -342,79 +348,183 @@ function applyAlphaMorph(enemy: Enemy): void {
   enemy.threatAlphaVisualApplied = true
 
   const scale = getAlphaScale(enemy)
+  const morph = getAlphaBodyMorph(enemy)
   enemy.threatAlphaScale = scale
-  enemy.body.scale.set(scale)
-  enemy.body.skew.set(0, 0)
+  enemy.body.scale.set(scale * morph.sx, scale * morph.sy)
+  enemy.body.skew.set(morph.skewX, morph.skewY)
+  enemy.body.rotation = morph.rotation
 
-  const hpOffset = 5 + Math.round((scale - 1) * 18)
+  const visualScale = Math.max(scale * morph.sx, scale * morph.sy)
+  const hpOffset = 5 + Math.round((visualScale - 1) * 18)
   enemy.hpBarBg.y -= hpOffset
   enemy.hpBar.y -= hpOffset
 
   const palette = getAlphaPalette(enemy)
   const filter = ensureColorFilter(enemy)
   filter.reset()
-  filter.hue(-8, true)
-  filter.saturate(0.4, true)
-  filter.contrast(1.24, true)
-  filter.brightness(0.86, true)
+  filter.hue(-4, true)
+  filter.saturate(0.1, true)
+  filter.contrast(1.1, true)
+  filter.brightness(0.82, true)
   enemy.body.tint = palette.base
+  enemy.threatVisualTimer = 0
   enemy.threatAlphaAttackTimer = 120 + Math.random() * 100
+}
+
+type AlphaCoreKind = 'diamond' | 'orb' | 'shield' | 'hex'
+
+interface AlphaHullSpec {
+  hull: number[]
+  plate: number[]
+  leftFin?: number[]
+  rightFin?: number[]
+  core: AlphaCoreKind
+}
+
+function scalePoly(points: number[], r: number, sx = 1, sy = 1): number[] {
+  const out: number[] = []
+  for (let i = 0; i < points.length; i += 2) {
+    out.push(points[i]! * r * sx, points[i + 1]! * r * sy)
+  }
+  return out
+}
+
+function getAlphaHullSpec(enemy: Enemy): AlphaHullSpec {
+  if (enemy.kind === 'sniper') {
+    return {
+      hull: [-0.38, -1.28, 0.38, -1.28, 0.52, 0.94, -0.52, 0.94],
+      plate: [-0.25, -1.0, 0.25, -1.0, 0.34, 0.7, -0.34, 0.7],
+      leftFin: [-0.52, -0.2, -1.28, 0.3, -0.52, 0.22],
+      rightFin: [0.52, -0.2, 1.28, 0.3, 0.52, 0.22],
+      core: 'shield',
+    }
+  }
+  if (enemy.kind === 'kamikaze') {
+    return {
+      hull: [0, -1.35, 1.02, -0.08, 0.46, 1.02, -0.46, 1.02, -1.02, -0.08],
+      plate: [0, -1.02, 0.68, 0.03, 0.28, 0.76, -0.28, 0.76, -0.68, 0.03],
+      leftFin: [-0.74, 0.1, -1.34, 0.44, -0.92, 0.62],
+      rightFin: [0.74, 0.1, 1.34, 0.44, 0.92, 0.62],
+      core: 'orb',
+    }
+  }
+  if (enemy.kind === 'dai_lien') {
+    return {
+      hull: [0, -1.34, 0.84, -0.04, 0.2, 1.15, -0.2, 1.15, -0.84, -0.04],
+      plate: [0, -1.04, 0.52, 0, 0.12, 0.8, -0.12, 0.8, -0.52, 0],
+      leftFin: [-0.84, -0.02, -1.38, -0.36, -1.02, 0.24, -0.48, 0.12],
+      rightFin: [0.84, -0.02, 1.38, -0.36, 1.02, 0.24, 0.48, 0.12],
+      core: 'diamond',
+    }
+  }
+  if (enemy.kind === 'thu_ho') {
+    return {
+      hull: [0, -1.25, 1.02, -0.14, 0.74, 0.74, 0, 1.08, -0.74, 0.74, -1.02, -0.14],
+      plate: [0, -0.92, 0.66, -0.06, 0.48, 0.5, 0, 0.78, -0.48, 0.5, -0.66, -0.06],
+      core: 'shield',
+    }
+  }
+  if (enemy.kind === 'thuat_si') {
+    return {
+      hull: [0, -1.28, 0.78, 0, 0, 1.18, -0.78, 0],
+      plate: [0, -0.98, 0.5, 0, 0, 0.86, -0.5, 0],
+      leftFin: [-0.78, 0, -0.1, -0.74, -0.3, 0.12],
+      rightFin: [0.78, 0, 0.1, -0.74, 0.3, 0.12],
+      core: 'hex',
+    }
+  }
+  if (enemy.kind === 'cnox_greedy') {
+    return {
+      hull: [0, -1.16, 0.98, -0.24, 0.72, 0.9, 0, 1.08, -0.82, 0.78, -1.04, -0.14],
+      plate: [0, -0.86, 0.62, -0.14, 0.48, 0.62, 0, 0.78, -0.56, 0.58, -0.7, -0.08],
+      core: 'orb',
+    }
+  }
+  if (enemy.kind === 'cnox_shield') {
+    return {
+      hull: [0, -1.28, 0.84, -0.04, 0, 1.26, -0.84, -0.04],
+      plate: [0, -0.98, 0.5, 0, 0, 0.92, -0.5, 0],
+      leftFin: [-0.84, -0.02, -1.2, 0.52, -0.78, 0.78],
+      rightFin: [0.84, -0.02, 1.2, 0.52, 0.78, 0.78],
+      core: 'shield',
+    }
+  }
+  if (enemy.kind === 'cnox_spark') {
+    return {
+      hull: [0, -1.34, 0.36, -0.18, 1.22, 0, 0.36, 0.18, 0, 1.34, -0.36, 0.18, -1.22, 0, -0.36, -0.18],
+      plate: [0, -1.0, 0.24, -0.12, 0.86, 0, 0.24, 0.12, 0, 1.0, -0.24, 0.12, -0.86, 0, -0.24, -0.12],
+      core: 'hex',
+    }
+  }
+  if (enemy.kind === 'dnox_fire') {
+    return {
+      hull: [0, -1.18, 1.02, -0.58, 1.02, 0.58, 0, 1.18, -1.02, 0.58, -1.02, -0.58],
+      plate: [0, -0.78, 0.66, -0.36, 0.66, 0.36, 0, 0.78, -0.66, 0.36, -0.66, -0.36],
+      leftFin: [-0.72, -0.22, -1.3, -0.42, -0.96, 0.12],
+      rightFin: [0.72, -0.22, 1.3, -0.42, 0.96, 0.12],
+      core: 'hex',
+    }
+  }
+  if (enemy.kind === 'dnox_ice') {
+    return {
+      hull: [0, -1.26, 0.46, -0.46, 1.22, 0, 0.46, 0.46, 0, 1.26, -0.46, 0.46, -1.22, 0, -0.46, -0.46],
+      plate: [0, -0.88, 0.32, -0.32, 0.84, 0, 0.32, 0.32, 0, 0.88, -0.32, 0.32, -0.84, 0, -0.32, -0.32],
+      core: 'diamond',
+    }
+  }
+  if (enemy.kind === 'dnox_soil') {
+    return {
+      hull: [-1.16, -0.76, -0.58, -1.08, 0, -0.52, 0.58, -1.08, 1.16, -0.76, 0.98, 0.66, 0, 1.12, -0.98, 0.66],
+      plate: [-0.82, -0.56, -0.4, -0.82, 0, -0.38, 0.4, -0.82, 0.82, -0.56, 0.68, 0.46, 0, 0.8, -0.68, 0.46],
+      core: 'orb',
+    }
+  }
+  return {
+    hull: [0, -1.32, 0.92, -0.12, 0.5, 0.98, 0, 1.2, -0.5, 0.98, -0.92, -0.12],
+    plate: [0, -1.0, 0.62, -0.05, 0.34, 0.74, 0, 0.9, -0.34, 0.74, -0.62, -0.05],
+    leftFin: [-0.62, 0.2, -1.25, 0.52, -0.66, 0.58],
+    rightFin: [0.62, 0.2, 1.25, 0.52, 0.66, 0.58],
+    core: 'diamond',
+  }
 }
 
 function drawAlphaMorph(enemy: Enemy): void {
   if (!enemy.threatAlphaShell || !enemy.threatAlphaCore) return
 
   const palette = getAlphaPalette(enemy)
-  const pulse = 0.72 + Math.sin((enemy.threatPulse ?? 0) * 0.1) * 0.2
+  const pulse = 1
   const scale = enemy.threatAlphaScale ?? 1.24
   const baseR = getEnemyBaseRadius(enemy) * scale
-  const outerR = (baseR + 10) * pulse
-  const innerR = baseR * 0.74
-  const armorR = baseR * 0.93
-  const spikes = enemy.kind === 'kamikaze' ? 12 : enemy.kind === 'cnox_shield' ? 9 : 7
-
-  const outerPts: number[] = []
-  const armorPts: number[] = []
-  for (let i = 0; i < spikes * 2; i++) {
-    const a = (i / (spikes * 2)) * Math.PI * 2 + (enemy.threatPulse ?? 0) * 0.016
-    const ro = i % 2 === 0 ? outerR : innerR
-    const ra = i % 2 === 0 ? armorR : baseR * 0.6
-    outerPts.push(Math.cos(a) * ro, Math.sin(a) * ro)
-    armorPts.push(Math.cos(a) * ra, Math.sin(a) * ra)
-  }
+  const hull = getAlphaHullSpec(enemy)
 
   enemy.threatAlphaShell.clear()
-  enemy.threatAlphaShell.poly(outerPts).fill({ color: palette.shadow, alpha: 0.78 })
-  enemy.threatAlphaShell.poly(armorPts).fill({ color: palette.base, alpha: 0.82 })
-  enemy.threatAlphaShell.poly(armorPts).stroke({ color: palette.accent, width: 2.2, alpha: 0.9 })
-
-  const hornLen = baseR + 9
-  enemy.threatAlphaShell.poly([
-    -baseR * 0.35, -baseR * 0.25,
-    -hornLen, -baseR * 0.6,
-    -baseR * 0.5, baseR * 0.03,
-  ]).fill({ color: palette.shadow, alpha: 0.92 })
-  enemy.threatAlphaShell.poly([
-    baseR * 0.35, -baseR * 0.25,
-    hornLen, -baseR * 0.6,
-    baseR * 0.5, baseR * 0.03,
-  ]).fill({ color: palette.shadow, alpha: 0.92 })
+  enemy.threatAlphaShell.poly(scalePoly(hull.hull, baseR, pulse, pulse)).fill({ color: palette.shadow, alpha: 0.92 })
+  enemy.threatAlphaShell.poly(scalePoly(hull.plate, baseR)).fill({ color: palette.base, alpha: 0.95 })
+  enemy.threatAlphaShell.poly(scalePoly(hull.plate, baseR)).stroke({ color: palette.accent, width: 2.1, alpha: 0.9 })
+  if (hull.leftFin) enemy.threatAlphaShell.poly(scalePoly(hull.leftFin, baseR, pulse, pulse)).fill({ color: palette.shadow, alpha: 0.94 })
+  if (hull.rightFin) enemy.threatAlphaShell.poly(scalePoly(hull.rightFin, baseR, pulse, pulse)).fill({ color: palette.shadow, alpha: 0.94 })
 
   enemy.threatAlphaCore.clear()
-  enemy.threatAlphaCore.roundRect(-baseR * 0.22, -baseR * 0.3, baseR * 0.44, baseR * 0.62, baseR * 0.08).fill({ color: palette.accent, alpha: 0.64 })
-  enemy.threatAlphaCore.circle(0, 0, baseR * 0.14).fill({ color: palette.glow, alpha: 0.72 })
-
-  for (let i = 0; i < 3; i++) {
-    const a = (enemy.threatPulse ?? 0) * 0.012 + i * (Math.PI * 2 / 3)
-    const x = Math.cos(a) * (baseR + 4)
-    const y = Math.sin(a) * (baseR + 4)
-    enemy.threatAlphaCore.circle(x, y, 2.3).fill({ color: palette.accent, alpha: 0.86 })
+  if (hull.core === 'diamond') {
+    enemy.threatAlphaCore.poly(scalePoly([0, -0.32, 0.22, 0, 0, 0.32, -0.22, 0], baseR)).fill({ color: palette.accent, alpha: 0.76 })
+    enemy.threatAlphaCore.poly(scalePoly([0, -0.2, 0.12, 0, 0, 0.2, -0.12, 0], baseR)).fill({ color: palette.glow, alpha: 0.9 })
+  } else if (hull.core === 'shield') {
+    enemy.threatAlphaCore.roundRect(-baseR * 0.22, -baseR * 0.31, baseR * 0.44, baseR * 0.62, baseR * 0.09).fill({ color: palette.accent, alpha: 0.72 })
+    enemy.threatAlphaCore.roundRect(-baseR * 0.11, -baseR * 0.17, baseR * 0.22, baseR * 0.34, baseR * 0.05).fill({ color: palette.glow, alpha: 0.82 })
+  } else if (hull.core === 'hex') {
+    enemy.threatAlphaCore.poly(scalePoly([0, -0.29, 0.24, -0.13, 0.24, 0.13, 0, 0.29, -0.24, 0.13, -0.24, -0.13], baseR)).fill({ color: palette.accent, alpha: 0.74 })
+    enemy.threatAlphaCore.poly(scalePoly([0, -0.18, 0.14, -0.08, 0.14, 0.08, 0, 0.18, -0.14, 0.08, -0.14, -0.08], baseR)).fill({ color: palette.glow, alpha: 0.88 })
+  } else {
+    enemy.threatAlphaCore.circle(0, 0, baseR * 0.2).fill({ color: palette.accent, alpha: 0.74 })
+    enemy.threatAlphaCore.circle(0, 0, baseR * 0.11).fill({ color: palette.glow, alpha: 0.9 })
   }
+  enemy.threatAlphaCore.rect(-baseR * 0.22, baseR * 0.18, baseR * 0.44, baseR * 0.07).fill({ color: palette.shadow, alpha: 0.48 })
 }
 
 function applyEvolutionTint(enemy: Enemy): void {
   if (enemy.threatAlpha) return
   const tier = clamp(Math.floor(enemy.threatTier ?? 0), 0, 3)
+  enemy.body.alpha = 1
   enemy.body.tint = 0xffffff
   if (tier <= 0) {
     clearColorFilter(enemy)
@@ -422,12 +532,27 @@ function applyEvolutionTint(enemy: Enemy): void {
     enemy.threatSigil?.clear()
     enemy.body.scale.set(1)
     enemy.body.skew.set(0, 0)
+    enemy.body.rotation = 0
     return
   }
+
+  if (enemy.kind === 'dnox_fire') {
+    // Keep heat-state colors visible in evolved form so charge->blast telegraph remains readable.
+    const filter = ensureColorFilter(enemy)
+    filter.reset()
+    filter.saturate(0.04, true)
+    filter.contrast(1.03, true)
+    filter.brightness(0.99, true)
+    enemy.body.tint = 0xffffff
+    applyEvolutionMorph(enemy, tier)
+    drawEvolutionAccent(enemy)
+    return
+  }
+
   const style = getEvolutionStyle(enemy, tier)
   const filter = ensureColorFilter(enemy)
   filter.reset()
-  filter.hue(style.hue || getEvolutionHue(enemy, tier), true)
+  filter.hue(style.hue, true)
   filter.saturate(style.saturation, true)
   filter.contrast(style.contrast, true)
   filter.brightness(style.brightness, true)
@@ -616,9 +741,12 @@ export function updateEnemyThreat(ctx: GameContext, enemy: Enemy, dt: number, pr
   enemy.threatPulse = (enemy.threatPulse ?? 0) + dt
   if (enemy.threatAlpha) {
     ensureAlphaMorphLayers(enemy)
-    clearColorFilter(enemy)
     applyAlphaMorph(enemy)
-    drawAlphaMorph(enemy)
+    enemy.threatVisualTimer = (enemy.threatVisualTimer ?? 0) - dt
+    if ((enemy.threatVisualTimer ?? 0) <= 0) {
+      drawAlphaMorph(enemy)
+      enemy.threatVisualTimer = 3
+    }
   } else if ((enemy.threatTier ?? 0) > 0) {
     applyEvolutionMorph(enemy, enemy.threatTier ?? 0)
     drawEvolutionAccent(enemy)

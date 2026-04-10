@@ -33,7 +33,8 @@ export function drawDaiLienBullet(g: Graphics): void {
 
 // ─── Spawn ────────────────────────────────────────────────────────────────────
 export function spawnDaiLienPair(ctx: GameContext, game: GameStore): void {
-  const count = 2 + (Math.random() < 0.45 ? 1 : 0) // 2 or 3 per spawn
+  const stage = game.currentStage
+  const count = 1 + (Math.random() < 0.78 ? 1 : 0) + (stage >= 22 && Math.random() < 0.2 ? 1 : 0) // 1-2 (rare 3 at high stage)
   const anchorX = GAME_W * 0.2 + Math.random() * GAME_W * 0.6
   const anchorY = GAME_H * 0.06 + Math.random() * GAME_H * 0.11
   const spacing = 54

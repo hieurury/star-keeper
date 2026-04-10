@@ -1,4 +1,4 @@
-import type { Graphics, Container, Text, ColorMatrixFilter } from 'pixi.js'
+﻿import type { Graphics, Container, Text, ColorMatrixFilter } from 'pixi.js'
 
 // --- Entity types ---
 export interface Bullet {
@@ -190,6 +190,7 @@ export interface Enemy {
   threatAlphaScale?: number
   threatAlphaVisualApplied?: boolean
   threatAlphaAttackTimer?: number
+  threatVisualTimer?: number
   threatColorFilter?: ColorMatrixFilter
   threatPulse?: number
 
@@ -373,3 +374,4 @@ export interface FlockState {
   ty: number
   timer: number
 }
+
