@@ -1,28 +1,29 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="64" y1="52" x2="448" y2="466" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#10355B"/>
-      <stop offset="0.55" stop-color="#0B2038"/>
-      <stop offset="1" stop-color="#071426"/>
+    <linearGradient id="bg" x1="72" y1="52" x2="440" y2="460" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0E3153"/>
+      <stop offset="0.56" stop-color="#081D33"/>
+      <stop offset="1" stop-color="#051021"/>
     </linearGradient>
-    <linearGradient id="glow" x1="118" y1="98" x2="420" y2="402" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#7EE7FF"/>
-      <stop offset="1" stop-color="#21BDE5"/>
+    <linearGradient id="ring" x1="130" y1="106" x2="392" y2="404" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#87ECFF"/>
+      <stop offset="1" stop-color="#25C6EC"/>
     </linearGradient>
-    <linearGradient id="plane" x1="240" y1="154" x2="301" y2="352" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#E6F8FF"/>
-      <stop offset="1" stop-color="#B5E6FF"/>
+    <linearGradient id="ship" x1="246" y1="154" x2="278" y2="364" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F1FCFF"/>
+      <stop offset="1" stop-color="#A7E8FF"/>
     </linearGradient>
   </defs>
 
-  <rect x="32" y="32" width="448" height="448" rx="94" fill="url(#bg)"/>
-  <rect x="32" y="32" width="448" height="448" rx="94" stroke="#2E5F86" stroke-width="10"/>
+  <rect x="26" y="26" width="460" height="460" rx="102" fill="url(#bg)"/>
+  <rect x="26" y="26" width="460" height="460" rx="102" stroke="#2C628E" stroke-width="10"/>
 
-  <circle cx="256" cy="256" r="162" stroke="url(#glow)" stroke-width="16" stroke-dasharray="24 22"/>
-  <circle cx="256" cy="256" r="104" fill="#0B2A46" stroke="#4CCCEC" stroke-width="8"/>
+  <circle cx="256" cy="256" r="165" stroke="url(#ring)" stroke-width="16" stroke-dasharray="24 18"/>
+  <circle cx="256" cy="256" r="108" fill="#0A2947" stroke="#56D6F5" stroke-width="8"/>
 
-  <path d="M254 132L289 236L402 255L289 275L254 380L220 275L108 255L220 236L254 132Z" fill="url(#glow)" fill-opacity="0.35"/>
-  <path d="M256 158L298 266L256 356L214 266L256 158Z" fill="url(#plane)"/>
-  <path d="M256 158L278 261H234L256 158Z" fill="#FFFFFF"/>
-  <circle cx="256" cy="262" r="14" fill="#21BDE5"/>
+  <path d="M256 124L293 229L406 256L293 283L256 388L219 283L106 256L219 229L256 124Z" fill="#39D2F4" fill-opacity="0.3"/>
+  <path d="M256 156L299 270L256 362L213 270L256 156Z" fill="url(#ship)"/>
+  <path d="M256 156L278 264H234L256 156Z" fill="#FFFFFF"/>
+  <path d="M256 362L268 392L256 385L244 392L256 362Z" fill="#99E9FF"/>
+  <circle cx="256" cy="266" r="15" fill="#23C5EA"/>
 </svg>

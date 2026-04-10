@@ -1,28 +1,29 @@
 <svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="24" y1="20" x2="168" y2="176" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#10355B"/>
-      <stop offset="0.55" stop-color="#0B2038"/>
-      <stop offset="1" stop-color="#071426"/>
+    <linearGradient id="bg" x1="22" y1="16" x2="170" y2="176" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0E3153"/>
+      <stop offset="0.56" stop-color="#081D33"/>
+      <stop offset="1" stop-color="#051021"/>
     </linearGradient>
-    <linearGradient id="glow" x1="44" y1="36" x2="156" y2="150" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#7EE7FF"/>
-      <stop offset="1" stop-color="#21BDE5"/>
+    <linearGradient id="ring" x1="44" y1="34" x2="148" y2="152" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#87ECFF"/>
+      <stop offset="1" stop-color="#25C6EC"/>
     </linearGradient>
-    <linearGradient id="plane" x1="90" y1="58" x2="113" y2="132" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#E6F8FF"/>
-      <stop offset="1" stop-color="#B5E6FF"/>
+    <linearGradient id="ship" x1="92" y1="58" x2="105" y2="136" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F1FCFF"/>
+      <stop offset="1" stop-color="#A7E8FF"/>
     </linearGradient>
   </defs>
 
-  <rect x="12" y="12" width="168" height="168" rx="36" fill="url(#bg)"/>
-  <rect x="12" y="12" width="168" height="168" rx="36" stroke="#2E5F86" stroke-width="4"/>
+  <rect x="10" y="10" width="172" height="172" rx="38" fill="url(#bg)"/>
+  <rect x="10" y="10" width="172" height="172" rx="38" stroke="#2C628E" stroke-width="4"/>
 
-  <circle cx="96" cy="96" r="60" stroke="url(#glow)" stroke-width="6" stroke-dasharray="9 8"/>
-  <circle cx="96" cy="96" r="38" fill="#0B2A46" stroke="#4CCCEC" stroke-width="3"/>
+  <circle cx="96" cy="96" r="60" stroke="url(#ring)" stroke-width="6" stroke-dasharray="9 7"/>
+  <circle cx="96" cy="96" r="39" fill="#0A2947" stroke="#56D6F5" stroke-width="3"/>
 
-  <path d="M95 50L108 88L150 95L108 103L95 142L82 103L40 95L82 88L95 50Z" fill="url(#glow)" fill-opacity="0.35"/>
-  <path d="M96 60L111 100L96 134L81 100L96 60Z" fill="url(#plane)"/>
-  <path d="M96 60L104 98H88L96 60Z" fill="#FFFFFF"/>
-  <circle cx="96" cy="97" r="5" fill="#21BDE5"/>
+  <path d="M96 46L110 84L150 96L110 108L96 146L82 108L42 96L82 84L96 46Z" fill="#39D2F4" fill-opacity="0.3"/>
+  <path d="M96 58L112 101L96 136L80 101L96 58Z" fill="url(#ship)"/>
+  <path d="M96 58L104 99H88L96 58Z" fill="#FFFFFF"/>
+  <path d="M96 136L101 147L96 144L91 147L96 136Z" fill="#99E9FF"/>
+  <circle cx="96" cy="100" r="5" fill="#23C5EA"/>
 </svg>

@@ -1,6 +1,6 @@
-﻿import type { Graphics, Container, Text, ColorMatrixFilter } from 'pixi.js'
+import type { Graphics, Container, Text, ColorMatrixFilter } from 'pixi.js'
 
-// --- Entity types ---
+// ─── Entity types ──────────────────────────────────────────────────────────────
 export interface Bullet {
   gfx: Graphics
   vy: number
@@ -18,7 +18,8 @@ export interface AllyDrone {
   burstTimer: number
 }
 
-export type EnemyKind = 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'
+export type EnemyKind =
+  | 'pioneer' | 'kamikaze' | 'sniper' | 'boss_stardestroyer' | 'boss_invader'
   | 'dai_lien' | 'thu_ho' | 'thuat_si' | 'boss_tinhvan' | 'boss_trumso'
   | 'cnox_greedy' | 'cnox_shield' | 'cnox_spark' | 'boss_cnox_sun' | 'boss_cnox_outsider'
   | 'dnox_fire' | 'dnox_ice' | 'dnox_soil'
@@ -57,6 +58,27 @@ export interface Enemy {
   maxHp: number
   barW: number
   contactDamageCd?: number
+  // threat system
+  threatInitialized?: boolean
+  threatTier?: number
+  threatAlpha?: boolean
+  threatBaseVx?: number
+  threatBaseVy?: number
+  threatDamageMult?: number
+  threatMoveMult?: number
+  threatAge?: number
+  threatNextEvolveAt?: number
+  threatPulse?: number
+  threatBossBoosted?: boolean
+  threatAura?: Graphics
+  threatSigil?: Graphics
+  threatAlphaShell?: Graphics
+  threatAlphaCore?: Graphics
+  threatColorFilter?: ColorMatrixFilter
+  threatAlphaVisualApplied?: boolean
+  threatAlphaScale?: number
+  threatAlphaAttackTimer?: number
+  threatVisualTimer?: number
   // kamikaze
   kamiState?: KamiState
   kamiTimer?: number
@@ -98,7 +120,7 @@ export interface Enemy {
   formOffsetY?: number
   // boss_invader
   bossTurrets?: BossTurret[]
-  // dai_lien - reuses shootTimer, pioneerPhase, formTargetX/Y
+  // dai_lien — reuses shootTimer, pioneerPhase, formTargetX/Y
   // thu_ho (guardian)
   reflectCooldown?: number
   isReflecting?: boolean
@@ -111,19 +133,20 @@ export interface Enemy {
   // cnox_greedy
   cnoxStolenExp?: number
   cnoxPowerMult?: number
-  dnoxSoilHasteMult?: number
-  dnoxFireCoolTimer?: number
   cnoxBaseMaxHp?: number
   cnoxBaseBarW?: number
   cnoxBaseSize?: number
   cnoxSplitDepth?: number
+  // dnox
+  dnoxFireCoolTimer?: number
+  dnoxSoilHasteMult?: number
   // cnox_shield
   cnoxShields?: Graphics[]
   cnoxShieldAngle?: number
   cnoxAlphaBarrierGfx?: Graphics
   cnoxAlphaBarrierHp?: number
   cnoxAlphaBarrierMaxHp?: number
-  // Star Faster ultimate (Vet thuong sau)
+  // Star Faster ultimate (Vết thương sâu)
   starFasterWoundBonus?: number
   // cnox_spark
   cnoxLaserGfx?: Graphics
@@ -163,37 +186,39 @@ export interface Enemy {
   sunCoreLaserAngle?: number
   sunCoreLaserStartAngle?: number
   sunCoreLaserSweepSpan?: number
-
   // boss_cnox_outsider
-  moonEnergy?: number
-  moonMaxEnergy?: number
-  moonRecoveryMode?: boolean
-  moonWeapons?: MoonWeapon[]
-  moonAttackQueue?: Array<'sword' | 'shield' | 'staff' | 'bow'>
-  moonActiveWeapon?: 'sword' | 'shield' | 'staff' | 'bow' | null
-
-  // Dynamic threat/evolution runtime metadata
-  threatInitialized?: boolean
-  threatBossBoosted?: boolean
-  threatTier?: number
-  threatAlpha?: boolean
-  threatDamageMult?: number
-  threatMoveMult?: number
-  threatAge?: number
-  threatNextEvolveAt?: number
-  threatBaseVx?: number
-  threatBaseVy?: number
-  threatAura?: Graphics
-  threatSigil?: Graphics
-  threatAlphaShell?: Graphics
-  threatAlphaCore?: Graphics
-  threatAlphaScale?: number
-  threatAlphaVisualApplied?: boolean
-  threatAlphaAttackTimer?: number
-  threatVisualTimer?: number
-  threatColorFilter?: ColorMatrixFilter
-  threatPulse?: number
-
+  outsiderArms?: OutsiderArm[]
+  outsiderEnergy?: number
+  outsiderEnergyMax?: number
+  outsiderEnergyBarBg?: Graphics
+  outsiderEnergyBar?: Graphics
+  outsiderState?: 'idle' | 'recharge' | 'channel'
+  outsiderStateTimer?: number
+  outsiderVulnerableArms?: number[]
+  outsiderChannelEnergy?: number
+  outsiderChannelColor?: number
+  outsiderLaserTimer?: number
+  outsiderLaserState?: 'idle' | 'warning' | 'firing'
+  outsiderLaserAngles?: number[]
+  outsiderSlashWarn?: number
+  outsiderSlashArmIdx?: number
+  outsiderSlashAngle?: number
+  outsiderSlashMode?: 'stab' | 'slash'
+  outsiderSlashTargetX?: number
+  outsiderSlashTargetY?: number
+  outsiderAttackCycle?: number
+  outsiderStabPhase?: 'idle' | 'warning' | 'charging' | 'dashing' | 'recovering'
+  outsiderStabTimer?: number
+  outsiderStabLaneX?: number
+  outsiderStabLaneY?: number
+  outsiderStabWarnFromY?: number
+  outsiderSweepPhase?: 'idle' | 'warning' | 'charging' | 'sweeping' | 'recovering'
+  outsiderSweepTimer?: number
+  outsiderSweepY?: number
+  outsiderSweepStartX?: number
+  outsiderSweepEndX?: number
+  outsiderSweepDir?: 1 | -1
+  outsiderFxGfx?: Graphics
 }
 
 export interface SunWeaponStar {
@@ -223,20 +248,27 @@ export interface SunEnergyCrystal {
   contactDamageCd?: number
 }
 
-export interface MoonWeapon {
-  kind: 'sword' | 'shield' | 'staff' | 'bow'
-  gfx: Graphics
-  state: 'idle' | 'attack_charge' | 'attack_strike' | 'return' | 'broken'
+export interface OutsiderArm {
+  root: Container
+  jointA: Graphics
+  jointB: Graphics
+  blade: Graphics
+  core: Graphics
+  angle: number
+  targetAngle: number
+  reach: number
   hp: number
   maxHp: number
-  baseOffset: { x: number, y: number }
-  timer: number
-  attackType?: 'stab' | 'slash'
-  targetX?: number
-  targetY?: number
-  warningGfx: Graphics
+  destroyed: boolean
+  coreOffset: number
+  swing: number
+  worldCoreX?: number
+  worldCoreY?: number
+  worldJointX?: number
+  worldJointY?: number
+  worldTipX?: number
+  worldTipY?: number
 }
-
 
 export interface TrumSoGun {
   gfx: Graphics
@@ -363,6 +395,9 @@ export interface PlayerMissile {
   targetEnemy?: Enemy
   targetX?: number
   targetY?: number
+  mode?: 'missile' | 'tracer' | 'tracer_small'
+  hitCooldown?: number
+  life?: number
 }
 
 export type WaveSpawner = () => void
@@ -374,4 +409,3 @@ export interface FlockState {
   ty: number
   timer: number
 }
-
