@@ -9,6 +9,18 @@ export interface RemoteSave {
   client_updated_at: string
 }
 
+export interface PushSaveResult {
+  ok: boolean
+  code?: string
+  message?: string
+}
+
+export interface ProfileEnsureResult {
+  ok: boolean
+  code?: string
+  message?: string
+}
+
 function isUpsertConflictConstraintError(error: { code?: string | null, message?: string | null } | null): boolean {
   if (!error) return false
   if (error.code === '42P10') return true
@@ -24,24 +36,29 @@ export async function pushSave(
   userId: string,
   saveVersion: number,
   payload: Record<string, unknown>,
-): Promise<boolean> {
-  if (!isSupabaseConfigured()) return false
-  if (!isOnline.value) return false
+  clientUpdatedAt?: string,
+): Promise<PushSaveResult> {
+  if (!isSupabaseConfigured()) {
+    return { ok: false, code: 'SUPABASE_NOT_CONFIGURED', message: 'Supabase chưa được cấu hình' }
+  }
+  if (!isOnline.value) {
+    return { ok: false, code: 'OFFLINE', message: 'Thiết bị đang offline' }
+  }
 
-  const clientUpdatedAt = new Date().toISOString()
+  const resolvedUpdatedAt = clientUpdatedAt ?? new Date().toISOString()
   const row = {
     user_id: userId,
     save_version: saveVersion,
     payload,
-    client_updated_at: clientUpdatedAt,
+    client_updated_at: resolvedUpdatedAt,
   }
 
   const { error } = await supabase.from(TABLE).upsert(row, { onConflict: 'user_id' })
-  if (!error) return true
+  if (!error) return { ok: true }
 
   if (!isUpsertConflictConstraintError(error)) {
     console.warn('[SyncService] pushSave thất bại:', error.code ?? 'UNKNOWN', error.message)
-    return false
+    return { ok: false, code: error.code ?? 'UNKNOWN', message: error.message ?? 'pushSave thất bại' }
   }
 
   // Fallback for schemas where user_id is not declared UNIQUE (upsert cannot target conflict).
@@ -53,25 +70,25 @@ export async function pushSave(
 
   if (selectErr) {
     console.warn('[SyncService] pushSave fallback/select thất bại:', selectErr.code ?? 'UNKNOWN', selectErr.message)
-    return false
+    return { ok: false, code: selectErr.code ?? 'UNKNOWN', message: selectErr.message ?? 'fallback select thất bại' }
   }
 
   if (existing) {
     const { error: updateErr } = await supabase.from(TABLE).update(row).eq('user_id', userId)
     if (updateErr) {
       console.warn('[SyncService] pushSave fallback/update thất bại:', updateErr.code ?? 'UNKNOWN', updateErr.message)
-      return false
+      return { ok: false, code: updateErr.code ?? 'UNKNOWN', message: updateErr.message ?? 'fallback update thất bại' }
     }
-    return true
+    return { ok: true }
   }
 
   const { error: insertErr } = await supabase.from(TABLE).insert(row)
   if (insertErr) {
     console.warn('[SyncService] pushSave fallback/insert thất bại:', insertErr.code ?? 'UNKNOWN', insertErr.message)
-    return false
+    return { ok: false, code: insertErr.code ?? 'UNKNOWN', message: insertErr.message ?? 'fallback insert thất bại' }
   }
 
-  return true
+  return { ok: true }
 }
 
 /**
@@ -121,11 +138,15 @@ export function resolveConflict(
 /**
  * Đảm bảo profile người dùng tồn tại trong bảng profiles.
  */
-export async function ensureProfile(userId: string, username: string, avatarId: number): Promise<void> {
-  if (!isSupabaseConfigured()) return
-  if (!isOnline.value) return
+export async function ensureProfile(userId: string, username: string, avatarId: number): Promise<ProfileEnsureResult> {
+  if (!isSupabaseConfigured()) {
+    return { ok: false, code: 'SUPABASE_NOT_CONFIGURED', message: 'Supabase chưa được cấu hình' }
+  }
+  if (!isOnline.value) {
+    return { ok: false, code: 'OFFLINE', message: 'Thiết bị đang offline' }
+  }
 
-  await supabase.from('profiles').upsert(
+  const { error } = await supabase.from('profiles').upsert(
     {
       id: userId,
       username,
@@ -134,4 +155,11 @@ export async function ensureProfile(userId: string, username: string, avatarId: 
     },
     { onConflict: 'id', ignoreDuplicates: false },
   )
+
+  if (error) {
+    console.warn('[SyncService] ensureProfile thất bại:', error.code ?? 'UNKNOWN', error.message)
+    return { ok: false, code: error.code ?? 'UNKNOWN', message: error.message ?? 'ensureProfile thất bại' }
+  }
+
+  return { ok: true }
 }

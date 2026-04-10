@@ -729,124 +729,31 @@ const MISSION_POOL: Array<{
 ]
 
 // ─── Save version ─────────────────────────────────────────────────────────────
-// Tăng số này mỗi khi cấu trúc dữ liệu save thay đổi không tương thích ngược.
-// loadProgress() sẽ dùng số này để chạy migration thích hợp.
-const SAVE_VERSION = 1
+const SAVE_VERSION = 2
 const SAVE_KEY = 'ban-may-bay-save'
 const SAVE_BACKUP_KEY = 'ban-may-bay-save-backup'
-const SAVE_REJECTED_KEY = 'ban-may-bay-save-rejected'
 const PENDING_SYNC_KEY = 'ban-may-bay-sync-pending'
-const SAVE_ENVELOPE_VERSION = 1
-const SAVE_SIGNATURE_PEPPER_CURRENT = 'ban-may-bay::save-signature::2026'
-const SAVE_SIGNATURE_PEPPERS_LEGACY = [
-  'ban-may-bay::save-signature::2025',
-  'ban-may-bay::save-signature::2024',
-  'ban-may-bay::save-signature',
-]
+const PLAYING_SAVE_DEBOUNCE_MS = 1200
 
 const POST_CARD_PICK_INVULNERABLE_MS = 1000
 
-interface SaveEnvelope {
-  format: 'signed'
-  envelopeVersion: number
-  payload: Record<string, unknown>
-  sig: string
+interface LocalSaveSnapshot {
+  format: 'v2'
+  version: number
+  saveUpdatedAt: string
+  data: Record<string, unknown>
 }
 
-type SaveVerifyMode = 'ok' | 'legacy-ok' | 'invalid'
-
-function normalizeForJson(value: unknown): unknown {
-  if (value === undefined || typeof value === 'function' || typeof value === 'symbol') return undefined
-  if (value === null || typeof value !== 'object') return value
-  if (Array.isArray(value)) {
-    // JSON arrays preserve length; undefined/function/symbol become null.
-    return value.map(item => {
-      const normalized = normalizeForJson(item)
-      return normalized === undefined ? null : normalized
-    })
-  }
-  const obj = value as Record<string, unknown>
-  const out: Record<string, unknown> = {}
-  for (const key of Object.keys(obj)) {
-    const normalized = normalizeForJson(obj[key])
-    if (normalized !== undefined) out[key] = normalized
-  }
-  return out
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
-  const obj = value as Record<string, unknown>
-  const keys = Object.keys(obj).sort()
-  const parts: string[] = []
-  for (const key of keys) {
-    parts.push(`${JSON.stringify(key)}:${stableStringify(obj[key])}`)
-  }
-  return `{${parts.join(',')}}`
-}
-
-function fnv1aHash(input: string): string {
-  let h = 0x811c9dc5
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  return (h >>> 0).toString(16).padStart(8, '0')
-}
-
-function createSaveSignatureWithPepper(payload: Record<string, unknown>, pepper: string): string {
-  const normalizedPayload = normalizeForJson(payload) as Record<string, unknown>
-  return fnv1aHash(`${stableStringify(normalizedPayload)}|${pepper}`)
-}
-
-function createSaveSignature(payload: Record<string, unknown>): string {
-  return createSaveSignatureWithPepper(payload, SAVE_SIGNATURE_PEPPER_CURRENT)
-}
-
-function createLegacyV1SignatureWithKnownBug(payload: Record<string, unknown>, pepper: string): string {
-  // Compatibility path for previously saved envelopes where undefined fields were
-  // included in signature input but dropped by JSON persistence.
-  const cloned = structuredClone(payload) as Record<string, unknown>
-  const missions = Array.isArray(cloned.dailyMissions) ? cloned.dailyMissions as Array<Record<string, unknown>> : []
-  for (const m of missions) {
-    if (m && typeof m === 'object' && !Array.isArray(m) && !Object.prototype.hasOwnProperty.call(m, 'shipId')) {
-      m.shipId = undefined
-    }
-  }
-  return fnv1aHash(`${stableStringify(cloned)}|${pepper}`)
-}
-
-function buildSaveEnvelope(payload: Record<string, unknown>): SaveEnvelope {
-  return {
-    format: 'signed',
-    envelopeVersion: SAVE_ENVELOPE_VERSION,
-    payload,
-    sig: createSaveSignature(payload),
-  }
-}
-
-function isSaveEnvelope(data: unknown): data is SaveEnvelope {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return false
-  const obj = data as Record<string, unknown>
-  return obj.format === 'signed'
-    && typeof obj.envelopeVersion === 'number'
-    && !!obj.payload
-    && typeof obj.payload === 'object'
-    && !Array.isArray(obj.payload)
-    && typeof obj.sig === 'string'
-}
-
-function getSaveVerificationMode(envelope: SaveEnvelope): SaveVerifyMode {
-  if (envelope.sig === createSaveSignature(envelope.payload)) return 'ok'
-
-  const knownPeppers = [SAVE_SIGNATURE_PEPPER_CURRENT, ...SAVE_SIGNATURE_PEPPERS_LEGACY]
-  for (const pepper of knownPeppers) {
-    if (envelope.sig === createSaveSignatureWithPepper(envelope.payload, pepper)) return 'legacy-ok'
-    if (envelope.sig === createLegacyV1SignatureWithKnownBug(envelope.payload, pepper)) return 'legacy-ok'
-  }
-
-  return 'invalid'
+function isLocalSaveSnapshot(data: unknown): data is LocalSaveSnapshot {
+  if (!isRecord(data)) return false
+  return data.format === 'v2'
+    && typeof data.version === 'number'
+    && typeof data.saveUpdatedAt === 'string'
+    && isRecord(data.data)
 }
 
 export const useGameStore = defineStore('game', () => {
@@ -1186,6 +1093,7 @@ export const useGameStore = defineStore('game', () => {
   const pendingSync = ref(localStorage.getItem(PENDING_SYNC_KEY) === '1')
   /** Thời điểm client lần cuối lưu (ISO string), dùng cho conflict resolution */
   const saveUpdatedAt = ref<string | null>(null)
+  const lastSyncError = ref<string | null>(null)
 
   function setPendingSync(value: boolean) {
     pendingSync.value = value
@@ -1612,7 +1520,7 @@ export const useGameStore = defineStore('game', () => {
 
     isPlaying.value = false
     updateRunMissions()
-    saveProgress()
+    saveProgress({ requestCloudSync: true })
   }
 
   // Ship purchase + selection
@@ -1687,6 +1595,10 @@ export const useGameStore = defineStore('game', () => {
   function addBossKill() {
     sessionBossKillsTotal.value++
     unlockAchievement('kill_boss')
+  }
+
+  function onStageAdvanced() {
+    saveProgress({ requestCloudSync: true })
   }
 
   // Skill actions
@@ -1810,7 +1722,7 @@ export const useGameStore = defineStore('game', () => {
       updateRunMissions()
     }
     isPlaying.value = false
-    saveProgress()
+    saveProgress({ requestCloudSync: true })
   }
 
   function pauseGame() {
@@ -2058,20 +1970,191 @@ export const useGameStore = defineStore('game', () => {
     equippedArtifacts.value = nextEquip
   }
 
-  function persistLocalSave(payload: Record<string, unknown>, forcedUpdatedAt?: string) {
-    const updatedAt = forcedUpdatedAt ?? new Date().toISOString()
-    const normalizedPayload = { ...payload, saveUpdatedAt: updatedAt }
-    const envelope = buildSaveEnvelope(normalizedPayload)
-    const prev = localStorage.getItem(SAVE_KEY)
-    if (prev) localStorage.setItem(SAVE_BACKUP_KEY, prev)
-    const serialized = JSON.stringify(envelope)
-    localStorage.setItem(SAVE_KEY, serialized)
-    queueMirrorSave(serialized)
-    saveUpdatedAt.value = updatedAt
+  function toFiniteNumber(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback
   }
 
-  function saveProgress() {
-    const data = {
+  function toIntInRange(value: unknown, fallback: number, min: number, max: number): number {
+    const n = Math.floor(toFiniteNumber(value, fallback))
+    return Math.max(min, Math.min(max, n))
+  }
+
+  function toStringValue(value: unknown, fallback: string, maxLen = 80): string {
+    if (typeof value !== 'string') return fallback
+    const trimmed = value.trim()
+    if (!trimmed) return fallback
+    return trimmed.slice(0, maxLen)
+  }
+
+  function toStringArray(value: unknown, maxItems = 64, maxLen = 80): string[] {
+    if (!Array.isArray(value)) return []
+    const out: string[] = []
+    for (const item of value) {
+      if (typeof item !== 'string') continue
+      const normalized = item.trim()
+      if (!normalized) continue
+      out.push(normalized.slice(0, maxLen))
+      if (out.length >= maxItems) break
+    }
+    return out
+  }
+
+  function extractPayloadFromRawSave(raw: unknown): { payload: Record<string, unknown>, updatedAt: string | null } | null {
+    if (isLocalSaveSnapshot(raw)) {
+      return { payload: raw.data, updatedAt: raw.saveUpdatedAt }
+    }
+
+    // Legacy compatibility path: old signed envelope or plain object save.
+    if (!isRecord(raw)) return null
+    if (isRecord(raw.payload)) {
+      const payload = raw.payload as Record<string, unknown>
+      const updatedAt = typeof payload.saveUpdatedAt === 'string'
+        ? payload.saveUpdatedAt
+        : (typeof raw.client_updated_at === 'string' ? raw.client_updated_at : null)
+      return { payload, updatedAt }
+    }
+
+    const updatedAt = typeof raw.saveUpdatedAt === 'string' ? raw.saveUpdatedAt : null
+    return { payload: raw, updatedAt }
+  }
+
+  function validateAndNormalizeLoadedPayload(raw: Record<string, unknown>): { payload: Record<string, unknown>, updatedAt: string | null } | null {
+    const objectFields = ['shipUpgrades', 'permUpgrades', 'equippedArtifacts', 'shipDurabilities', 'audioSettings']
+    for (const field of objectFields) {
+      if (field in raw && raw[field] != null && !isRecord(raw[field])) return null
+    }
+
+    const arrayFields = ['ownedShips', 'unlockedAchievements', 'encounteredEnemyKinds', 'ownedArtifacts', 'updateNoticeSeenIds', 'dailyMissions']
+    for (const field of arrayFields) {
+      if (field in raw && raw[field] != null && !Array.isArray(raw[field])) return null
+    }
+
+    const validShipIds = new Set<string>(Object.keys(SHIP_DEFS))
+    const validNoticeIds = new Set<string>(UPDATE_NOTICES.map(n => n.id))
+    const validAchievementIds = new Set<string>(ALL_ACHIEVEMENTS.map(a => a.id))
+    const validArtifactIds = new Set<string>(ALL_ARTIFACT_DEFS.map(a => a.id))
+    const validEnemyKinds = new Set<string>(ALL_ENEMY_KINDS)
+
+    const ownedShipsRaw = toStringArray(raw.ownedShips, 12, 40).filter(id => validShipIds.has(id))
+    const ownedShipsNormalized = ownedShipsRaw.length > 0 ? [...new Set(ownedShipsRaw)] : ['star_keeper']
+    const selectedShipRaw = typeof raw.selectedShip === 'string' ? raw.selectedShip : ownedShipsNormalized[0]
+    const selectedShipNormalized = ownedShipsNormalized.includes(selectedShipRaw) ? selectedShipRaw : (ownedShipsNormalized[0] ?? 'star_keeper')
+
+    const shipUpgradesRaw = isRecord(raw.shipUpgrades) ? raw.shipUpgrades : {}
+    const shipUpgradesNormalized = {} as Record<ShipId, ShipUpgradeLevels>
+    for (const shipId of Object.keys(SHIP_DEFS) as ShipId[]) {
+      const row = isRecord(shipUpgradesRaw[shipId]) ? shipUpgradesRaw[shipId] : {}
+      shipUpgradesNormalized[shipId] = {
+        hp: toIntInRange(row.hp, 0, 0, SHIP_UPGRADE_MAX_LEVEL),
+        fireRate: toIntInRange(row.fireRate, 0, 0, SHIP_UPGRADE_MAX_LEVEL),
+        damage: toIntInRange(row.damage, 0, 0, SHIP_UPGRADE_MAX_LEVEL),
+      }
+    }
+
+    const permRaw = isRecord(raw.permUpgrades) ? raw.permUpgrades : {}
+    const maxByPerm = Object.fromEntries(PERM_UPGRADE_DEFS.map(def => [def.key, def.costs.length])) as Record<PermUpgradeKey, number>
+    const permNormalized = {
+      baseDamage: toIntInRange(permRaw.baseDamage, 0, 0, maxByPerm.baseDamage ?? 0),
+      baseHp: toIntInRange(permRaw.baseHp, 0, 0, maxByPerm.baseHp ?? 0),
+      baseSpeed: toIntInRange(permRaw.baseSpeed, 0, 0, maxByPerm.baseSpeed ?? 0),
+      expBonus: toIntInRange(permRaw.expBonus, 0, 0, maxByPerm.expBonus ?? 0),
+      bulletCount: toIntInRange(permRaw.bulletCount, 0, 0, maxByPerm.bulletCount ?? 0),
+      fireRate: toIntInRange(permRaw.fireRate, 0, 0, maxByPerm.fireRate ?? 0),
+    }
+
+    const ownedArtifactsNormalized = [...new Set(toStringArray(raw.ownedArtifacts, 80, 80).filter(id => validArtifactIds.has(id)))]
+    const equippedRaw = isRecord(raw.equippedArtifacts) ? raw.equippedArtifacts : {}
+    const equippedNormalized: Record<string, string[]> = {}
+    for (const shipId of Object.keys(SHIP_ARTIFACT_SLOTS)) {
+      const slots = SHIP_ARTIFACT_SLOTS[shipId] ?? 1
+      const list = toStringArray(equippedRaw[shipId], slots, 80)
+      equippedNormalized[shipId] = [...new Set(list.filter(id => ownedArtifactsNormalized.includes(id)))].slice(0, slots)
+    }
+
+    const dursRaw = isRecord(raw.shipDurabilities) ? raw.shipDurabilities : {}
+    const dursNormalized: Record<string, number> = {}
+    for (const [shipId, maxDur] of Object.entries(SHIP_DURABILITY_MAX)) {
+      dursNormalized[shipId] = toIntInRange(dursRaw[shipId], maxDur, 0, maxDur)
+    }
+
+    const dailyMissionsNormalized: DailyMission[] = []
+    for (const item of Array.isArray(raw.dailyMissions) ? raw.dailyMissions.slice(0, 24) : []) {
+      if (!isRecord(item)) continue
+      const rewardRaw = isRecord(item.reward) ? item.reward : {}
+      const target = toIntInRange(item.target, 0, 0, 2000000000)
+      const progress = toIntInRange(item.progress, 0, 0, Math.max(target, 0))
+      dailyMissionsNormalized.push({
+        id: toStringValue(item.id, '', 64),
+        kind: toStringValue(item.kind, '', 64),
+        desc: toStringValue(item.desc, '', 180),
+        target,
+        progress,
+        completed: item.completed === true,
+        claimed: item.claimed === true,
+        reward: {
+          coins: toIntInRange(rewardRaw.coins, 0, 0, 2000000000),
+          ruby: toIntInRange(rewardRaw.ruby, 0, 0, 2000000000),
+          accountExp: toIntInRange(rewardRaw.accountExp, 0, 0, 2000000000),
+        },
+        shipId: typeof item.shipId === 'string' ? item.shipId : undefined,
+      })
+    }
+
+    const audioRaw = isRecord(raw.audioSettings) ? raw.audioSettings : {}
+    const audioNormalized: AudioSettings = {
+      enabled: typeof audioRaw.enabled === 'boolean' ? audioRaw.enabled : DEFAULT_AUDIO_SETTINGS.enabled,
+      musicEnabled: typeof audioRaw.musicEnabled === 'boolean' ? audioRaw.musicEnabled : DEFAULT_AUDIO_SETTINGS.musicEnabled,
+      sfxEnabled: typeof audioRaw.sfxEnabled === 'boolean' ? audioRaw.sfxEnabled : DEFAULT_AUDIO_SETTINGS.sfxEnabled,
+      masterVolume: Math.max(0, Math.min(1, toFiniteNumber(audioRaw.masterVolume, DEFAULT_AUDIO_SETTINGS.masterVolume))),
+      musicVolume: Math.max(0, Math.min(1, toFiniteNumber(audioRaw.musicVolume, DEFAULT_AUDIO_SETTINGS.musicVolume))),
+      sfxVolume: Math.max(0, Math.min(1, toFiniteNumber(audioRaw.sfxVolume, DEFAULT_AUDIO_SETTINGS.sfxVolume))),
+    }
+
+    const normalized: Record<string, unknown> = {
+      version: toIntInRange(raw.version, SAVE_VERSION, 1, 99),
+      saveUpdatedAt: typeof raw.saveUpdatedAt === 'string' ? raw.saveUpdatedAt : null,
+      playerCoins: toIntInRange(raw.playerCoins, 0, 0, 2000000000),
+      playerRuby: toIntInRange(raw.playerRuby, 0, 0, 2000000000),
+      highScore: toIntInRange(raw.highScore, 0, 0, 2000000000),
+      username: toStringValue(raw.username, 'Phi Công', 40),
+      avatarId: toIntInRange(raw.avatarId, 0, 0, 1000),
+      shipName: toStringValue(raw.shipName, 'Chiến Cơ Alpha', 64),
+      updateNoticeSeenIds: [...new Set(toStringArray(raw.updateNoticeSeenIds, 128, 64).filter(id => validNoticeIds.has(id)))],
+      accountLevel: Math.max(1, toIntInRange(raw.accountLevel, 1, 1, 2000000000)),
+      accountExp: toIntInRange(raw.accountExp, 0, 0, 2000000000),
+      ownedShips: ownedShipsNormalized,
+      selectedShip: selectedShipNormalized,
+      shipUpgrades: shipUpgradesNormalized,
+      unlockedAchievements: [...new Set(toStringArray(raw.unlockedAchievements, 256, 80).filter(id => validAchievementIds.has(id)))],
+      encounteredEnemyKinds: [...new Set(toStringArray(raw.encounteredEnemyKinds, 128, 64).filter(kind => validEnemyKinds.has(kind)))],
+      permUpgrades: permNormalized,
+      ownedArtifacts: ownedArtifactsNormalized,
+      equippedArtifacts: equippedNormalized,
+      shipDurabilities: dursNormalized,
+      durabilityLastSave: toIntInRange(raw.durabilityLastSave, Date.now(), 0, 4102444800000),
+      dailyMissions: dailyMissionsNormalized,
+      dailyDate: typeof raw.dailyDate === 'string' ? raw.dailyDate.slice(0, 24) : '',
+      milestone3Claimed: raw.milestone3Claimed === true,
+      milestone5Claimed: raw.milestone5Claimed === true,
+      audioSettings: audioNormalized,
+    }
+
+    return {
+      payload: normalized,
+      updatedAt: typeof normalized.saveUpdatedAt === 'string' ? normalized.saveUpdatedAt : null,
+    }
+  }
+
+  let playingSaveDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  function clearPlayingSaveDebounceTimer() {
+    if (!playingSaveDebounceTimer) return
+    clearTimeout(playingSaveDebounceTimer)
+    playingSaveDebounceTimer = null
+  }
+
+  function buildCurrentSaveData(): Record<string, unknown> {
+    return {
       version: SAVE_VERSION,
       playerCoins: playerCoins.value,
       playerRuby: playerRuby.value,
@@ -2105,9 +2188,62 @@ export const useGameStore = defineStore('game', () => {
       milestone5Claimed: milestone5Claimed.value,
       audioSettings: audioSettings.value,
     }
-    persistLocalSave(data as Record<string, unknown>)
-    // Push lên Supabase nếu online, nếu không thì đặt cờ pendingSync
-    void pushToSupabase()
+  }
+
+  function flushDebouncedLocalSaveIfNeeded() {
+    if (!playingSaveDebounceTimer) return
+    clearPlayingSaveDebounceTimer()
+    persistLocalSave(buildCurrentSaveData())
+  }
+
+  function scheduleDebouncedLocalSave() {
+    clearPlayingSaveDebounceTimer()
+    playingSaveDebounceTimer = setTimeout(() => {
+      playingSaveDebounceTimer = null
+      persistLocalSave(buildCurrentSaveData())
+    }, PLAYING_SAVE_DEBOUNCE_MS)
+  }
+
+  function persistLocalSave(payload: Record<string, unknown>, forcedUpdatedAt?: string) {
+    const updatedAt = forcedUpdatedAt ?? new Date().toISOString()
+    const normalizedPayload = {
+      ...payload,
+      version: SAVE_VERSION,
+      saveUpdatedAt: updatedAt,
+    }
+    const snapshot: LocalSaveSnapshot = {
+      format: 'v2',
+      version: SAVE_VERSION,
+      saveUpdatedAt: updatedAt,
+      data: normalizedPayload,
+    }
+
+    const prev = localStorage.getItem(SAVE_KEY)
+    if (prev) localStorage.setItem(SAVE_BACKUP_KEY, prev)
+
+    const serialized = JSON.stringify(snapshot)
+    localStorage.setItem(SAVE_KEY, serialized)
+    queueMirrorSave(serialized)
+    saveUpdatedAt.value = updatedAt
+  }
+
+  function saveProgress(options?: { requestCloudSync?: boolean }) {
+    setPendingSync(true)
+
+    const canDebounceInGame = isPlaying.value
+      && !options?.requestCloudSync
+      && !!localStorage.getItem(SAVE_KEY)
+
+    if (canDebounceInGame) {
+      scheduleDebouncedLocalSave()
+    } else {
+      clearPlayingSaveDebounceTimer()
+      persistLocalSave(buildCurrentSaveData())
+    }
+
+    if (options?.requestCloudSync || !isPlaying.value) {
+      void pushToSupabase()
+    }
   }
 
   /** Push dữ liệu save hiện tại lên Supabase (nội bộ hoặc khi liên kết). */
@@ -2115,30 +2251,58 @@ export const useGameStore = defineStore('game', () => {
     // Import inline để tránh circular dependency với authStore
     const { useAuthStore } = await import('./authStore')
     const auth = useAuthStore()
-    if (!auth.isLoggedIn || !auth.userId) return false
-    if (!isOnline.value) {
-      setPendingSync(true)
+    if (!auth.isLoggedIn || !auth.userId) {
       return false
     }
+    if (!isOnline.value) {
+      setPendingSync(true)
+      lastSyncError.value = 'Thiết bị đang offline.'
+      return false
+    }
+
+    flushDebouncedLocalSaveIfNeeded()
+
     const saved = localStorage.getItem(SAVE_KEY)
     if (!saved) {
       setPendingSync(false)
+      lastSyncError.value = null
       return false
     }
-    let payload: Record<string, unknown>
+    let decoded: { payload: Record<string, unknown>, updatedAt: string | null } | null = null
     try {
-      payload = (JSON.parse(saved) as { payload: Record<string, unknown> }).payload
+      decoded = extractPayloadFromRawSave(JSON.parse(saved) as unknown)
     } catch {
       setPendingSync(true)
+      lastSyncError.value = 'Không thể đọc dữ liệu local để đồng bộ.'
       return false
     }
-    const ok = await pushSave(auth.userId, SAVE_VERSION, payload)
-    if (ok) {
+    if (!decoded) {
+      setPendingSync(true)
+      lastSyncError.value = 'Dữ liệu local không hợp lệ.'
+      return false
+    }
+
+    const payload = decoded.payload
+    const updatedAt = decoded.updatedAt ?? saveUpdatedAt.value ?? undefined
+
+    // Ensure profile exists first. This also satisfies DB schemas that keep FK game_saves.user_id -> profiles.id.
+    await ensureProfile(auth.userId, username.value, avatarId.value)
+
+    let pushResult = await pushSave(auth.userId, SAVE_VERSION, payload, updatedAt)
+    if (!pushResult.ok && pushResult.code === '23503') {
+      const ensureResult = await ensureProfile(auth.userId, username.value, avatarId.value)
+      if (ensureResult.ok) {
+        pushResult = await pushSave(auth.userId, SAVE_VERSION, payload, updatedAt)
+      }
+    }
+
+    if (pushResult.ok) {
       setPendingSync(false)
-      void ensureProfile(auth.userId, username.value, avatarId.value)
+      lastSyncError.value = null
       return true
     } else {
       setPendingSync(true)
+      lastSyncError.value = pushResult.message ?? 'Cloud từ chối lưu dữ liệu.'
       return false
     }
   }
@@ -2149,6 +2313,19 @@ export const useGameStore = defineStore('game', () => {
     const auth = useAuthStore()
     if (!auth.isLoggedIn || !auth.userId) return
     if (!isOnline.value) return
+
+    if (!saveUpdatedAt.value) {
+      const localSaved = localStorage.getItem(SAVE_KEY)
+      if (localSaved) {
+        try {
+          const decoded = extractPayloadFromRawSave(JSON.parse(localSaved) as unknown)
+          if (decoded?.updatedAt) saveUpdatedAt.value = decoded.updatedAt
+        } catch {
+          // Ignore broken local json here; normal load path will handle fallback.
+        }
+      }
+    }
+
     const remote = await pullSave(auth.userId)
     if (!remote) {
       // Cloud chưa có bản ghi: nếu local đã có save thì seed lên cloud.
@@ -2166,12 +2343,14 @@ export const useGameStore = defineStore('game', () => {
       if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
       persistLocalSave(remotePayload, remote.client_updated_at)
       setPendingSync(false)
+      lastSyncError.value = null
       console.info('[Sync] Đã tải dữ liệu từ cloud (server mới hơn local).')
     } else if (decision === 'local') {
       // Local mới hơn → push lên server
       await pushToSupabase()
     } else {
       setPendingSync(false)
+      lastSyncError.value = null
     }
   }
 
@@ -2261,63 +2440,71 @@ export const useGameStore = defineStore('game', () => {
     const { useAuthStore } = await import('./authStore')
     const auth = useAuthStore()
     if (!auth.isLoggedIn || !auth.userId) return
-    if (!isOnline.value) { setPendingSync(true); return }
+    if (!isOnline.value) {
+      setPendingSync(true)
+      lastSyncError.value = 'Thiết bị đang offline.'
+      return
+    }
+
+    if (!saveUpdatedAt.value) {
+      const localSaved = localStorage.getItem(SAVE_KEY)
+      if (localSaved) {
+        try {
+          const decoded = extractPayloadFromRawSave(JSON.parse(localSaved) as unknown)
+          if (decoded?.updatedAt) saveUpdatedAt.value = decoded.updatedAt
+        } catch {
+          // Ignore parse issues in this path; push/pull will set explicit errors later if needed.
+        }
+      }
+    }
+
     const remote = await pullSave(auth.userId)
-    
-    if (remote && remote.payload) {
-      // Supabase is the source of truth. Overwrite local data entirely.
+
+    if (!remote || !remote.payload) {
+      // Cloud is empty, push local progress to initialize it
+      await pushToSupabase()
+      return
+    }
+
+    const decision = resolveConflict(saveUpdatedAt.value, SAVE_VERSION, remote)
+    if (decision === 'remote') {
       const localSaved = localStorage.getItem(SAVE_KEY)
       if (localSaved) localStorage.setItem(SAVE_BACKUP_KEY, localSaved)
       _applyDataToStore(remote.payload)
       if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
       persistLocalSave(remote.payload, remote.client_updated_at)
       setPendingSync(false)
-      console.info('[Sync] Overwrote local data with cloud data on account link')
-    } else {
-      // Cloud is empty, push local progress to initialize it
-      await pushToSupabase()
+      lastSyncError.value = null
+      console.info('[Sync] Account link: dùng dữ liệu cloud (mới hơn local).')
+      return
     }
-  }
 
-  // Migration stubs — thêm case mới khi cấu trúc save thay đổi.
-  // Mỗi hàm nhận raw object v(N) và trả ra object đã migrate lên v(N+1).
-  function _migrateV0toV1(d: Record<string, unknown>): Record<string, unknown> {
-    // v0 (chưa có trường version) → v1: không thay đổi cấu trúc, chỉ thêm trường version.
-    return { ...d, version: 1 }
+    await pushToSupabase()
   }
 
   function tryLoadSerializedSave(saved: string): boolean {
     try {
       const parsed = JSON.parse(saved) as unknown
-      let data: Record<string, unknown> | null = null
-      let verifyMode: SaveVerifyMode = 'ok'
+      const decoded = extractPayloadFromRawSave(parsed)
+      if (!decoded) return false
 
-      if (isSaveEnvelope(parsed)) {
-        verifyMode = getSaveVerificationMode(parsed)
-        if (!isAdminMode.value && verifyMode === 'invalid') {
-          localStorage.setItem(SAVE_REJECTED_KEY, saved)
-          return false
-        }
-        data = parsed.payload
-      } else if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        // Legacy plain-object save. Load once then re-save in signed format.
-        data = parsed as Record<string, unknown>
+      const validated = validateAndNormalizeLoadedPayload(decoded.payload)
+      if (!validated) {
+        console.warn('[Save] Save payload schema không hợp lệ, bỏ qua bản save này.')
+        return false
       }
 
-      if (!data) return false
-      saveUpdatedAt.value = typeof data.saveUpdatedAt === 'string' ? data.saveUpdatedAt : null
-
-      // -- Migration chain -------------------------------------------------
-      const ver = typeof data.version === 'number' ? data.version : 0
-      if (ver < 1) data = _migrateV0toV1(data)
-      // -------------------------------------------------------------------
-      _applyDataToStore(data)
+      saveUpdatedAt.value = validated.updatedAt
+      _applyDataToStore(validated.payload)
       if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
-      // Re-save if migrated, legacy format, or verified by legacy signature.
-      if (ver < SAVE_VERSION || !isSaveEnvelope(parsed) || verifyMode === 'legacy-ok') saveProgress()
+
+      // If this is not the new snapshot format, rewrite immediately to v2.
+      if (!isLocalSaveSnapshot(parsed)) {
+        persistLocalSave(validated.payload, validated.updatedAt ?? undefined)
+      }
+
       return true
     } catch {
-      localStorage.setItem(SAVE_REJECTED_KEY, saved)
       return false
     }
   }
@@ -2360,50 +2547,6 @@ export const useGameStore = defineStore('game', () => {
     generateDailyMissions()
     // Đồng bộ từ Supabase sau khi load local xong
     void pullFromSupabase()
-  }
-
-  /** Xuất dữ liệu game ra file JSON để người dùng tự bảo quản. */
-  function exportSave() {
-    const saved = localStorage.getItem(SAVE_KEY)
-    if (!saved) return
-    const blob = new Blob([saved], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
-    const d = new Date()
-    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-    a.download = `ban-may-bay-save-${stamp}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
-  /**
-   * Nạp lại dữ liệu từ chuỗi JSON (do người dùng cung cấp qua file).
-   * Trả về true nếu thành công.
-   */
-  function importSave(jsonStr: string): boolean {
-    try {
-      const raw = JSON.parse(jsonStr) as unknown
-      if (isSaveEnvelope(raw)) {
-        if (!isAdminMode.value && getSaveVerificationMode(raw) === 'invalid') return false
-        const serialized = JSON.stringify(raw)
-        localStorage.setItem(SAVE_KEY, serialized)
-        queueMirrorSave(serialized)
-      } else {
-        // Chỉ admin mới được import save dạng không ký.
-        if (!isAdminMode.value) return false
-        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return false
-        const serialized = JSON.stringify(raw)
-        localStorage.setItem(SAVE_KEY, serialized)
-        queueMirrorSave(serialized)
-      }
-      loadProgress()
-      return true
-    } catch {
-      return false
-    }
   }
 
   return {
@@ -2529,12 +2672,11 @@ export const useGameStore = defineStore('game', () => {
     // Kill tracking (called from GameCanvas)
     addKill,
     addBossKill,
-    // Save management
-    exportSave,
-    importSave,
+    onStageAdvanced,
     updateAudioSettings,
     // Supabase sync
     pendingSync,
+    lastSyncError,
     pullFromSupabase,
     pushToSupabase,
     // Test mode

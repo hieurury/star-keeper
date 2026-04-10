@@ -1461,6 +1461,7 @@ function onShipNameKey(e: KeyboardEvent) {
                       <span v-if="game.pendingSync" class="sync-pending">⏳ Đang chờ đồng bộ...</span>
                       <span v-else class="sync-done">☁ Đã đồng bộ lên Cloud</span>
                     </div>
+                    <div v-if="game.lastSyncError" class="auth-inline-error">⚠ {{ game.lastSyncError }}</div>
                     <button class="btn-cancel btn-logout" style="width:100%;padding:10px;display:flex;align-items:center;justify-content:center;border-radius:0;border:2px solid rgba(229,62,62,0.3);font-family:var(--font-pixel);font-size:10px;text-transform:uppercase;" @click="void auth.logout()">
                       <PhSignOut :size="18" style="margin-right:6px;" /> Đăng xuất
                     </button>
