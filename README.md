@@ -51,6 +51,57 @@ Luu y:
 - Service Worker chi dang ky o web browser, khong dang ky trong shell native de tranh xung dot cache.
 - Moi thay doi code Vue/game logic van giu nguyen workflow hien tai; chi can build va sync lai truoc khi chay tren mobile.
 
+## Cai de phien ban moi (khong can xoa game cu)
+
+- Android se cai de duoc neu giu cung `applicationId` va ky cung keystore.
+- Du an da tu dong map version tu `package.json` vao `android/app/build.gradle`:
+	- `versionName` = `package.json.version`
+	- `versionCode` = `major * 10000 + minor * 100 + patch`
+- Vi vay, moi lan tang version trong `package.json`, APK moi co the update len ban cu ma khong can go cai dat.
+
+## Tu thong bao update dua tren ma nguon
+
+Game da co checker doc file `public/version.json`:
+
+- `src/lib/updateChecker.ts` se fetch manifest version va so sanh voi version hien tai trong app.
+- Home/Settings se hien trang thai "Co ban cap nhat moi" va nut cap nhat.
+- Khi vao game, app se check version. Neu co ban moi, app mo man hinh bat buoc cap nhat voi:
+  - Version hien tai / version moi
+  - Dung luong can thiet
+  - Lua chon `Cap nhat ngay` hoac `Thoat`
+- Neu chon cap nhat, loading full-screen se hien tien trinh cap nhat cho den khi xong.
+
+Manifest mau:
+
+```json
+{
+	"version": "1.1.0",
+	"publishedAt": "2026-04-12",
+	"forceUpdate": true,
+	"requiredSizeMb": 120,
+	"packageUrl": "https://your-domain.com/patch-v1.1.0.bin",
+	"packageSizeBytes": 125829120,
+	"downloadUrl": "https://...",
+	"notes": "Mo ta ngan"
+}
+```
+
+Ghi chu:
+
+- Uu tien `packageUrl` neu ban muon hien tien trinh tai goi cap nhat ngay trong game.
+- Neu khong co `packageUrl`, app se fallback sang `downloadUrl`.
+
+Neu can check update tu server rieng (dac biet cho ban native), dat bien moi truong:
+
+```bash
+VITE_UPDATE_MANIFEST_URL=https://your-domain.com/version.json
+```
+
+Khi release, cap nhat 2 thu:
+
+1. Tang `package.json.version`
+2. Cap nhat `public/version.json` (version + downloadUrl)
+
 ## Checklist truoc khi build APK
 
 ### 1) Cap nhat bo icon app

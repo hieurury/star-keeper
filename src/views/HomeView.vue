@@ -22,13 +22,15 @@ import ArtifactIcon from '../components/ui/ArtifactIcon.vue'
 import CardIcon from '../components/ui/CardIcon.vue'
 import LobbyBottomNav from '../components/ui/LobbyBottomNav.vue'
 import { UPDATE_NOTICES, type UpdateNotice } from '../content/updateNotices'
+import { APP_VERSION } from '../lib/appVersion'
+import { checkForUpdates, type UpdateCheckResult } from '../lib/updateChecker'
 import {
   PhCoins, PhDiamond, PhSword, PhShield, PhCrown,
   PhAirplaneTilt, PhMagicWand,
   PhClipboardText, PhPencilSimple, PhCheck, PhX,
   PhArrowLeft, PhCaretLeft, PhCaretRight, PhTimer,
   PhWarning, PhWrench, PhLightning, PhLock,
-  PhBell, PhSpeakerHigh, PhSpeakerSlash, PhMusicNotes,
+  PhBell, PhSpeakerHigh, PhSpeakerSlash, PhMusicNotes, PhArrowSquareOut,
   PhTreasureChest,
   PhCloudArrowUp, PhSignOut
 } from '@phosphor-icons/vue'
@@ -71,6 +73,10 @@ const showTourPrompt = ref(false)
 const showTour = ref(false)
 const showSettingsPanel = ref(false)
 const settingsActiveTab = ref<'account' | 'audio' | 'graphics'>('account')
+const updateCheckState = ref<UpdateCheckResult | null>(null)
+const checkingUpdate = ref(false)
+const updateCheckError = ref('')
+const LAST_UPDATE_PROMPT_KEY = 'lastPromptedUpdateVersion'
 
 function setAudioEnabled(enabled: boolean) {
   game.updateAudioSettings({ enabled })
@@ -118,6 +124,10 @@ const notices = computed(() => [...UPDATE_NOTICES].slice(0, 3))
 const unreadNoticeIds = computed(() => notices.value.map(n => n.id).filter(id => !game.isUpdateNoticeSeen(id)))
 const unreadNoticeCount = computed(() => unreadNoticeIds.value.length)
 const selectedNotice = computed<UpdateNotice | null>(() => notices.value.find(n => n.id === selectedNoticeId.value) ?? null)
+const appVersionLabel = computed(() => `v${APP_VERSION}`)
+const latestVersionLabel = computed(() => updateCheckState.value?.latestVersion ? `v${updateCheckState.value.latestVersion}` : null)
+const hasAppUpdate = computed(() => updateCheckState.value?.hasUpdate ?? false)
+const updateDownloadUrl = computed(() => updateCheckState.value?.manifest?.downloadUrl?.trim() || '')
 
 const MILESTONE_ITEMS: Array<{ step: 3|5; reward: string }> = [
   { step: 3, reward: '400🪙+EXP' },
@@ -200,6 +210,41 @@ function markSelectedNoticeSeen() {
 
 function markAllNoticesSeen() {
   game.markAllUpdateNoticesSeen()
+}
+
+async function refreshUpdateStatus(options: { silent?: boolean } = {}) {
+  if (checkingUpdate.value) return
+  checkingUpdate.value = true
+  if (!options.silent) updateCheckError.value = ''
+
+  try {
+    const result = await checkForUpdates()
+    updateCheckState.value = result
+
+    if (result.hasUpdate) {
+      const lastPromptedVersion = localStorage.getItem(LAST_UPDATE_PROMPT_KEY)
+      if (lastPromptedVersion !== result.latestVersion) {
+        localStorage.setItem(LAST_UPDATE_PROMPT_KEY, result.latestVersion ?? '')
+        openUpdateNotices()
+      }
+    }
+
+    if (!result.hasUpdate && result.latestVersion) {
+      localStorage.setItem(LAST_UPDATE_PROMPT_KEY, result.latestVersion)
+    }
+  } catch (error) {
+    if (!options.silent) {
+      updateCheckError.value = error instanceof Error ? error.message : 'Khong the kiem tra ban cap nhat.'
+    }
+  } finally {
+    checkingUpdate.value = false
+  }
+}
+
+function openUpdateDownload() {
+  const url = updateDownloadUrl.value
+  if (!url) return
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 function confirmAdmin() {
@@ -485,6 +530,7 @@ onMounted(() => {
   // Thụ động tái sinh độ bền: 1/phút
   regenInterval = setInterval(() => game.tickDurabilityRegen(), 60000)
   document.addEventListener('keydown', onAdminKeyDown)
+  void refreshUpdateStatus({ silent: true })
 })
 
 onUnmounted(() => {
@@ -578,6 +624,9 @@ function onShipNameKey(e: KeyboardEvent) {
       </div>
       <div class="topbar-resource-col" data-tour="currency">
         <div class="topbar-resource-actions">
+          <button v-if="hasAppUpdate" class="topbar-update" @click="updateDownloadUrl ? openUpdateDownload() : openUpdateNotices()" title="Co ban cap nhat moi">
+            <PhArrowSquareOut weight="fill" :size="18" />
+          </button>
           <button class="topbar-notices" @click="openUpdateNotices">
             <PhBell weight="fill" :size="18" />
             <span v-if="unreadNoticeCount > 0" class="topbar-notices__badge">{{ unreadNoticeCount }}</span>
@@ -1496,6 +1545,28 @@ function onShipNameKey(e: KeyboardEvent) {
                     </button>
                   </template>
                   <div v-if="auth.authError" class="auth-inline-error">{{ auth.authError }}</div>
+                </div>
+
+                <div class="settings-auth-card settings-version-card">
+                  <div class="settings-section-label">PHIEN BAN</div>
+                  <div class="version-line">Hien tai: {{ appVersionLabel }}</div>
+                  <div v-if="latestVersionLabel" class="version-line">Moi nhat: {{ latestVersionLabel }}</div>
+                  <div v-if="hasAppUpdate" class="version-alert">Co ban cap nhat moi.</div>
+                  <div v-else-if="!checkingUpdate && latestVersionLabel" class="version-ok">Ban dang o phien ban moi nhat.</div>
+                  <div v-if="updateCheckError" class="auth-inline-error">{{ updateCheckError }}</div>
+
+                  <div class="notice-actions" style="margin-top: 12px;">
+                    <button class="notice-btn notice-btn--ghost" :disabled="checkingUpdate" @click="void refreshUpdateStatus()">
+                      {{ checkingUpdate ? 'Dang kiem tra...' : 'Kiem tra cap nhat' }}
+                    </button>
+                    <button
+                      v-if="hasAppUpdate"
+                      class="notice-btn"
+                      @click="updateDownloadUrl ? openUpdateDownload() : openUpdateNotices()"
+                    >
+                      {{ updateDownloadUrl ? 'Cap nhat ngay' : 'Xem chi tiet' }}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2570,6 +2641,27 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   padding: 14px;
   margin-bottom: 15px;
 }
+.settings-version-card {
+  margin-top: -2px;
+}
+.version-line {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #b7d3ef;
+  line-height: 1.7;
+}
+.version-alert {
+  margin-top: 6px;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #ffd98a;
+}
+.version-ok {
+  margin-top: 6px;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #85e8ae;
+}
 .auth-status {
   display: flex;
   align-items: center;
@@ -3117,6 +3209,25 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   border-radius: 2px;
   transition: border-color 0.15s, color 0.15s;
   flex-shrink: 0;
+}
+.topbar-update {
+  position: relative;
+  background: rgba(0, 188, 212, 0.12);
+  border: 2px solid rgba(0, 188, 212, 0.65);
+  color: #9ff6ff;
+  width: 29px;
+  height: 29px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.topbar-update:hover {
+  border-color: #72f1ff;
+  background: rgba(0, 188, 212, 0.22);
 }
 .topbar-notices:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .topbar-notices__badge {

@@ -5,6 +5,9 @@ export interface LoadingShowOptions {
   title?: string
   subtitle?: string
   tip?: string
+  progress?: number | null
+  progressLabel?: string
+  persistent?: boolean
 }
 
 const DEFAULT_TIPS = [
@@ -28,8 +31,15 @@ export const useUiStore = defineStore('ui', () => {
   const loadingTitle = ref('STAR KEEPER')
   const loadingSubtitle = ref('Khởi động hệ thống phi hành...')
   const loadingTip = ref(DEFAULT_TIPS[0]!)
+  const loadingProgress = ref<number | null>(null)
+  const loadingProgressLabel = ref('')
+  const loadingPersistent = ref(false)
   const loadingTips = ref<string[]>([...DEFAULT_TIPS])
   const loadingToken = ref(0)
+
+  function clampProgress(progress: number): number {
+    return Math.max(0, Math.min(100, Math.round(progress)))
+  }
 
   function nextLoadingTip() {
     const tips = loadingTips.value
@@ -52,16 +62,44 @@ export const useUiStore = defineStore('ui', () => {
   function showLoading(opts: LoadingShowOptions = {}): number {
     loadingToken.value += 1
     loadingVisible.value = true
+    loadingPersistent.value = opts.persistent === true
     if (opts.title) loadingTitle.value = opts.title
     if (opts.subtitle) loadingSubtitle.value = opts.subtitle
+    if (opts.progress !== undefined) {
+      loadingProgress.value = opts.progress === null ? null : clampProgress(opts.progress)
+    } else {
+      loadingProgress.value = null
+    }
+    loadingProgressLabel.value = opts.progressLabel ?? ''
     if (opts.tip) loadingTip.value = opts.tip
     else nextLoadingTip()
     return loadingToken.value
   }
 
+  function setLoadingProgress(progress: number | null, label?: string) {
+    loadingProgress.value = progress === null ? null : clampProgress(progress)
+    if (label !== undefined) {
+      loadingProgressLabel.value = label
+    }
+  }
+
+  function setLoadingPersistent(persistent: boolean) {
+    loadingPersistent.value = persistent
+  }
+
   function hideLoading(token?: number) {
     if (token !== undefined && token !== loadingToken.value) return
+    if (loadingPersistent.value) return
     loadingVisible.value = false
+    loadingProgress.value = null
+    loadingProgressLabel.value = ''
+  }
+
+  function forceHideLoading() {
+    loadingPersistent.value = false
+    loadingVisible.value = false
+    loadingProgress.value = null
+    loadingProgressLabel.value = ''
   }
 
   return {
@@ -69,9 +107,15 @@ export const useUiStore = defineStore('ui', () => {
     loadingTitle,
     loadingSubtitle,
     loadingTip,
+    loadingProgress,
+    loadingProgressLabel,
+    loadingPersistent,
     loadingTips,
     showLoading,
+    setLoadingProgress,
+    setLoadingPersistent,
     hideLoading,
+    forceHideLoading,
     nextLoadingTip,
   }
 })

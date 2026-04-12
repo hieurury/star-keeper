@@ -4,6 +4,17 @@ import { useUiStore } from '../../stores/uiStore'
 
 const ui = useUiStore()
 const isVisible = computed(() => ui.loadingVisible)
+const progressValue = computed(() => ui.loadingProgress)
+const isIndeterminate = computed(() => progressValue.value === null)
+const progressStyle = computed(() => {
+  if (progressValue.value === null) return undefined
+  return { width: `${progressValue.value}%` }
+})
+const progressText = computed(() => {
+  if (ui.loadingProgressLabel) return ui.loadingProgressLabel
+  if (progressValue.value === null) return 'Dang tai...'
+  return `${progressValue.value}%`
+})
 
 let tipTimer: ReturnType<typeof setInterval> | null = null
 
@@ -33,17 +44,26 @@ onBeforeUnmount(() => {
 <template>
   <Transition name="loading-fade">
     <div v-if="isVisible" class="loading-overlay" aria-live="polite" aria-busy="true">
-      <div class="loading-card">
-        <div class="loading-logo-wrap">
-          <div class="loading-orbit" />
-          <div class="loading-core">SK</div>
-        </div>
+      <div class="loading-shell">
+        <img class="loading-icon" src="/pwa/icon-192.svg" alt="Star Keeper icon" />
         <h1 class="loading-title">{{ ui.loadingTitle }}</h1>
         <p class="loading-subtitle">{{ ui.loadingSubtitle }}</p>
 
-        <div class="loading-progress" role="progressbar" aria-valuetext="Dang tai">
-          <span class="loading-progress__bar" />
+        <div
+          class="loading-progress"
+          role="progressbar"
+          :aria-valuenow="progressValue === null ? undefined : progressValue"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuetext="progressText"
+        >
+          <span
+            class="loading-progress__fill"
+            :class="{ 'loading-progress__fill--indeterminate': isIndeterminate }"
+            :style="progressStyle"
+          />
         </div>
+        <div class="loading-progress__text">{{ progressText }}</div>
 
         <div class="loading-tip">
           <div class="loading-tip__label">Mẹo</div>
@@ -59,68 +79,38 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  display: grid;
+  place-items: center;
   background:
-    radial-gradient(circle at 50% 0%, rgba(0, 160, 255, 0.15), transparent 60%),
-    radial-gradient(circle at 80% 80%, rgba(255, 120, 0, 0.08), transparent 50%),
-    rgba(4, 8, 16, 0.85);
-  backdrop-filter: blur(12px);
+    radial-gradient(circle at 15% 20%, rgba(0, 160, 255, 0.18), transparent 45%),
+    radial-gradient(circle at 85% 82%, rgba(255, 120, 0, 0.12), transparent 45%),
+    linear-gradient(165deg, #050b18 0%, #060f1f 55%, #08172f 100%);
 }
 
-.loading-card {
-  width: min(90vw, 420px);
-  border-radius: 24px;
-  padding: 32px 24px;
-  background: linear-gradient(135deg, rgba(20, 30, 50, 0.4), rgba(10, 15, 25, 0.6));
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+.loading-shell {
+  width: 100%;
+  height: 100%;
+  padding: clamp(24px, 5vw, 48px);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
   color: #e2f1ff;
-  border: none;
 }
 
-.loading-logo-wrap {
-  width: 90px;
-  height: 90px;
-  margin-bottom: 16px;
-  position: relative;
-  display: grid;
-  place-items: center;
-}
-
-.loading-core {
-  width: 58px;
-  height: 58px;
-  border-radius: 16px;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-pixel);
-  font-size: 22px;
-  font-weight: 800;
-  color: #fff;
-  background: linear-gradient(135deg, #00d2ff, #0a4bf8);
-  box-shadow: 0 10px 24px rgba(0, 162, 255, 0.4);
-  border: none;
-}
-
-.loading-orbit {
-  position: absolute;
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  border: 1.5px dashed rgba(0, 212, 255, 0.5);
-  animation: spin 3s linear infinite;
+.loading-icon {
+  width: clamp(84px, 14vw, 110px);
+  height: clamp(84px, 14vw, 110px);
+  object-fit: contain;
+  margin-bottom: 18px;
 }
 
 .loading-title {
   font-family: var(--font-pixel);
   text-align: center;
   letter-spacing: 0.1em;
-  font-size: clamp(22px, 5vw, 26px);
+  font-size: clamp(22px, 4vw, 30px);
   background: linear-gradient(to right, #ffffff, #88c0ff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -131,33 +121,46 @@ onBeforeUnmount(() => {
   text-align: center;
   font-family: var(--font-pixel);
   color: #8da9c4;
-  font-size: 13px;
+  font-size: clamp(12px, 2.2vw, 14px);
   margin-bottom: 24px;
   letter-spacing: 0.04em;
 }
 
 .loading-progress {
-  width: 100%;
-  height: 6px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  width: min(620px, 92vw);
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
-  margin-bottom: 24px;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+  margin-bottom: 8px;
 }
 
-.loading-progress__bar {
+.loading-progress__fill {
   display: block;
   height: 100%;
-  width: 50%;
-  border-radius: 6px;
+  width: 0;
+  background: linear-gradient(90deg, #00c8ff, #6fb8ff);
+  transition: width 0.22s ease;
+}
+
+.loading-progress__fill--indeterminate {
+  width: 42%;
   background: linear-gradient(90deg, transparent, #00d4ff, transparent);
   animation: loading-slide 1.5s ease-in-out infinite;
 }
 
+.loading-progress__text {
+  width: min(620px, 92vw);
+  text-align: right;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: #8eb8dd;
+  letter-spacing: 0.06em;
+  margin-bottom: 20px;
+}
+
 .loading-tip {
   text-align: center;
-  width: 100%;
+  width: min(620px, 92vw);
   padding: 0 12px;
 }
 
@@ -174,7 +177,7 @@ onBeforeUnmount(() => {
 .loading-tip__text {
   font-family: var(--font-pixel);
   color: #a4bed8;
-  font-size: 13px;
+  font-size: clamp(12px, 2vw, 14px);
   line-height: 1.5;
   min-height: 38px;
 }
@@ -187,12 +190,6 @@ onBeforeUnmount(() => {
 .loading-fade-enter-from,
 .loading-fade-leave-to {
   opacity: 0;
-  backdrop-filter: blur(0px);
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 @keyframes loading-slide {
