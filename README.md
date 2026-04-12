@@ -141,6 +141,16 @@ Vao repo GitHub > Settings > Secrets and variables > Actions, tao 4 secrets:
 - `ANDROID_KEY_ALIAS`: alias key (vi du `starkeeper`)
 - `ANDROID_KEY_PASSWORD`: mat khau key
 
+De APK build tren GitHub chay dung dang nhap (khong bi man hinh den do thieu env), them them 2 secrets:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+Neu co dung update endpoint rieng, co the them Actions Variables:
+
+- `VITE_UPDATE_MANIFEST_URL`
+- `VITE_NATIVE_OAUTH_SCHEME` (mac dinh: `com.vibe.banmaybay`)
+
 ### C) Tao release moi
 
 ```bash
