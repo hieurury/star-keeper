@@ -70,7 +70,7 @@ const adminInput = ref('')
 const showTourPrompt = ref(false)
 const showTour = ref(false)
 const showSettingsPanel = ref(false)
-const settingsActiveTab = ref<'account' | 'audio'>('account')
+const settingsActiveTab = ref<'account' | 'audio' | 'graphics'>('account')
 
 function setAudioEnabled(enabled: boolean) {
   game.updateAudioSettings({ enabled })
@@ -97,6 +97,14 @@ function setMusicVolume(ev: Event) {
 function setSfxVolume(ev: Event) {
   const value = Number((ev.target as HTMLInputElement).value)
   game.updateAudioSettings({ sfxVolume: value / 100 })
+}
+
+function setGraphicsQuality(quality: 'low' | 'high') {
+  game.updateGraphicsSettings({ quality })
+}
+
+function setShowFps(showFps: boolean) {
+  game.updateGraphicsSettings({ showFps })
 }
 
 function unlockAudioByGesture() {
@@ -1443,6 +1451,7 @@ function onShipNameKey(e: KeyboardEvent) {
           <div class="settings-tabs">
             <button class="settings-tab" :class="{ 'settings-tab--active': settingsActiveTab === 'account' }" @click="settingsActiveTab = 'account'">Tài Khoản</button>
             <button class="settings-tab" :class="{ 'settings-tab--active': settingsActiveTab === 'audio' }" @click="settingsActiveTab = 'audio'">Âm Thanh</button>
+            <button class="settings-tab" :class="{ 'settings-tab--active': settingsActiveTab === 'graphics' }" @click="settingsActiveTab = 'graphics'">Đồ Họa</button>
           </div>
           <div class="ships-scroll" style="padding: 20px 16px 32px;">
             <!-- TAB: TÀI KHOẢN -->
@@ -1534,6 +1543,35 @@ function onShipNameKey(e: KeyboardEvent) {
 
                 <label class="audio-slider-label" for="audio-sfx-volume">Âm lượng hiệu ứng: {{ Math.round(game.audioSettings.sfxVolume * 100) }}%</label>
                 <input id="audio-sfx-volume" class="audio-slider" type="range" min="0" max="100" step="1" :value="Math.round(game.audioSettings.sfxVolume * 100)" :disabled="!game.audioSettings.enabled || !game.audioSettings.sfxEnabled" @input="setSfxVolume" />
+              </div>
+            </div>
+
+            <!-- TAB: ĐỒ HỌA -->
+            <div v-if="settingsActiveTab === 'graphics'">
+              <div class="settings-desc">Chọn chất lượng đồ họa phù hợp máy của bạn. Mức Thấp sẽ tắt các hiệu ứng hạt và hiệu ứng lấp lánh để tăng độ mượt.</div>
+
+              <div class="graphics-quality-card">
+                <div class="settings-section-label" style="margin-bottom:8px;">CHẤT LƯỢNG ĐỒ HỌA</div>
+                <div class="quality-toggle-row">
+                  <button class="quality-btn" :class="{ 'quality-btn--active': game.graphicsQuality === 'low' }" @click="setGraphicsQuality('low')">
+                    <PhMagicWand :size="13" weight="bold" />
+                    <span>Thấp</span>
+                  </button>
+                  <button class="quality-btn" :class="{ 'quality-btn--active': game.graphicsQuality === 'high' }" @click="setGraphicsQuality('high')">
+                    <PhMagicWand :size="13" weight="bold" />
+                    <span>Cao</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="audio-row" style="margin-top: 10px; margin-bottom: 0;">
+                <label class="audio-toggle" for="graphics-show-fps">
+                  <span class="audio-toggle__label"><PhTimer :size="13" weight="bold" /> Hiển thị FPS trong game</span>
+                  <span class="audio-switch">
+                    <input id="graphics-show-fps" type="checkbox" :checked="game.showFps" @change="setShowFps(($event.target as HTMLInputElement).checked)" />
+                    <span class="audio-switch__track"></span>
+                  </span>
+                </label>
               </div>
             </div>
           </div>
@@ -3496,6 +3534,40 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   width: 100%;
   margin-bottom: 15px;
   background: transparent;
+}
+.graphics-quality-card {
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  padding: 10px;
+}
+.quality-toggle-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.quality-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 8px;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--color-text-dim);
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+.quality-btn:hover {
+  border-color: rgba(126, 230, 255, 0.7);
+}
+.quality-btn--active {
+  border-color: rgba(0, 210, 255, 0.9);
+  background: rgba(0, 210, 255, 0.18);
+  color: #bdefff;
 }
 .audio-slider:last-child {
   margin-bottom: 0;

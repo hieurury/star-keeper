@@ -11,6 +11,7 @@ export function spawnExplosion(
   color2 = 0xffee44,
 ): void {
   if (!ctx.gameLayer || !ctx.app) return
+  if (ctx.lowGraphicsMode) return
   const g = new Graphics()
   g.x = x
   g.y = y
@@ -112,6 +113,7 @@ export function spawnExpCollectEffect(
   color = 0x66ccff,
 ): void {
   if (!ctx.gameLayer) return
+  if (ctx.lowGraphicsMode) return
   const particleCount = Math.max(2, Math.min(6, Math.round(Math.sqrt(Math.max(1, amount)) / 2.6)))
   for (let i = 0; i < particleCount; i++) {
     const g = new Graphics()
@@ -229,6 +231,7 @@ export function spawnAlphaEvolutionEffect(
   accent = 0xff8844,
 ): void {
   if (!ctx.app || !ctx.gameLayer) return
+  if (ctx.lowGraphicsMode) return
 
   const ring = new Graphics()
   ring.x = x

@@ -1,4 +1,4 @@
-import { Graphics, ColorMatrixFilter } from 'pixi.js'
+import { Graphics } from 'pixi.js'
 import type { useGameStore } from '../../stores/gameStore'
 import type { GameContext } from '../context'
 import type { Enemy } from '../types'
@@ -126,6 +126,9 @@ const ENEMY_THREAT_PALETTES: Record<string, EnemyThreatPalette> = {
     alpha: { base: 0x4a3a27, shadow: 0x18130d, accent: 0x72604a, glow: 0xa79478 },
   },
 }
+
+const EVOLUTION_FLASH_COOLDOWN_MS = 70
+let lastEvolutionFlashAt = 0
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -330,17 +333,8 @@ function drawEvolutionAccent(enemy: Enemy): void {
   enemy.threatSigil?.clear()
 }
 
-function ensureColorFilter(enemy: Enemy): ColorMatrixFilter {
-  if (!enemy.threatColorFilter) {
-    enemy.threatColorFilter = new ColorMatrixFilter()
-  }
-  enemy.body.filters = [enemy.threatColorFilter]
-  return enemy.threatColorFilter
-}
-
 function clearColorFilter(enemy: Enemy): void {
   if (enemy.body.filters?.length) enemy.body.filters = []
-  enemy.threatColorFilter = undefined
 }
 
 function applyAlphaMorph(enemy: Enemy): void {
@@ -360,14 +354,9 @@ function applyAlphaMorph(enemy: Enemy): void {
   enemy.hpBar.y -= hpOffset
 
   const palette = getAlphaPalette(enemy)
-  const filter = ensureColorFilter(enemy)
-  filter.reset()
-  filter.hue(-4, true)
-  filter.saturate(0.1, true)
-  filter.contrast(1.1, true)
-  filter.brightness(0.82, true)
+  clearColorFilter(enemy)
+  enemy.body.alpha = 1
   enemy.body.tint = palette.base
-  enemy.threatVisualTimer = 0
   enemy.threatAlphaAttackTimer = 120 + Math.random() * 100
 }
 
@@ -538,11 +527,7 @@ function applyEvolutionTint(enemy: Enemy): void {
 
   if (enemy.kind === 'dnox_fire') {
     // Keep heat-state colors visible in evolved form so charge->blast telegraph remains readable.
-    const filter = ensureColorFilter(enemy)
-    filter.reset()
-    filter.saturate(0.04, true)
-    filter.contrast(1.03, true)
-    filter.brightness(0.99, true)
+    clearColorFilter(enemy)
     enemy.body.tint = 0xffffff
     applyEvolutionMorph(enemy, tier)
     drawEvolutionAccent(enemy)
@@ -550,18 +535,16 @@ function applyEvolutionTint(enemy: Enemy): void {
   }
 
   const style = getEvolutionStyle(enemy, tier)
-  const filter = ensureColorFilter(enemy)
-  filter.reset()
-  filter.hue(style.hue, true)
-  filter.saturate(style.saturation, true)
-  filter.contrast(style.contrast, true)
-  filter.brightness(style.brightness, true)
+  clearColorFilter(enemy)
   enemy.body.tint = style.tint
   applyEvolutionMorph(enemy, tier)
   drawEvolutionAccent(enemy)
 }
 
-function triggerEvolutionFlash(ctx: GameContext, enemy: Enemy, color: number): void {
+function triggerEvolutionFlash(ctx: GameContext, enemy: Enemy, color: number, opts?: { force?: boolean }): void {
+  const now = performance.now()
+  if (!opts?.force && now - lastEvolutionFlashAt < EVOLUTION_FLASH_COOLDOWN_MS) return
+  lastEvolutionFlashAt = now
   spawnExplosion(ctx, enemy.container.x, enemy.container.y, 14, color, 0x111111)
 }
 
@@ -585,7 +568,7 @@ function promoteToAlpha(ctx: GameContext, enemy: Enemy): void {
   redrawHpBar(enemy.hpBarBg, enemy.hpBar, enemy.hp / enemy.maxHp, enemy.barW)
   drawAlphaMorph(enemy)
   spawnAlphaEvolutionEffect(ctx, enemy.container.x, enemy.container.y, getAlphaPalette(enemy).accent)
-  triggerEvolutionFlash(ctx, enemy, getAlphaPalette(enemy).accent)
+  triggerEvolutionFlash(ctx, enemy, getAlphaPalette(enemy).accent, { force: true })
 }
 
 export function estimatePlayerCombatPower(game: GameStore): number {
@@ -729,7 +712,7 @@ export function initializeEnemyThreat(ctx: GameContext, game: GameStore, enemy: 
   redrawHpBar(enemy.hpBarBg, enemy.hpBar, enemy.hp / enemy.maxHp, enemy.barW)
 
   if (isAlphaUnit) {
-    triggerEvolutionFlash(ctx, enemy, getAlphaPalette(enemy).accent)
+    triggerEvolutionFlash(ctx, enemy, getAlphaPalette(enemy).accent, { force: true })
   } else if (tier > 0) {
     triggerEvolutionFlash(ctx, enemy, getEvolutionTint(enemy, tier))
   }
@@ -740,12 +723,10 @@ export function updateEnemyThreat(ctx: GameContext, enemy: Enemy, dt: number, pr
 
   enemy.threatPulse = (enemy.threatPulse ?? 0) + dt
   if (enemy.threatAlpha) {
-    ensureAlphaMorphLayers(enemy)
-    applyAlphaMorph(enemy)
-    enemy.threatVisualTimer = (enemy.threatVisualTimer ?? 0) - dt
-    if ((enemy.threatVisualTimer ?? 0) <= 0) {
+    if (!enemy.threatAlphaVisualApplied || !enemy.threatAlphaShell || !enemy.threatAlphaCore) {
+      ensureAlphaMorphLayers(enemy)
+      applyAlphaMorph(enemy)
       drawAlphaMorph(enemy)
-      enemy.threatVisualTimer = 3
     }
   } else if ((enemy.threatTier ?? 0) > 0) {
     applyEvolutionMorph(enemy, enemy.threatTier ?? 0)

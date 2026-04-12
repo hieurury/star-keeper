@@ -141,6 +141,8 @@ export interface CardStats {
   tracerSwordExecutePct: number
 }
 
+export type GraphicsQuality = 'low' | 'high'
+
 export const ALL_CARD_DEFS: CardDef[] = [
   // ── Tấn công ────────────────────────────────────────────────────────────────
   {
@@ -776,6 +778,8 @@ export const useGameStore = defineStore('game', () => {
   const shipName = ref('Chiến Cơ Alpha')
   const updateNoticeSeenIds = ref<string[]>([])
   const audioSettings = ref<AudioSettings>({ ...DEFAULT_AUDIO_SETTINGS })
+  const graphicsQuality = ref<GraphicsQuality>('high')
+  const showFps = ref(false)
   audioManager.setSettings(audioSettings.value)
 
   // Tiến trình tài khoản (persistent, không reset giữa các ván)
@@ -1110,6 +1114,11 @@ export const useGameStore = defineStore('game', () => {
   const skillCooldown = ref(0)          // giây còn lại (0 = sẵn sàng) — chỉ dùng cho star_keeper
   const skillActivationPending = ref(false) // GameCanvas tiêu thụ flag này
   const fragmentCount = ref(0)           // Star Holder: mảnh linh hồn đã thu thập
+  const currentFps = ref(0)
+
+  function setCurrentFps(value: number) {
+    currentFps.value = Math.max(0, Math.round(value))
+  }
 
   // ─── Artifact & Durability state ─────────────────────────────────────────────
   const ownedArtifacts = ref<string[]>([])
@@ -1389,6 +1398,16 @@ export const useGameStore = defineStore('game', () => {
       sfxVolume: Math.max(0, Math.min(1, next.sfxVolume ?? audioSettings.value.sfxVolume)),
     }
     audioManager.setSettings(audioSettings.value)
+    saveProgress()
+  }
+
+  function updateGraphicsSettings(next: Partial<{ quality: GraphicsQuality, showFps: boolean }>) {
+    if (next.quality) {
+      graphicsQuality.value = next.quality === 'low' ? 'low' : 'high'
+    }
+    if (typeof next.showFps === 'boolean') {
+      showFps.value = next.showFps
+    }
     saveProgress()
   }
 
@@ -1685,6 +1704,7 @@ export const useGameStore = defineStore('game', () => {
     skillCooldown.value = 0
     skillActivationPending.value = false
     fragmentCount.value = 0
+    currentFps.value = 0
     pendingHealPopup.value = 0
     // Reset card system
     activeCards.value = {}
@@ -1711,6 +1731,7 @@ export const useGameStore = defineStore('game', () => {
 
   function endGame() {
     pendingHealPopup.value = 0
+    currentFps.value = 0
     isGameOverSequence.value = false
     postCardPickInvulnerableUntilMs.value = 0
     // Award gold/exp earned during this run when player exits manually
@@ -2109,6 +2130,8 @@ export const useGameStore = defineStore('game', () => {
       musicVolume: Math.max(0, Math.min(1, toFiniteNumber(audioRaw.musicVolume, DEFAULT_AUDIO_SETTINGS.musicVolume))),
       sfxVolume: Math.max(0, Math.min(1, toFiniteNumber(audioRaw.sfxVolume, DEFAULT_AUDIO_SETTINGS.sfxVolume))),
     }
+    const graphicsQualityNormalized: GraphicsQuality = raw.graphicsQuality === 'low' ? 'low' : 'high'
+    const showFpsNormalized = raw.showFps === true
 
     const normalized: Record<string, unknown> = {
       version: toIntInRange(raw.version, SAVE_VERSION, 1, 99),
@@ -2137,6 +2160,8 @@ export const useGameStore = defineStore('game', () => {
       milestone3Claimed: raw.milestone3Claimed === true,
       milestone5Claimed: raw.milestone5Claimed === true,
       audioSettings: audioNormalized,
+      graphicsQuality: graphicsQualityNormalized,
+      showFps: showFpsNormalized,
     }
 
     return {
@@ -2187,6 +2212,8 @@ export const useGameStore = defineStore('game', () => {
       milestone3Claimed: milestone3Claimed.value,
       milestone5Claimed: milestone5Claimed.value,
       audioSettings: audioSettings.value,
+      graphicsQuality: graphicsQuality.value,
+      showFps: showFps.value,
     }
   }
 
@@ -2433,6 +2460,8 @@ export const useGameStore = defineStore('game', () => {
       musicVolume: Math.max(0, Math.min(1, Number(loadedAudio.musicVolume ?? DEFAULT_AUDIO_SETTINGS.musicVolume))),
       sfxVolume: Math.max(0, Math.min(1, Number(loadedAudio.sfxVolume ?? DEFAULT_AUDIO_SETTINGS.sfxVolume))),
     }
+    graphicsQuality.value = data.graphicsQuality === 'low' ? 'low' : 'high'
+    showFps.value = data.showFps === true
     audioManager.setSettings(audioSettings.value)
   }
 
@@ -2586,6 +2615,9 @@ export const useGameStore = defineStore('game', () => {
     shipName,
     updateNoticeSeenIds,
     audioSettings,
+    graphicsQuality,
+    showFps,
+    currentFps,
     // Account
     accountLevel,
     accountExp,
@@ -2640,6 +2672,7 @@ export const useGameStore = defineStore('game', () => {
     tickSkillCooldown,
     consumeSkillActivation,
     reduceSkillCooldown,
+    setCurrentFps,
     tickShield,
     absorbShieldHit,
     buyShip,
@@ -2674,6 +2707,7 @@ export const useGameStore = defineStore('game', () => {
     addBossKill,
     onStageAdvanced,
     updateAudioSettings,
+    updateGraphicsSettings,
     // Supabase sync
     pendingSync,
     lastSyncError,

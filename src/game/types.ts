@@ -1,4 +1,4 @@
-import type { Graphics, Container, Text, ColorMatrixFilter } from 'pixi.js'
+﻿import type { Graphics, Container, Text } from 'pixi.js'
 
 // ─── Entity types ──────────────────────────────────────────────────────────────
 export interface Bullet {
@@ -74,11 +74,9 @@ export interface Enemy {
   threatSigil?: Graphics
   threatAlphaShell?: Graphics
   threatAlphaCore?: Graphics
-  threatColorFilter?: ColorMatrixFilter
   threatAlphaVisualApplied?: boolean
   threatAlphaScale?: number
   threatAlphaAttackTimer?: number
-  threatVisualTimer?: number
   // kamikaze
   kamiState?: KamiState
   kamiTimer?: number

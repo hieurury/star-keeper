@@ -65,6 +65,20 @@ function getEnemyBulletCap(stage: number): number {
 let zoomIndicatorText: Text | null = null
 let zoomIndicatorTimer = 0
 let zoomIndicatorLastZoom = 1.0
+let fpsFrames = 0
+let fpsElapsedMs = 0
+let fpsLastTs = 0
+
+function syncGraphicsMode() {
+  ctx.lowGraphicsMode = game.graphicsQuality === 'low'
+}
+
+function resetFpsTracking() {
+  fpsFrames = 0
+  fpsElapsedMs = 0
+  fpsLastTs = 0
+  game.setCurrentFps(0)
+}
 
 function renderFreezeEffects() {
   if (!freezeScreenGfx) return
@@ -168,7 +182,7 @@ function drawAllyDrone(g: Graphics, isUltimate = false) {
   g.clear()
   const coreColor = isUltimate ? 0xff6666 : 0xffdd66
   const auraColor = isUltimate ? 0xff2233 : 0xffcc55
-  g.circle(0, 0, 6).fill({ color: auraColor, alpha: 0.2 })
+  if (!ctx.lowGraphicsMode) g.circle(0, 0, 6).fill({ color: auraColor, alpha: 0.2 })
   g.poly([0, -7, 6, 2, 0, 7, -6, 2]).fill(0xffffff)
   g.poly([0, -7, 6, 2, 0, 7, -6, 2]).stroke({ color: 0xcfd5ff, width: 1.2, alpha: 0.85 })
   g.circle(0, 0, 2).fill(coreColor)
@@ -179,7 +193,7 @@ function drawDroneBullet(g: Graphics, isUltimate = false) {
   const color = isUltimate ? 0xff4455 : 0xfff3c6
   const glow = isUltimate ? 0xff1122 : 0xffcc66
   g.roundRect(-1.1, -8.5, 2.2, 14.5, 0.9).fill({ color, alpha: 0.95 })
-  g.roundRect(-0.45, -11.5, 0.9, 6.2, 0.45).fill({ color: glow, alpha: 0.72 })
+  if (!ctx.lowGraphicsMode) g.roundRect(-0.45, -11.5, 0.9, 6.2, 0.45).fill({ color: glow, alpha: 0.72 })
 }
 
 function drawTracerSword(g: Graphics, variant: 'main' | 'sub' = 'main') {
@@ -196,7 +210,7 @@ function drawTracerSword(g: Graphics, variant: 'main' | 'sub' = 'main') {
   ]).fill(isSub ? 0xf3f7ff : 0x53e3b7)
   g.rect(-0.9 * scale, -13 * scale, 1.8 * scale, 26 * scale).fill({ color: isSub ? 0xffffff : 0xecfff8, alpha: 0.85 })
   g.rect(-5 * scale, 8.5 * scale, 10 * scale, 2 * scale).fill(isSub ? 0xcfd8f6 : 0x1a8b70)
-  g.circle(0, 9.5 * scale, 1.2 * scale).fill(0xe5fff8)
+  if (!ctx.lowGraphicsMode) g.circle(0, 9.5 * scale, 1.2 * scale).fill(0xe5fff8)
 }
 
 function activateThienHaTram() {
@@ -516,7 +530,7 @@ function spawnAlphaProjectile(
   const bg = new Graphics()
   drawEnemyBullet(bg)
   bg.tint = tint
-  bg.circle(0, 0, 1.5).fill({ color: 0xffffff, alpha: 0.85 })
+  if (!ctx.lowGraphicsMode) bg.circle(0, 0, 1.5).fill({ color: 0xffffff, alpha: 0.85 })
   bg.scale.set(1.08)
   bg.x = sx
   bg.y = sy
@@ -648,6 +662,25 @@ function updateAlphaActiveAttack(e: Enemy, dt: number): void {
 function gameLoop(ticker: Ticker) {
   if (!app || !game.isPlaying || game.isGameOverSequence) return
   const dt = ticker.deltaTime
+  if (game.showFps) {
+    const now = performance.now()
+    if (fpsLastTs > 0) {
+      const elapsed = now - fpsLastTs
+      if (elapsed > 0 && elapsed < 1000) {
+        fpsElapsedMs += elapsed
+        fpsFrames += 1
+      }
+    }
+    fpsLastTs = now
+    if (fpsElapsedMs >= 260) {
+      const fps = Math.max(0, Math.round((fpsFrames * 1000) / fpsElapsedMs))
+      game.setCurrentFps(fps)
+      fpsElapsedMs = 0
+      fpsFrames = 0
+    }
+  } else if (fpsLastTs > 0 || fpsFrames > 0 || fpsElapsedMs > 0 || game.currentFps > 0) {
+    resetFpsTracking()
+  }
   const hasActiveBoss = ctx.enemies.some((e) => e.kind.startsWith('boss_') && !e.isDyingMeteor)
   audioManager.setBossActive(hasActiveBoss)
   ctx.playerLaserDamageCd = Math.max(0, ctx.playerLaserDamageCd - dt)
@@ -5143,6 +5176,8 @@ async function initPixi() {
   ctx.bgLayer   = new Container(); app.stage.addChild(ctx.bgLayer)
   ctx.gameLayer = new Container(); app.stage.addChild(ctx.gameLayer)
   ctx.uiLayer   = new Container(); app.stage.addChild(ctx.uiLayer)
+  syncGraphicsMode()
+  resetFpsTracking()
 
   for (let i = 0; i < 80; i++) {
     const s = createStar()
@@ -5302,10 +5337,23 @@ function destroyPixi() {
   freezeOverlayGfx = null
   if (freezeScreenGfx && !freezeScreenGfx.destroyed) ctx.uiLayer?.removeChild(freezeScreenGfx)
   freezeScreenGfx = null
+  resetFpsTracking()
 }
 
 onMounted(async () => { await initPixi(); game.startGame() })
 onUnmounted(() => { destroyPixi() })
+
+watch(() => game.graphicsQuality, () => {
+  syncGraphicsMode()
+})
+
+watch(() => game.showFps, () => {
+  if (!game.showFps) resetFpsTracking()
+}, { immediate: true })
+
+watch(() => game.isPlaying, (val) => {
+  if (!val) resetFpsTracking()
+})
 
 watch(() => game.isGameOverSequence, (val) => {
   if (!val || !app || !ctx.playerShip) return

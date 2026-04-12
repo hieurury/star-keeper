@@ -459,25 +459,27 @@ export function updateStaticField(ctx: GameContext, game: GameStore, dt: number)
     const r2 = cs.staticFieldRadius * cs.staticFieldRadius
     let totalHealed = 0
 
-    // Shock pulse ring each damage tick to make field damage timing readable.
-    const pulseRing = new Graphics()
-    pulseRing.x = ctx.playerShip.x
-    pulseRing.y = ctx.playerShip.y
-    ctx.gameLayer.addChild(pulseRing)
-    let pulseFrame = 0
-    const pulseTick = () => {
-      pulseFrame++
-      const t = pulseFrame / 10
-      const rr = cs.staticFieldRadius * (0.86 + 0.24 * t)
-      pulseRing.clear()
-      pulseRing.circle(0, 0, rr).stroke({ color: 0xffaa88, width: 2.2, alpha: Math.max(0, 0.8 - t * 0.8) })
-      pulseRing.circle(0, 0, rr * 0.82).stroke({ color: 0xff5533, width: 1.2, alpha: Math.max(0, 0.55 - t * 0.55) })
-      if (pulseFrame >= 10) {
-        if (!pulseRing.destroyed) ctx.gameLayer.removeChild(pulseRing)
-        ctx.app?.ticker.remove(pulseTick)
+    if (!ctx.lowGraphicsMode) {
+      // Shock pulse ring each damage tick to make field damage timing readable.
+      const pulseRing = new Graphics()
+      pulseRing.x = ctx.playerShip.x
+      pulseRing.y = ctx.playerShip.y
+      ctx.gameLayer.addChild(pulseRing)
+      let pulseFrame = 0
+      const pulseTick = () => {
+        pulseFrame++
+        const t = pulseFrame / 10
+        const rr = cs.staticFieldRadius * (0.86 + 0.24 * t)
+        pulseRing.clear()
+        pulseRing.circle(0, 0, rr).stroke({ color: 0xffaa88, width: 2.2, alpha: Math.max(0, 0.8 - t * 0.8) })
+        pulseRing.circle(0, 0, rr * 0.82).stroke({ color: 0xff5533, width: 1.2, alpha: Math.max(0, 0.55 - t * 0.55) })
+        if (pulseFrame >= 10) {
+          if (!pulseRing.destroyed) ctx.gameLayer.removeChild(pulseRing)
+          ctx.app?.ticker.remove(pulseTick)
+        }
       }
+      ctx.app?.ticker.add(pulseTick)
     }
-    ctx.app?.ticker.add(pulseTick)
 
     for (let i = ctx.enemies.length - 1; i >= 0; i--) {
       const e = ctx.enemies[i]
@@ -488,23 +490,25 @@ export function updateStaticField(ctx: GameContext, game: GameStore, dt: number)
         hitFlash(e.body)
         spawnDamageText(ctx, e.container.x, e.container.y - 14, cs.staticFieldDmgPerTick)
 
-        const spark = new Graphics()
-        spark.x = e.container.x
-        spark.y = e.container.y
-        ctx.gameLayer.addChild(spark)
-        let sparkFrame = 0
-        const sparkTick = () => {
-          sparkFrame++
-          const s = 4 + sparkFrame * 1.15
-          spark.clear()
-          spark.circle(0, 0, s).stroke({ color: 0xffbb88, width: 1.4, alpha: Math.max(0, 0.7 - sparkFrame * 0.12) })
-          spark.circle(0, 0, Math.max(1.4, s * 0.45)).fill({ color: 0xff4422, alpha: Math.max(0, 0.45 - sparkFrame * 0.09) })
-          if (sparkFrame >= 7) {
-            if (!spark.destroyed) ctx.gameLayer.removeChild(spark)
-            ctx.app?.ticker.remove(sparkTick)
+        if (!ctx.lowGraphicsMode) {
+          const spark = new Graphics()
+          spark.x = e.container.x
+          spark.y = e.container.y
+          ctx.gameLayer.addChild(spark)
+          let sparkFrame = 0
+          const sparkTick = () => {
+            sparkFrame++
+            const s = 4 + sparkFrame * 1.15
+            spark.clear()
+            spark.circle(0, 0, s).stroke({ color: 0xffbb88, width: 1.4, alpha: Math.max(0, 0.7 - sparkFrame * 0.12) })
+            spark.circle(0, 0, Math.max(1.4, s * 0.45)).fill({ color: 0xff4422, alpha: Math.max(0, 0.45 - sparkFrame * 0.09) })
+            if (sparkFrame >= 7) {
+              if (!spark.destroyed) ctx.gameLayer.removeChild(spark)
+              ctx.app?.ticker.remove(sparkTick)
+            }
           }
+          ctx.app?.ticker.add(sparkTick)
         }
-        ctx.app?.ticker.add(sparkTick)
 
         redrawHpBar(e.hpBarBg, e.hpBar, e.hp / e.maxHp, e.barW)
         if (e.hp <= 0) killEnemy(ctx, game, e, i)

@@ -11,6 +11,7 @@ export interface GameContext {
   gameLayer: Container
   bgLayer: Container
   uiLayer: Container
+  lowGraphicsMode: boolean
 
   // Player
   playerShip: Graphics | null
@@ -120,6 +121,7 @@ export function createGameContext(): GameContext {
     gameLayer: null as unknown as Container,
     bgLayer: null as unknown as Container,
     uiLayer: null as unknown as Container,
+    lowGraphicsMode: false,
     playerShip: null,
     shieldGfx: null,
     bullets: [],

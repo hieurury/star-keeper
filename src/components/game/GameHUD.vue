@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useGameStore, ALL_CARD_DEFS, ALL_ARTIFACT_DEFS, SHIP_DEFS } from '../../stores/gameStore'
 import type { CardDef, CardType } from '../../stores/gameStore'
 import { estimatePlayerCombatPower } from '../../game/systems/threat'
-import { PhCoins, PhCrosshair, PhHouse, PhLightning, PhPlay, PhQuestion, PhSpiral, PhSword } from '@phosphor-icons/vue'
+import { PhCoins, PhCrosshair, PhHouse, PhLightning, PhPlay, PhQuestion, PhSpiral, PhSword, PhTimer } from '@phosphor-icons/vue'
 import ArtifactIcon from '../ui/ArtifactIcon.vue'
 import CardIcon from '../ui/CardIcon.vue'
 
@@ -180,6 +180,12 @@ const goldEarnedPreview = computed(() => game.projectedGoldEarnedThisRun)
           </div>
           <span class="hud__exp-num">{{ game.playerExp }}/{{ game.expToNextLevel }}</span>
         </div>
+      </div>
+
+      <div v-if="game.showFps && game.isPlaying" class="hud__fps-row">
+        <span class="hud__fps-icon"><PhTimer :size="10" weight="fill" /></span>
+        <span class="hud__fps-sep">:</span>
+        <span class="hud__fps-value">{{ game.currentFps }}</span>
       </div>
     </div>
 
@@ -895,6 +901,28 @@ const goldEarnedPreview = computed(() => game.projectedGoldEarnedThisRun)
   font-size: 7px;
   color: var(--color-text-dim);
   white-space: nowrap;
+}
+.hud__fps-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  margin-top: 2px;
+  font-size: 8px;
+  color: #9ee8ff;
+  letter-spacing: 0.6px;
+}
+.hud__fps-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #72d7ff;
+}
+.hud__fps-sep {
+  color: #7cc9e6;
+}
+.hud__fps-value {
+  color: #d8f6ff;
+  min-width: 24px;
 }
 
 /* Skill button */
