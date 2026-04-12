@@ -8,7 +8,6 @@ import { Browser } from '@capacitor/browser'
 
 const NATIVE_OAUTH_SCHEME = (import.meta.env.VITE_NATIVE_OAUTH_SCHEME as string | undefined)?.trim() || 'com.vibe.banmaybay'
 const NATIVE_OAUTH_HOST = 'auth'
-const NATIVE_OAUTH_PATH = '/callback'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
@@ -88,7 +87,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function getNativeRedirectUrl(): string {
-    return `${NATIVE_OAUTH_SCHEME}://${NATIVE_OAUTH_HOST}${NATIVE_OAUTH_PATH}`
+    return `${NATIVE_OAUTH_SCHEME}://${NATIVE_OAUTH_HOST}`
   }
 
   function isNativeOAuthCallback(url: string): boolean {
@@ -97,7 +96,6 @@ export const useAuthStore = defineStore('auth', () => {
       const scheme = parsed.protocol.replace(':', '')
       return scheme === NATIVE_OAUTH_SCHEME
         && parsed.host === NATIVE_OAUTH_HOST
-        && parsed.pathname === NATIVE_OAUTH_PATH
     } catch {
       return false
     }
@@ -139,6 +137,12 @@ export const useAuthStore = defineStore('auth', () => {
   async function ensureNativeOAuthListener(): Promise<void> {
     if (!Capacitor.isNativePlatform()) return
     if (nativeAppUrlOpenSubscription) return
+
+    const launchUrlResult = await CapacitorApp.getLaunchUrl().catch(() => null)
+    if (launchUrlResult?.url && isNativeOAuthCallback(launchUrlResult.url)) {
+      await Browser.close().catch(() => undefined)
+      await handleNativeOAuthCallback(launchUrlResult.url)
+    }
 
     nativeAppUrlOpenSubscription = await CapacitorApp.addListener('appUrlOpen', async ({ url }) => {
       if (!url || !isNativeOAuthCallback(url)) return

@@ -146,6 +146,15 @@ De APK build tren GitHub chay dung dang nhap (khong bi man hinh den do thieu env
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
+### B.1) Cau hinh Supabase OAuth redirect cho mobile (bat buoc)
+
+Vao Supabase Dashboard > Authentication > URL Configuration, them Redirect URLs:
+
+- `com.vibe.banmaybay://auth`
+- `com.vibe.banmaybay://auth/callback`
+
+Neu de redirect URL chi la dia chi web, dang nhap xong se o lai browser thay vi quay lai app.
+
 Neu co dung update endpoint rieng, co the them Actions Variables:
 
 - `VITE_UPDATE_MANIFEST_URL`
