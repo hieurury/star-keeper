@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -34,6 +35,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate signing secrets presence
+        shell: bash
+        run: |
+          missing=0
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "One or more required signing secrets are missing."
+            exit 1
+          fi
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
       - name: Decode Android keystore
         shell: bash
         run: |
@@ -42,6 +63,15 @@ jobs:
             exit 1
           fi
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/release-keystore.jks
+
+      - name: Verify keystore and alias
+        shell: bash
+        run: |
+          keytool -list \
+            -keystore android/app/release-keystore.jks \
+            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            -alias "${{ secrets.ANDROID_KEY_ALIAS }}" > /tmp/keystore-check.txt
+          echo "Keystore + alias validated successfully"
 
       - name: Prepare gradlew on Linux runner
         shell: bash
@@ -55,6 +85,7 @@ jobs:
           npm run cap:sync:android
           cd android
           ./gradlew assembleRelease \
+            --stacktrace \
             -PANDROID_SIGNING_STORE_FILE=release-keystore.jks \
             -PANDROID_SIGNING_STORE_PASSWORD="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
             -PANDROID_SIGNING_KEY_ALIAS="${{ secrets.ANDROID_KEY_ALIAS }}" \
