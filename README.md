@@ -102,6 +102,69 @@ Khi release, cap nhat 2 thu:
 1. Tang `package.json.version`
 2. Cap nhat `public/version.json` (version + downloadUrl)
 
+## Tu dong build APK len GitHub Releases
+
+Du an da co workflow:
+
+- `.github/workflows/android-release.yml`
+
+Workflow nay se chay khi ban push tag `v*` (vi du: `v2.1.0`):
+
+1. Build web + sync Capacitor Android
+2. Build APK release da ky
+3. Upload len GitHub Release voi ten file co dinh `star-keeper.apk`
+
+### A) Chuan bi keystore (1 lan)
+
+Neu ban chua co keystore:
+
+```bash
+keytool -genkey -v -keystore star-keeper-release.jks -alias starkeeper -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Sau do encode base64:
+
+```bash
+# Linux/macOS
+base64 -w 0 star-keeper-release.jks > keystore.base64
+
+# Windows PowerShell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("star-keeper-release.jks")) | Out-File keystore.base64
+```
+
+### B) Them GitHub Secrets
+
+Vao repo GitHub > Settings > Secrets and variables > Actions, tao 4 secrets:
+
+- `ANDROID_KEYSTORE_BASE64`: noi dung file `keystore.base64`
+- `ANDROID_KEYSTORE_PASSWORD`: mat khau keystore
+- `ANDROID_KEY_ALIAS`: alias key (vi du `starkeeper`)
+- `ANDROID_KEY_PASSWORD`: mat khau key
+
+### C) Tao release moi
+
+```bash
+git add .
+git commit -m "release: v2.1.0"
+git push origin main
+git tag v2.1.0
+git push origin v2.1.0
+```
+
+Sau khi workflow xong, APK se o tab Releases.
+
+### D) Lay link tai tren web
+
+Ban co 2 cach:
+
+- Link co dinh (de nhat):
+	- `https://github.com/<owner>/<repo>/releases/latest/download/star-keeper.apk`
+- Lay metadata bang API:
+	- `https://api.github.com/repos/<owner>/<repo>/releases/latest`
+	- Parse `tag_name`, `assets[].size`, `assets[].browser_download_url`
+
+Goi y: dat `public/version.json.downloadUrl` = link latest/download o tren de app va web luon tro ve ban moi nhat.
+
 ## Checklist truoc khi build APK
 
 ### 1) Cap nhat bo icon app

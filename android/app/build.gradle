@@ -18,9 +18,25 @@ while (versionParts.size() < 3) {
 
 def appVersionCode = (versionParts[0] * 10000) + (versionParts[1] * 100) + versionParts[2]
 
+def signingStoreFile = project.findProperty('ANDROID_SIGNING_STORE_FILE') ?: System.getenv('ANDROID_SIGNING_STORE_FILE')
+def signingStorePassword = project.findProperty('ANDROID_SIGNING_STORE_PASSWORD') ?: System.getenv('ANDROID_SIGNING_STORE_PASSWORD')
+def signingKeyAlias = project.findProperty('ANDROID_SIGNING_KEY_ALIAS') ?: System.getenv('ANDROID_SIGNING_KEY_ALIAS')
+def signingKeyPassword = project.findProperty('ANDROID_SIGNING_KEY_PASSWORD') ?: System.getenv('ANDROID_SIGNING_KEY_PASSWORD')
+def hasReleaseSigning = signingStoreFile && signingStorePassword && signingKeyAlias && signingKeyPassword
+
 android {
     namespace "com.vibe.banmaybay"
     compileSdk rootProject.ext.compileSdkVersion
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(signingStoreFile)
+                storePassword signingStorePassword
+                keyAlias signingKeyAlias
+                keyPassword signingKeyPassword
+            }
+        }
+    }
     defaultConfig {
         applicationId "com.vibe.banmaybay"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -37,6 +53,9 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
