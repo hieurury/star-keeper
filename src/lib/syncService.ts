@@ -1,5 +1,4 @@
 import { supabase, isSupabaseConfigured } from './supabase'
-import { isOnline } from './networkStatus'
 
 const TABLE = 'game_saves'
 
@@ -11,6 +10,13 @@ export interface RemoteSave {
 
 export interface PushSaveResult {
   ok: boolean
+  code?: string
+  message?: string
+}
+
+export interface PullSaveResult {
+  ok: boolean
+  data: RemoteSave | null
   code?: string
   message?: string
 }
@@ -30,7 +36,7 @@ function isUpsertConflictConstraintError(error: { code?: string | null, message?
 
 /**
  * Đẩy dữ liệu save lên Supabase (upsert vào bảng game_saves).
- * No-op nếu: chưa cấu hình Supabase, chưa đăng nhập, hoặc offline.
+ * No-op nếu chưa cấu hình Supabase.
  */
 export async function pushSave(
   userId: string,
@@ -40,9 +46,6 @@ export async function pushSave(
 ): Promise<PushSaveResult> {
   if (!isSupabaseConfigured()) {
     return { ok: false, code: 'SUPABASE_NOT_CONFIGURED', message: 'Supabase chưa được cấu hình' }
-  }
-  if (!isOnline.value) {
-    return { ok: false, code: 'OFFLINE', message: 'Thiết bị đang offline' }
   }
 
   const resolvedUpdatedAt = clientUpdatedAt ?? new Date().toISOString()
@@ -93,11 +96,17 @@ export async function pushSave(
 
 /**
  * Kéo dữ liệu save từ Supabase.
- * Trả về null nếu không có dữ liệu hoặc lỗi.
+ * Trả về dữ liệu cloud hoặc thông tin lỗi rõ ràng.
  */
-export async function pullSave(userId: string): Promise<RemoteSave | null> {
-  if (!isSupabaseConfigured()) return null
-  if (!isOnline.value) return null
+export async function pullSave(userId: string): Promise<PullSaveResult> {
+  if (!isSupabaseConfigured()) {
+    return {
+      ok: false,
+      data: null,
+      code: 'SUPABASE_NOT_CONFIGURED',
+      message: 'Supabase chưa được cấu hình',
+    }
+  }
 
   const { data, error } = await supabase
     .from(TABLE)
@@ -106,10 +115,18 @@ export async function pullSave(userId: string): Promise<RemoteSave | null> {
     .maybeSingle()
 
   if (error) {
-    console.warn('[SyncService] pullSave thất bại:', error.message)
-    return null
+    console.warn('[SyncService] pullSave thất bại:', error.code ?? 'UNKNOWN', error.message)
+    return {
+      ok: false,
+      data: null,
+      code: error.code ?? 'UNKNOWN',
+      message: error.message ?? 'pullSave thất bại',
+    }
   }
-  return data as RemoteSave | null
+  return {
+    ok: true,
+    data: (data as RemoteSave | null) ?? null,
+  }
 }
 
 /**
@@ -141,9 +158,6 @@ export function resolveConflict(
 export async function ensureProfile(userId: string, username: string, avatarId: number): Promise<ProfileEnsureResult> {
   if (!isSupabaseConfigured()) {
     return { ok: false, code: 'SUPABASE_NOT_CONFIGURED', message: 'Supabase chưa được cấu hình' }
-  }
-  if (!isOnline.value) {
-    return { ok: false, code: 'OFFLINE', message: 'Thiết bị đang offline' }
   }
 
   const { error } = await supabase.from('profiles').upsert(

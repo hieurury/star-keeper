@@ -6,7 +6,7 @@ import { audioManager, DEFAULT_AUDIO_SETTINGS, type AudioSettings } from '../gam
 import { calculateCombatPower, getShipPowerFactor } from '../game/systems/combatPower'
 import { queueMirrorSave, readMirrorSave } from '../game/systems/saveFileMirror'
 import { pushSave, pullSave, resolveConflict, ensureProfile } from '../lib/syncService'
-import { isOnline, onReconnect } from '../lib/networkStatus'
+import { onReconnect } from '../lib/networkStatus'
 
 export const ALL_ENEMY_KINDS: EnemyKind[] = [
   'pioneer',
@@ -2336,11 +2336,6 @@ export const useGameStore = defineStore('game', () => {
     if (!auth.isLoggedIn || !auth.userId) {
       return false
     }
-    if (!isOnline.value) {
-      setPendingSync(true)
-      lastSyncError.value = 'Thiết bị đang offline.'
-      return false
-    }
 
     flushDebouncedLocalSaveIfNeeded()
 
@@ -2368,13 +2363,22 @@ export const useGameStore = defineStore('game', () => {
     const updatedAt = decoded.updatedAt ?? saveUpdatedAt.value ?? undefined
 
     // Ensure profile exists first. This also satisfies DB schemas that keep FK game_saves.user_id -> profiles.id.
-    await ensureProfile(auth.userId, username.value, avatarId.value)
+    const ensureResult = await ensureProfile(auth.userId, username.value, avatarId.value)
+    if (!ensureResult.ok && ensureResult.code !== '23505') {
+      setPendingSync(true)
+      lastSyncError.value = ensureResult.message ?? 'Không thể đồng bộ hồ sơ tài khoản.'
+      return false
+    }
 
     let pushResult = await pushSave(auth.userId, SAVE_VERSION, payload, updatedAt)
     if (!pushResult.ok && pushResult.code === '23503') {
-      const ensureResult = await ensureProfile(auth.userId, username.value, avatarId.value)
-      if (ensureResult.ok) {
+      const ensureRetry = await ensureProfile(auth.userId, username.value, avatarId.value)
+      if (ensureRetry.ok) {
         pushResult = await pushSave(auth.userId, SAVE_VERSION, payload, updatedAt)
+      } else {
+        setPendingSync(true)
+        lastSyncError.value = ensureRetry.message ?? 'Không thể đồng bộ hồ sơ tài khoản.'
+        return false
       }
     }
 
@@ -2389,12 +2393,28 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  function normalizeRemotePayloadForApply(
+    rawPayload: unknown,
+    fallbackUpdatedAt: string | null,
+  ): { payload: Record<string, unknown>, updatedAt: string | null } | null {
+    const extracted = extractPayloadFromRawSave(rawPayload)
+    if (!extracted) return null
+
+    const validated = validateAndNormalizeLoadedPayload(extracted.payload)
+    if (!validated) return null
+
+    const updatedAt = validated.updatedAt ?? extracted.updatedAt ?? fallbackUpdatedAt
+    return {
+      payload: validated.payload,
+      updatedAt,
+    }
+  }
+
   /** Pull dữ liệu từ Supabase và merge nếu cần (gọi khi startup). */
   async function pullFromSupabase(): Promise<void> {
     const { useAuthStore } = await import('./authStore')
     const auth = useAuthStore()
     if (!auth.isLoggedIn || !auth.userId) return
-    if (!isOnline.value) return
 
     if (!saveUpdatedAt.value) {
       const localSaved = localStorage.getItem(SAVE_KEY)
@@ -2408,22 +2428,43 @@ export const useGameStore = defineStore('game', () => {
       }
     }
 
-    const remote = await pullSave(auth.userId)
+    const remoteResult = await pullSave(auth.userId)
+    if (!remoteResult.ok) {
+      setPendingSync(true)
+      lastSyncError.value = remoteResult.message ?? 'Không thể tải dữ liệu cloud.'
+      return
+    }
+
+    const remote = remoteResult.data
     if (!remote) {
       // Cloud chưa có bản ghi: nếu local đã có save thì seed lên cloud.
       if (localStorage.getItem(SAVE_KEY)) await pushToSupabase()
       return
     }
-    const decision = resolveConflict(saveUpdatedAt.value, SAVE_VERSION, remote)
+
+    const normalizedRemote = normalizeRemotePayloadForApply(remote.payload, remote.client_updated_at)
+    if (!normalizedRemote) {
+      lastSyncError.value = 'Dữ liệu cloud không hợp lệ.'
+      setPendingSync(true)
+      console.warn('[Sync] Bỏ qua dữ liệu cloud vì payload không hợp lệ.')
+      return
+    }
+
+    const remoteForConflict = {
+      ...remote,
+      payload: normalizedRemote.payload,
+      client_updated_at: normalizedRemote.updatedAt ?? remote.client_updated_at,
+    }
+    const decision = resolveConflict(saveUpdatedAt.value, SAVE_VERSION, remoteForConflict)
     if (decision === 'remote') {
       // Áp dụng dữ liệu từ server
-      const remotePayload = remote.payload
+      const remotePayload = normalizedRemote.payload
       // Backup local trước
       const localSaved = localStorage.getItem(SAVE_KEY)
       if (localSaved) localStorage.setItem(SAVE_BACKUP_KEY, localSaved)
       _applyDataToStore(remotePayload)
       if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
-      persistLocalSave(remotePayload, remote.client_updated_at)
+      persistLocalSave(remotePayload, normalizedRemote.updatedAt ?? undefined)
       setPendingSync(false)
       lastSyncError.value = null
       console.info('[Sync] Đã tải dữ liệu từ cloud (server mới hơn local).')
@@ -2524,11 +2565,6 @@ export const useGameStore = defineStore('game', () => {
     const { useAuthStore } = await import('./authStore')
     const auth = useAuthStore()
     if (!auth.isLoggedIn || !auth.userId) return
-    if (!isOnline.value) {
-      setPendingSync(true)
-      lastSyncError.value = 'Thiết bị đang offline.'
-      return
-    }
 
     if (!saveUpdatedAt.value) {
       const localSaved = localStorage.getItem(SAVE_KEY)
@@ -2542,7 +2578,14 @@ export const useGameStore = defineStore('game', () => {
       }
     }
 
-    const remote = await pullSave(auth.userId)
+    const remoteResult = await pullSave(auth.userId)
+    if (!remoteResult.ok) {
+      setPendingSync(true)
+      lastSyncError.value = remoteResult.message ?? 'Không thể tải dữ liệu cloud.'
+      return
+    }
+
+    const remote = remoteResult.data
 
     if (!remote || !remote.payload) {
       // Cloud is empty, push local progress to initialize it
@@ -2550,13 +2593,29 @@ export const useGameStore = defineStore('game', () => {
       return
     }
 
-    const decision = resolveConflict(saveUpdatedAt.value, SAVE_VERSION, remote)
+    const normalizedRemote = normalizeRemotePayloadForApply(remote.payload, remote.client_updated_at)
+    if (!normalizedRemote) {
+      if (localStorage.getItem(SAVE_KEY)) {
+        await pushToSupabase()
+      } else {
+        lastSyncError.value = 'Dữ liệu cloud không hợp lệ.'
+        setPendingSync(true)
+      }
+      return
+    }
+
+    const remoteForConflict = {
+      ...remote,
+      payload: normalizedRemote.payload,
+      client_updated_at: normalizedRemote.updatedAt ?? remote.client_updated_at,
+    }
+    const decision = resolveConflict(saveUpdatedAt.value, SAVE_VERSION, remoteForConflict)
     if (decision === 'remote') {
       const localSaved = localStorage.getItem(SAVE_KEY)
       if (localSaved) localStorage.setItem(SAVE_BACKUP_KEY, localSaved)
-      _applyDataToStore(remote.payload)
+      _applyDataToStore(normalizedRemote.payload)
       if (!isAdminMode.value) sanitizeLoadedStateForNonAdmin()
-      persistLocalSave(remote.payload, remote.client_updated_at)
+      persistLocalSave(normalizedRemote.payload, normalizedRemote.updatedAt ?? undefined)
       setPendingSync(false)
       lastSyncError.value = null
       console.info('[Sync] Account link: dùng dữ liệu cloud (mới hơn local).')

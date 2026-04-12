@@ -8,6 +8,8 @@ export const useAuthStore = defineStore('auth', () => {
   const session = ref<Session | null>(null)
   const isLoading = ref(false)
   const authError = ref<string | null>(null)
+  let authStateSubscription: { unsubscribe: () => void } | null = null
+  let cloudSyncInFlight: Promise<void> | null = null
 
   // System states for guest mode
   const isGuest = ref(localStorage.getItem('auth-mode-guest') === '1')
@@ -43,6 +45,70 @@ export const useAuthStore = defineStore('auth', () => {
     setGuestMode()
   }
 
+  function clearPersistedSupabaseSession() {
+    const storages: Storage[] = []
+    if (typeof window !== 'undefined') {
+      storages.push(window.localStorage, window.sessionStorage)
+    }
+
+    let projectRef: string | null = null
+    try {
+      const url = new URL(import.meta.env.VITE_SUPABASE_URL as string)
+      projectRef = url.hostname.split('.')[0] ?? null
+    } catch {
+      projectRef = null
+    }
+
+    const knownKeys = new Set<string>(['supabase.auth.token'])
+    if (projectRef) {
+      const baseKey = `sb-${projectRef}-auth-token`
+      knownKeys.add(baseKey)
+      knownKeys.add(`${baseKey}-code-verifier`)
+    }
+
+    for (const storage of storages) {
+      for (const key of Object.keys(storage)) {
+        if (
+          knownKeys.has(key)
+          || (key.startsWith('sb-') && key.includes('-auth-token'))
+          || (key.startsWith('sb-') && key.includes('code-verifier'))
+        ) {
+          storage.removeItem(key)
+        }
+      }
+    }
+  }
+
+  async function runCloudSync(preferMerge: boolean): Promise<void> {
+    if (cloudSyncInFlight) {
+      await cloudSyncInFlight
+      return
+    }
+
+    const task = (async () => {
+      try {
+        const { useGameStore } = await import('./gameStore')
+        const game = useGameStore()
+        if (preferMerge) {
+          await game.syncOnAccountLink()
+        } else {
+          await game.pullFromSupabase()
+        }
+      } catch (err) {
+        console.warn('[Auth] Không thể đồng bộ dữ liệu cloud:', err)
+      }
+    })()
+
+    cloudSyncInFlight = task
+    try {
+      await task
+    } finally {
+      if (cloudSyncInFlight === task) {
+        cloudSyncInFlight = null
+      }
+    }
+  }
+
   // ─── Khôi phục phiên đăng nhập ────────────────────────────────────────────
   async function restoreSession(): Promise<void> {
     if (!isSupabaseConfigured()) return
@@ -69,36 +135,41 @@ export const useAuthStore = defineStore('auth', () => {
       console.warn('[Auth] Không thể khôi phục phiên:', e)
     }
 
+    if (authStateSubscription) {
+      authStateSubscription.unsubscribe()
+      authStateSubscription = null
+    }
+
     // Lắng nghe thay đổi trạng thái auth
-    supabase.auth.onAuthStateChange(async (event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       session.value = newSession
       user.value = newSession?.user ?? null
       if (user.value) {
+        authError.value = null
+        const wasGuestBeforeEvent = isGuest.value
         // If INITIAL_SESSION, use the flag captured during restoreSession, otherwise use current isGuest value
-        const wasGuest = event === 'INITIAL_SESSION' ? wasGuestFromRestore : isGuest.value
+        const wasGuest = event === 'INITIAL_SESSION' ? wasGuestFromRestore : wasGuestBeforeEvent
         isGuest.value = false
         localStorage.removeItem('auth-mode-guest')
         setChosen()
 
         // Nếu người chơi vốn là khách (Guest) và giờ vừa đăng nhập, hãy hợp nhất dữ liệu của họ với cloud
         if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-          try {
-            const { useGameStore } = await import('./gameStore')
-            const game = useGameStore()
-            if (wasGuest) {
-              await game.syncOnAccountLink()
-            } else {
-              await game.pullFromSupabase()
-            }
-          } catch (err) {
-            console.warn('[Auth] Không thể sync data sau khi liên kết tài khoản', err)
-          }
+          await runCloudSync(wasGuest)
+        } else if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          await runCloudSync(false)
         }
       } else if (hasChosen.value) {
         // Token hết hạn hoặc sign-out ở tab khác.
         setGuestMode()
       }
     })
+    authStateSubscription = subscription
+
+    // Fallback: trong một số môi trường listener có thể không bắn event mong đợi ngay.
+    if (user.value) {
+      await runCloudSync(wasGuestFromRestore)
+    }
   }
 
   // ─── Đăng nhập Google ─────────────────────────────────────────────────────
@@ -124,6 +195,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout(): Promise<void> {
     // Luôn thoát local ngay để UI phản hồi tức thì, kể cả khi mạng lỗi.
     clearLocalAuthState()
+    clearPersistedSupabaseSession()
 
     if (!isSupabaseConfigured()) return
 
@@ -135,6 +207,9 @@ export const useAuthStore = defineStore('auth', () => {
       }
     } catch (err) {
       console.warn('[Auth] signOut local lỗi:', err)
+    } finally {
+      // Bảo đảm storage sạch ngay cả khi signOut throw hoặc bị đóng app giữa chừng.
+      clearPersistedSupabaseSession()
     }
   }
 
