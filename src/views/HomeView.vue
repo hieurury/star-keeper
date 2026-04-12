@@ -20,16 +20,16 @@ import PixelButton from '../components/ui/PixelButton.vue'
 import TourOverlay, { type TourStep } from '../components/ui/TourOverlay.vue'
 import ArtifactIcon from '../components/ui/ArtifactIcon.vue'
 import CardIcon from '../components/ui/CardIcon.vue'
+import LobbyBottomNav from '../components/ui/LobbyBottomNav.vue'
 import { UPDATE_NOTICES, type UpdateNotice } from '../content/updateNotices'
 import {
   PhCoins, PhDiamond, PhSword, PhShield, PhCrown,
-  PhPlay, PhAirplaneTilt, PhRocketLaunch, PhMagicWand, PhCards, PhGear,
+  PhAirplaneTilt, PhMagicWand,
   PhClipboardText, PhPencilSimple, PhCheck, PhX,
   PhArrowLeft, PhCaretLeft, PhCaretRight, PhTimer,
-  PhWarning, PhWrench, PhLightning,
+  PhWarning, PhWrench, PhLightning, PhLock,
   PhBell, PhSpeakerHigh, PhSpeakerSlash, PhMusicNotes,
   PhTreasureChest,
-  PhBookOpen,
   PhCloudArrowUp, PhSignOut
 } from '@phosphor-icons/vue'
 import { audioManager } from '../game/systems/audio'
@@ -146,22 +146,22 @@ const TOUR_STEPS: TourStep[] = [
   {
     target: 'stats-panel',
     title: 'Tiến Độ',
-    desc: 'Theo dõi cấp độ tài khoản, vàng tích lũy và kỷ lục điểm cao nhất của bạn tại đây.',
+    desc: 'Theo dõi trạng thái phi cơ, độ bền, cổ vật đang gắn và lực chiến hiện tại tại đây.',
   },
   {
-    target: 'ships-btn',
-    title: 'Phi Cơ',
-    desc: 'Xem thông số, kỹ năng phi cơ và mở panel nâng cấp chiến cơ trực tiếp từ ảnh tàu.',
+    target: 'mode-story',
+    title: 'Bố Cục Màn Chơi',
+    desc: 'Tại Xuất Trinh, bạn chọn gameplay bằng các thẻ chế độ. Những chế độ chưa mở sẽ có khóa và làm mờ.',
   },
   {
-    target: 'core-btn',
-    title: 'Lõi Sao — Thẻ Kỹ Năng',
-    desc: 'Khi lên cấp trong trận, bạn chọn 1 trong 3 lõi ngẫu nhiên. Kết hợp đúng lõi sẽ mở lõi Tối thượng.',
+    target: 'mode-endless',
+    title: 'Chế Độ Vô Tận',
+    desc: 'Đây là chế độ có thể chơi ngay ở thời điểm hiện tại.',
   },
   {
-    target: 'play-btn',
-    title: 'Sẵn Sàng Chiến Đấu!',
-    desc: 'Di chuyển: kéo chuột (PC) hoặc chạm và trượt (Mobile).\nKỹ năng: chuột phải (PC) hoặc chạm đôi (Mobile).\n\nNhớ bấm chuông thông báo để xem patch notes mới nhất trước khi vào trận.',
+    target: 'bottom-nav',
+    title: 'Điều Hướng Nhanh',
+    desc: 'Dùng thanh dưới cùng để chuyển nhanh giữa Xuất trinh, Công nghệ, Bách khoa và Cài đặt.',
   },
 ]
 
@@ -498,18 +498,12 @@ function startGame() {
   router.push('/game')
 }
 
-function goToTest() {
-  router.push('/test')
-}
-
-function goToCodex() {
-  router.push('/codex')
-}
-
 const canPlay = computed(() => {
   const dur = game.shipDurabilities[game.selectedShip] ?? (SHIP_DURABILITY_MAX[game.selectedShip] ?? 100)
   return dur >= 10
 })
+
+const shipCombatPower = computed(() => game.preBattleCombatPower)
 
 function openProfileSheet() {
   usernameInput.value = game.username
@@ -566,30 +560,33 @@ function onShipNameKey(e: KeyboardEvent) {
 
     <!-- Top profile bar -->
     <div class="home__topbar">
-      <button class="profile-btn" data-tour="profile" @click="openProfileSheet">
-        <div class="profile-avatar"><CardIcon :name="AVATARS[game.avatarId]" :size="20" /></div>
-        <div class="profile-info">
-          <div class="profile-name">{{ game.username }}</div>
-          <div class="profile-ship">{{ game.shipName }}</div>
+      <div class="topbar-player-col">
+        <button class="profile-btn" data-tour="profile" @click="openProfileSheet">
+          <div class="profile-avatar"><CardIcon :name="AVATARS[game.avatarId]" :size="20" /></div>
+          <div class="profile-info">
+            <div class="profile-name">{{ game.username }}</div>
+            <div class="profile-ship">{{ game.shipName }}</div>
+          </div>
+        </button>
+        <div class="topbar-lv">
+          <div class="topbar-lv__badge">LV {{ game.accountLevel }}</div>
+          <div class="topbar-lv__bar">
+            <div class="topbar-lv__fill" :style="{ width: game.accountExpPercent + '%' }" />
+          </div>
+          <div class="topbar-lv__exp">{{ game.accountExp }}/{{ game.accountExpToNextLevel }}</div>
         </div>
-      </button>
-      <!-- LV + EXP bar -->
-      <div class="topbar-lv">
-        <div class="topbar-lv__badge">LV {{ game.accountLevel }}</div>
-        <div class="topbar-lv__bar">
-          <div class="topbar-lv__fill" :style="{ width: game.accountExpPercent + '%' }" />
-        </div>
-        <div class="topbar-lv__exp">{{ game.accountExp }}/{{ game.accountExpToNextLevel }}</div>
       </div>
-      <div class="topbar-right" data-tour="currency">
-        <button class="topbar-notices" @click="openUpdateNotices">
-          <PhBell weight="fill" :size="18" />
-          <span v-if="unreadNoticeCount > 0" class="topbar-notices__badge">{{ unreadNoticeCount }}</span>
-        </button>
-        <button class="topbar-missions" @click="showMissionsPanel = true">
-          <PhClipboardText weight="fill" :size="18" />
-          <span v-if="unclaimedMissions > 0" class="topbar-missions__badge">{{ unclaimedMissions }}</span>
-        </button>
+      <div class="topbar-resource-col" data-tour="currency">
+        <div class="topbar-resource-actions">
+          <button class="topbar-notices" @click="openUpdateNotices">
+            <PhBell weight="fill" :size="18" />
+            <span v-if="unreadNoticeCount > 0" class="topbar-notices__badge">{{ unreadNoticeCount }}</span>
+          </button>
+          <button class="topbar-missions" @click="showMissionsPanel = true">
+            <PhClipboardText weight="fill" :size="18" />
+            <span v-if="unclaimedMissions > 0" class="topbar-missions__badge">{{ unclaimedMissions }}</span>
+          </button>
+        </div>
         <div class="currency-display">
           <div class="gold-display">
             <span class="gold-icon"><PhCoins weight="fill" :size="16" /></span>
@@ -604,114 +601,111 @@ function onShipNameKey(e: KeyboardEvent) {
     </div>
 
     <div class="home__container">
-      <!-- Logo / Title -->
-      <div class="home__hero">
-        <div class="home__title-wrapper">
-          <h1 class="home__title">STAR<br/>KEEPER</h1>
-          <div class="home__subtitle">NGƯỜI HỘ SAO</div>
-        </div>
-        <div class="home__ship-icon"><PhAirplaneTilt :size="64" weight="fill" /></div>
-      </div>
-
       <!-- Equipment Panel -->
       <div data-tour="stats-panel" class="equip-panel">
         <div class="equip-panel__title">TRANG BỊ</div>
         <div class="equip-panel__body">
-          <!-- Left: ship SVG -->
-          <button class="equip-panel__ship" type="button" @click="openShipUpgradePanel()" title="Nâng cấp chiến cơ">
-            <template v-if="game.selectedShip === 'star_keeper'">
-              <svg viewBox="-32 -28 64 58" width="56" height="54">
-                <polygon points="-10,0 -28,18 -10,10" fill="#0077bb"/>
-                <polygon points="10,0 28,18 10,10" fill="#0077bb"/>
-                <rect x="-10" y="-22" width="20" height="34" fill="#00cfff"/>
-                <rect x="-5" y="-22" width="10" height="13" fill="#ffd700"/>
-                <rect x="-6" y="12" width="12" height="9" fill="#ff6600" opacity="0.85"/>
-              </svg>
-            </template>
-            <template v-else-if="game.selectedShip === 'star_holder'">
-              <svg viewBox="-34 -32 68 66" width="56" height="54">
-                <polygon points="-9,4 -30,20 -9,14" fill="#dd6600"/>
-                <polygon points="-25,18 -30,20 -20,22" fill="#ff8800"/>
-                <polygon points="9,4 30,20 9,14" fill="#dd6600"/>
-                <polygon points="25,18 30,20 20,22" fill="#ff8800"/>
-                <rect x="-9" y="-24" width="18" height="38" fill="#ff9900"/>
-                <polygon points="0,-28 8,-18 -8,-18" fill="#ffee44"/>
-                <rect x="-6" y="14" width="12" height="10" fill="#ff4400" opacity="0.9"/>
-                <rect x="-3" y="18" width="6" height="6" fill="#ffcc00" opacity="0.85"/>
-              </svg>
-            </template>
-            <template v-else-if="game.selectedShip === 'star_shooter'">
-              <svg viewBox="-32 -33 64 62" width="56" height="54">
-                <polygon points="-7,-4 -29,-12 -25,5 -7,5" fill="#27405f"/>
-                <polygon points="7,-4 29,-12 25,5 7,5" fill="#27405f"/>
-                <polygon points="-7,-4 -29,-12 -28,-9 -7,-3" fill="#4477aa" opacity="0.75"/>
-                <polygon points="7,-4 29,-12 28,-9 7,-3" fill="#4477aa" opacity="0.75"/>
-                <polygon points="-7,9 -20,15 -18,21 -7,17" fill="#1a2e48"/>
-                <polygon points="7,9 20,15 18,21 7,17" fill="#1a2e48"/>
-                <rect x="-28" y="-10" width="7" height="4" fill="#ff3333"/>
-                <rect x="-25" y="-4" width="7" height="4" fill="#ff3333"/>
-                <rect x="21" y="-10" width="7" height="4" fill="#ff3333"/>
-                <rect x="18" y="-4" width="7" height="4" fill="#ff3333"/>
-                <rect x="-7" y="-24" width="14" height="42" fill="#1c2c44"/>
-                <polygon points="-7,18 7,18 4,22 -4,22" fill="#151f33"/>
-                <rect x="-2" y="-24" width="4" height="42" fill="#7733cc" opacity="0.38"/>
-                <polygon points="0,-30 6,-21 -6,-21" fill="#ff4422"/>
-                <rect x="-3" y="-19" width="6" height="8" fill="#66ccff" opacity="0.88"/>
-                <rect x="-5" y="18" width="10" height="7" fill="#ff5500" opacity="0.9"/>
-                <rect x="-3" y="22" width="6" height="5" fill="#ffcc22" opacity="0.95"/>
-              </svg>
-            </template>
-            <template v-else-if="game.selectedShip === 'star_faster'">
-              <svg viewBox="-36 -44 72 64" width="56" height="54">
-                <rect x="-6" y="-28" width="12" height="44" fill="#f5f5ff"/>
-                <rect x="-5.5" y="-28" width="2.5" height="44" fill="#ffffff" opacity="0.5"/>
-                <polygon points="0,-40 6,-20 -6,-20" fill="#6644bb"/>
-                <polygon points="0,-40 0,-25 6,-20" fill="#8855dd" opacity="0.7"/>
-                <polygon points="-4,-20 4,-20 3,-10 -3,-10" fill="#4477ff"/>
-                <polygon points="-3.5,-10 3.5,-10 2.5,-2 -2.5,-2" fill="#6699ff" opacity="0.8"/>
-                <rect x="-5" y="-7" width="1.8" height="5" fill="#b8a8dd" opacity="0.7"/>
-                <rect x="3.2" y="-7" width="1.8" height="5" fill="#b8a8dd" opacity="0.7"/>
-                <polygon points="-6,-10 -27,-5 -25,7 -6,0" fill="#b8a0ff"/>
-                <polygon points="6,-10 27,-5 25,7 6,0" fill="#b8a0ff"/>
-                <polygon points="-6,-10 -27,-5 -26,-2 -6,-5" fill="#d0c0ff" opacity="0.6"/>
-                <polygon points="6,-10 27,-5 25,-2 6,-5" fill="#d0c0ff" opacity="0.6"/>
-                <polygon points="-6,-2 -20,-2 -18,13 -6,7" fill="#a08add" opacity="0.85"/>
-                <polygon points="6,-2 20,-2 18,13 6,7" fill="#a08add" opacity="0.85"/>
-                <polygon points="-6,5 -15,5 -13,10 -6,7" fill="#8878cc" opacity="0.8"/>
-                <polygon points="6,5 15,5 13,10 6,7" fill="#8878cc" opacity="0.8"/>
-                <polygon points="-6,15 6,15 4,20 -4,20" fill="#9a88cc"/>
-                <rect x="-5.8" y="-12" width="1" height="27" fill="#c0a8ff" opacity="0.5"/>
-                <rect x="4.8" y="-12" width="1" height="27" fill="#c0a8ff" opacity="0.5"/>
-                <circle cx="0" cy="16" r="3.8" fill="#00eeff" opacity="0.6"/>
-                <circle cx="0" cy="16" r="2.2" fill="#66ffff"/>
-              </svg>
-            </template>
-            <template v-else-if="game.selectedShip === 'thien_ha_truy'">
-              <svg viewBox="-34 -38 68 74" width="56" height="54">
-                <polygon points="0,-34 8,-10 5,20 0,28 -5,20 -8,-10" fill="#39d3a2"/>
-                <polygon points="0,-34 8,-10 3,-7 0,-20" fill="#7dffd7" opacity="0.75"/>
-                <polygon points="0,-30 5,16 0,24 -5,16" fill="#1f9f7f"/>
-                <polygon points="0,-36 3,-30 -3,-30" fill="#d9fff4"/>
-                <rect x="-10" y="18" width="20" height="4" fill="#0f6f5b"/>
-                <rect x="-5" y="20" width="10" height="5" fill="#155448"/>
-                <rect x="-1" y="-32" width="2" height="58" fill="#d5fff4" opacity="0.55"/>
-                <polygon points="-12,4 -18,18 -14,24 -8,10" fill="#66ffe4" opacity="0.45"/>
-                <polygon points="12,4 18,18 14,24 8,10" fill="#66ffe4" opacity="0.45"/>
-              </svg>
-            </template>
-            <template v-else>
-              <svg viewBox="-34 -32 68 66" width="56" height="54">
-                <polygon points="-9,4 -30,20 -9,14" fill="#dd6600"/>
-                <polygon points="-25,18 -30,20 -20,22" fill="#ff8800"/>
-                <polygon points="9,4 30,20 9,14" fill="#dd6600"/>
-                <polygon points="25,18 30,20 20,22" fill="#ff8800"/>
-                <rect x="-9" y="-24" width="18" height="38" fill="#ff9900"/>
-                <polygon points="0,-28 8,-18 -8,-18" fill="#ffee44"/>
-                <rect x="-6" y="14" width="12" height="10" fill="#ff4400" opacity="0.9"/>
-                <rect x="-3" y="18" width="6" height="6" fill="#ffcc00" opacity="0.85"/>
-              </svg>
-            </template>
-          </button>
+          <div class="equip-panel__left">
+            <!-- Left: ship SVG -->
+            <button class="equip-panel__ship" type="button" @click="openShipUpgradePanel()" title="Nâng cấp chiến cơ">
+              <template v-if="game.selectedShip === 'star_keeper'">
+                <svg viewBox="-32 -28 64 58" width="56" height="54">
+                  <polygon points="-10,0 -28,18 -10,10" fill="#0077bb"/>
+                  <polygon points="10,0 28,18 10,10" fill="#0077bb"/>
+                  <rect x="-10" y="-22" width="20" height="34" fill="#00cfff"/>
+                  <rect x="-5" y="-22" width="10" height="13" fill="#ffd700"/>
+                  <rect x="-6" y="12" width="12" height="9" fill="#ff6600" opacity="0.85"/>
+                </svg>
+              </template>
+              <template v-else-if="game.selectedShip === 'star_holder'">
+                <svg viewBox="-34 -32 68 66" width="56" height="54">
+                  <polygon points="-9,4 -30,20 -9,14" fill="#dd6600"/>
+                  <polygon points="-25,18 -30,20 -20,22" fill="#ff8800"/>
+                  <polygon points="9,4 30,20 9,14" fill="#dd6600"/>
+                  <polygon points="25,18 30,20 20,22" fill="#ff8800"/>
+                  <rect x="-9" y="-24" width="18" height="38" fill="#ff9900"/>
+                  <polygon points="0,-28 8,-18 -8,-18" fill="#ffee44"/>
+                  <rect x="-6" y="14" width="12" height="10" fill="#ff4400" opacity="0.9"/>
+                  <rect x="-3" y="18" width="6" height="6" fill="#ffcc00" opacity="0.85"/>
+                </svg>
+              </template>
+              <template v-else-if="game.selectedShip === 'star_shooter'">
+                <svg viewBox="-32 -33 64 62" width="56" height="54">
+                  <polygon points="-7,-4 -29,-12 -25,5 -7,5" fill="#27405f"/>
+                  <polygon points="7,-4 29,-12 25,5 7,5" fill="#27405f"/>
+                  <polygon points="-7,-4 -29,-12 -28,-9 -7,-3" fill="#4477aa" opacity="0.75"/>
+                  <polygon points="7,-4 29,-12 28,-9 7,-3" fill="#4477aa" opacity="0.75"/>
+                  <polygon points="-7,9 -20,15 -18,21 -7,17" fill="#1a2e48"/>
+                  <polygon points="7,9 20,15 18,21 7,17" fill="#1a2e48"/>
+                  <rect x="-28" y="-10" width="7" height="4" fill="#ff3333"/>
+                  <rect x="-25" y="-4" width="7" height="4" fill="#ff3333"/>
+                  <rect x="21" y="-10" width="7" height="4" fill="#ff3333"/>
+                  <rect x="18" y="-4" width="7" height="4" fill="#ff3333"/>
+                  <rect x="-7" y="-24" width="14" height="42" fill="#1c2c44"/>
+                  <polygon points="-7,18 7,18 4,22 -4,22" fill="#151f33"/>
+                  <rect x="-2" y="-24" width="4" height="42" fill="#7733cc" opacity="0.38"/>
+                  <polygon points="0,-30 6,-21 -6,-21" fill="#ff4422"/>
+                  <rect x="-3" y="-19" width="6" height="8" fill="#66ccff" opacity="0.88"/>
+                  <rect x="-5" y="18" width="10" height="7" fill="#ff5500" opacity="0.9"/>
+                  <rect x="-3" y="22" width="6" height="5" fill="#ffcc22" opacity="0.95"/>
+                </svg>
+              </template>
+              <template v-else-if="game.selectedShip === 'star_faster'">
+                <svg viewBox="-36 -44 72 64" width="56" height="54">
+                  <rect x="-6" y="-28" width="12" height="44" fill="#f5f5ff"/>
+                  <rect x="-5.5" y="-28" width="2.5" height="44" fill="#ffffff" opacity="0.5"/>
+                  <polygon points="0,-40 6,-20 -6,-20" fill="#6644bb"/>
+                  <polygon points="0,-40 0,-25 6,-20" fill="#8855dd" opacity="0.7"/>
+                  <polygon points="-4,-20 4,-20 3,-10 -3,-10" fill="#4477ff"/>
+                  <polygon points="-3.5,-10 3.5,-10 2.5,-2 -2.5,-2" fill="#6699ff" opacity="0.8"/>
+                  <rect x="-5" y="-7" width="1.8" height="5" fill="#b8a8dd" opacity="0.7"/>
+                  <rect x="3.2" y="-7" width="1.8" height="5" fill="#b8a8dd" opacity="0.7"/>
+                  <polygon points="-6,-10 -27,-5 -25,7 -6,0" fill="#b8a0ff"/>
+                  <polygon points="6,-10 27,-5 25,7 6,0" fill="#b8a0ff"/>
+                  <polygon points="-6,-10 -27,-5 -26,-2 -6,-5" fill="#d0c0ff" opacity="0.6"/>
+                  <polygon points="6,-10 27,-5 25,-2 6,-5" fill="#d0c0ff" opacity="0.6"/>
+                  <polygon points="-6,-2 -20,-2 -18,13 -6,7" fill="#a08add" opacity="0.85"/>
+                  <polygon points="6,-2 20,-2 18,13 6,7" fill="#a08add" opacity="0.85"/>
+                  <polygon points="-6,5 -15,5 -13,10 -6,7" fill="#8878cc" opacity="0.8"/>
+                  <polygon points="6,5 15,5 13,10 6,7" fill="#8878cc" opacity="0.8"/>
+                  <polygon points="-6,15 6,15 4,20 -4,20" fill="#9a88cc"/>
+                  <rect x="-5.8" y="-12" width="1" height="27" fill="#c0a8ff" opacity="0.5"/>
+                  <rect x="4.8" y="-12" width="1" height="27" fill="#c0a8ff" opacity="0.5"/>
+                  <circle cx="0" cy="16" r="3.8" fill="#00eeff" opacity="0.6"/>
+                  <circle cx="0" cy="16" r="2.2" fill="#66ffff"/>
+                </svg>
+              </template>
+              <template v-else-if="game.selectedShip === 'thien_ha_truy'">
+                <svg viewBox="-34 -38 68 74" width="56" height="54">
+                  <polygon points="0,-34 8,-10 5,20 0,28 -5,20 -8,-10" fill="#39d3a2"/>
+                  <polygon points="0,-34 8,-10 3,-7 0,-20" fill="#7dffd7" opacity="0.75"/>
+                  <polygon points="0,-30 5,16 0,24 -5,16" fill="#1f9f7f"/>
+                  <polygon points="0,-36 3,-30 -3,-30" fill="#d9fff4"/>
+                  <rect x="-10" y="18" width="20" height="4" fill="#0f6f5b"/>
+                  <rect x="-5" y="20" width="10" height="5" fill="#155448"/>
+                  <rect x="-1" y="-32" width="2" height="58" fill="#d5fff4" opacity="0.55"/>
+                  <polygon points="-12,4 -18,18 -14,24 -8,10" fill="#66ffe4" opacity="0.45"/>
+                  <polygon points="12,4 18,18 14,24 8,10" fill="#66ffe4" opacity="0.45"/>
+                </svg>
+              </template>
+              <template v-else>
+                <svg viewBox="-34 -32 68 66" width="56" height="54">
+                  <polygon points="-9,4 -30,20 -9,14" fill="#dd6600"/>
+                  <polygon points="-25,18 -30,20 -20,22" fill="#ff8800"/>
+                  <polygon points="9,4 30,20 9,14" fill="#dd6600"/>
+                  <polygon points="25,18 30,20 20,22" fill="#ff8800"/>
+                  <rect x="-9" y="-24" width="18" height="38" fill="#ff9900"/>
+                  <polygon points="0,-28 8,-18 -8,-18" fill="#ffee44"/>
+                  <rect x="-6" y="14" width="12" height="10" fill="#ff4400" opacity="0.9"/>
+                  <rect x="-3" y="18" width="6" height="6" fill="#ffcc00" opacity="0.85"/>
+                </svg>
+              </template>
+            </button>
+            <div class="equip-power">
+              <span class="equip-power__label">LỰC CHIẾN HIỆN TẠI</span>
+              <span class="equip-power__value"><PhLightning :size="12" weight="fill" /> {{ shipCombatPower }}</span>
+            </div>
+          </div>
           <!-- Right: stats -->
           <div class="equip-panel__right">
             <!-- Durability bar -->
@@ -757,44 +751,46 @@ function onShipNameKey(e: KeyboardEvent) {
         </div>
       </div>
 
-      <!-- Menu buttons -->
-      <div class="home__menu">
-        <button class="menu-play-btn" data-tour="play-btn" :disabled="!canPlay" @click="startGame">
-          <PhPlay :size="18" weight="fill" />
-          <span>BẮT ĐẦU</span>
-        </button>
-        <div v-if="!canPlay" class="menu-play-warn">⚠ Độ bền phi cơ quá thấp! Sửa chữa trước khi cất cánh.</div>
-        <div class="menu-grid">
-          <button class="menu-tile" data-tour="ships-btn" @click="showShipsPanel = true">
-            <PhRocketLaunch :size="24" weight="fill" />
-            <span>Phi Cơ</span>
+      <!-- Sortie mode cards -->
+      <div class="home__modes">
+        <div class="mode-grid">
+          <button class="mode-card mode-card--story mode-card--locked" data-tour="mode-story" @click="showComingSoon = true">
+            <div class="mode-card__backdrop"></div>
+            <div class="mode-card__content">
+              <div class="mode-card__eyebrow">Gameplay 01</div>
+              <h3 class="mode-card__title">Cốt Truyện</h3>
+              <p class="mode-card__desc">Hành trình mở khóa thiên hà theo từng chương.</p>
+            </div>
+            <div class="mode-card__lock"><PhLock :size="16" weight="fill" /></div>
           </button>
-          <button class="menu-tile" @click="showArtifactsPanel = true">
-            <PhMagicWand :size="24" weight="fill" />
-            <span>Cổ Vật</span>
-          </button>
-          <button class="menu-tile" data-tour="core-btn" @click="showCorePanel = true">
-            <PhCards :size="24" weight="fill" />
-            <span>Lõi Sao</span>
-          </button>
-          <button class="menu-tile" @click="goToCodex">
-            <PhBookOpen :size="24" weight="fill" />
-            <span>Bách Khoa</span>
-          </button>
-          <button class="menu-tile" @click="showSettingsPanel = true">
-            <PhGear :size="24" weight="fill" />
-            <span>Cài Đặt</span>
-          </button>
-          <button v-if="game.isAdminMode" class="menu-tile menu-tile--test" @click="goToTest">
-            <PhWrench :size="24" weight="fill" />
-            <span>Thử Nghiệm</span>
-          </button>
+
+          <div class="mode-stack">
+            <button class="mode-card mode-card--endless" data-tour="mode-endless" :disabled="!canPlay" @click="startGame">
+              <div class="mode-card__backdrop"></div>
+              <div class="mode-card__content">
+                <div class="mode-card__eyebrow">Gameplay 02</div>
+                <h3 class="mode-card__title">Chế Độ Vô Tận</h3>
+                <p class="mode-card__desc">Sống sót càng lâu, đẩy điểm và phần thưởng càng cao.</p>
+              </div>
+            </button>
+
+            <button class="mode-card mode-card--daily mode-card--locked" @click="showComingSoon = true">
+              <div class="mode-card__backdrop"></div>
+              <div class="mode-card__content">
+                <div class="mode-card__eyebrow">Gameplay 03</div>
+                <h3 class="mode-card__title">Sự Kiện Hằng Ngày</h3>
+                <p class="mode-card__desc">Nhiệm vụ giới hạn thời gian cùng thưởng đặc biệt.</p>
+              </div>
+              <div class="mode-card__lock"><PhLock :size="16" weight="fill" /></div>
+            </button>
+          </div>
         </div>
+        <div v-if="!canPlay" class="mode-warn">⚠ Độ bền phi cơ dưới 10. Hãy sửa chữa trước khi xuất trinh Vô tận.</div>
       </div>
 
-      <!-- Version -->
-      <div class="home__footer">v0.1.0 · PIXEL EDITION</div>
     </div>
+
+    <LobbyBottomNav />
 
     <!-- Profile Sheet Overlay -->
     <Transition name="sheet">
@@ -1566,7 +1562,7 @@ function onShipNameKey(e: KeyboardEvent) {
 
               <div class="audio-row" style="margin-top: 10px; margin-bottom: 0;">
                 <label class="audio-toggle" for="graphics-show-fps">
-                  <span class="audio-toggle__label"><PhTimer :size="13" weight="bold" /> Hiển thị FPS trong game</span>
+                  <span class="audio-toggle__label"><span class="audio-toggle__fps-badge">FPS</span> Hiển thị FPS trong game</span>
                   <span class="audio-switch">
                     <input id="graphics-show-fps" type="checkbox" :checked="game.showFps" @change="setShowFps(($event.target as HTMLInputElement).checked)" />
                     <span class="audio-switch__track"></span>
@@ -1719,27 +1715,41 @@ function onShipNameKey(e: KeyboardEvent) {
   top: 0;
   width: 100%;
   max-width: 420px;
+  box-sizing: border-box;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 10px 16px;
+  gap: 8px;
+  padding-top: calc(7px + constant(safe-area-inset-top));
+  padding-top: calc(7px + env(safe-area-inset-top));
+  padding-right: 10px;
+  padding-bottom: 7px;
+  padding-left: 10px;
   background: rgba(8, 8, 20, 0.88);
   border-bottom: 2px solid var(--color-border-dark);
   backdrop-filter: blur(8px);
   z-index: 10;
 }
+.topbar-player-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
 .profile-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   background: none;
   border: none;
   cursor: pointer;
   padding: 0;
+  width: 100%;
 }
 .profile-avatar {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--color-panel);
   border: 2px solid var(--color-border);
@@ -1757,14 +1767,14 @@ function onShipNameKey(e: KeyboardEvent) {
 }
 .profile-name {
   font-family: var(--font-pixel);
-  font-size: 11px;
+  font-size: 9px;
   color: var(--color-text);
 }
 .profile-ship {
   font-family: var(--font-pixel);
-  font-size: 9px;
+  font-size: 8px;
   color: var(--color-text-dim);
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 .currency-display {
   display: flex;
@@ -1772,28 +1782,51 @@ function onShipNameKey(e: KeyboardEvent) {
   gap: 4px;
   align-items: flex-end;
 }
+.topbar-resource-col {
+  width: 124px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.topbar-resource-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
 .gold-display,
 .ruby-display {
   display: flex;
+  width: 100%;
+  box-sizing: border-box;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   background: var(--color-panel);
-  padding: 3px 10px;
+  padding: 2px 7px;
   font-family: var(--font-pixel);
 }
 .gold-display { border: 2px solid #7d6608; }
 .ruby-display { border: 2px solid #7b1fa2; }
 .gold-icon, .ruby-icon { font-size: 14px; }
 .gold-amount {
-  font-size: 14px;
+  font-size: 11px;
   color: #f1c40f;
-  min-width: 20px;
+  min-width: 0;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: right;
 }
 .ruby-amount {
-  font-size: 14px;
+  font-size: 11px;
   color: #e040fb;
-  min-width: 20px;
+  min-width: 0;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: right;
 }
 
@@ -1802,56 +1835,14 @@ function onShipNameKey(e: KeyboardEvent) {
   position: relative;
   width: 100%;
   max-width: 380px;
-  padding: 20px 16px 24px;
+  box-sizing: border-box;
+  padding: 10px 10px 90px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
   z-index: 1;
 }
 
-/* Hero */
-.home__hero {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 8px 0;
-}
-.home__title {
-  font-family: var(--font-pixel);
-  font-size: 32px;
-  line-height: 1.15;
-  color: var(--color-accent);
-  text-shadow:
-    3px 3px 0 var(--color-accent-dark),
-    0 0 20px rgba(0, 200, 255, 0.4);
-  margin: 0;
-  letter-spacing: 2px;
-}
-.home__subtitle {
-  font-family: var(--font-pixel);
-  font-size: 10px;
-  color: var(--color-text-dim);
-  letter-spacing: 3px;
-  margin-top: 4px;
-}
-.home__ship-icon {
-  animation: float 2s ease-in-out infinite alternate;
-  filter: drop-shadow(0 0 12px var(--color-accent));
-  color: var(--color-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 0;
-}
-
-@keyframes float {
-  from { transform: rotate(-90deg) translateX(-6px); }
-  to   { transform: rotate(-90deg) translateX(6px); }
-}
-.home__ship-icon > * {
-  transform: rotate(-90deg);
-}
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1925,86 +1916,114 @@ function onShipNameKey(e: KeyboardEvent) {
   color: var(--color-text-dim);
 }
 
-/* Menu */
-.home__menu {
+/* Sortie cards */
+.home__modes {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  align-items: stretch;
 }
-.menu-play-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  padding: 14px 20px;
-  background: var(--color-accent);
-  color: #fff;
-  font-family: var(--font-pixel);
-  font-size: 16px;
-  letter-spacing: 2px;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 4px 0 var(--color-accent-dark), inset 0 1px 0 rgba(255,255,255,0.25);
-  transition: transform 0.05s, box-shadow 0.05s, background 0.1s;
-  text-transform: uppercase;
-  user-select: none;
-}
-.menu-play-btn:hover { background: var(--color-accent-light); }
-.menu-play-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--color-accent-dark); }
-.menu-play-btn:disabled {
-  background: #555;
-  box-shadow: 0 4px 0 #333, inset 0 1px 0 rgba(255,255,255,0.08);
-  cursor: not-allowed;
-  opacity: 0.65;
-}
-.menu-play-warn {
-  text-align: center;
-  font-family: var(--font-pixel);
-  font-size: 10px;
-  color: #ff7043;
-  letter-spacing: 1px;
-  margin-top: -4px;
-}
-.menu-grid {
+.mode-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  width: 100%;
+  gap: 8px;
 }
-.menu-tile {
+.mode-stack {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+}
+.mode-card {
+  position: relative;
+  border: 2px solid #2e4468;
+  background: linear-gradient(145deg, rgba(12, 27, 56, 0.94), rgba(7, 15, 34, 0.94));
+  min-height: 98px;
+  text-align: left;
+  overflow: hidden;
+  padding: 8px 8px 9px;
+  cursor: pointer;
+  isolation: isolate;
+}
+.mode-card--story {
+  min-height: 204px;
+}
+.mode-card__backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(84, 206, 255, 0.26), transparent 55%),
+    radial-gradient(circle at 84% 82%, rgba(57, 113, 255, 0.24), transparent 52%);
+  filter: blur(8px);
+  z-index: -2;
+}
+.mode-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(2, 8, 24, 0.12), rgba(2, 8, 24, 0.76));
+  z-index: -1;
+}
+.mode-card__content {
   display: flex;
   flex-direction: column;
+  gap: 7px;
+}
+.mode-card__eyebrow {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  letter-spacing: 1px;
+  color: #84a7cf;
+  text-transform: uppercase;
+}
+.mode-card__title {
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: #d7edff;
+}
+.mode-card__desc {
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  line-height: 1.6;
+  color: #9ab3d2;
+}
+.mode-card__lock {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(5, 10, 22, 0.72);
+  color: #d8e6ff;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 16px 8px;
-  background: var(--color-panel);
-  border: 2px solid var(--color-border-dark);
-  color: var(--color-text-dim);
-  font-family: var(--font-pixel);
-  font-size: 11px;
-  letter-spacing: 1.5px;
-  cursor: pointer;
-  text-transform: uppercase;
-  box-shadow: 0 3px 0 var(--color-border-dark);
-  transition: transform 0.05s, box-shadow 0.05s, border-color 0.12s, color 0.12s;
-  user-select: none;
 }
-.menu-tile:hover { border-color: var(--color-accent); color: var(--color-accent); }
-.menu-tile:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--color-border-dark); }
-.menu-tile--test { border-color: #f39c12; color: #f39c12; }
-.menu-tile--test:hover { border-color: #f1c40f; color: #f1c40f; }
-
-/* Footer */
-.home__footer {
+.mode-card--locked {
+  filter: grayscale(0.85);
+  opacity: 0.82;
+}
+.mode-card--locked .mode-card__content {
+  filter: blur(0.8px);
+}
+.mode-card--endless {
+  border-color: #2f8fc8;
+  box-shadow: 0 0 0 1px rgba(68, 180, 255, 0.25) inset;
+}
+.mode-card--endless:disabled {
+  opacity: 0.7;
+  filter: grayscale(0.6);
+  cursor: not-allowed;
+}
+.mode-warn {
   text-align: center;
-  font-size: 9px;
   font-family: var(--font-pixel);
-  color: var(--color-text-dim);
-  letter-spacing: 2px;
-  opacity: 0.5;
+  font-size: 8px;
+  color: #ff7043;
+  letter-spacing: 0.8px;
 }
 
 /* ─── Profile Sheet ───────────────────────────────────────────────────── */
@@ -2689,20 +2708,19 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
 .topbar-lv {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  padding: 0 10px;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
 }
 .topbar-lv__badge {
   font-family: var(--font-pixel);
-  font-size: 9px;
+  font-size: 8px;
   color: var(--color-accent);
   letter-spacing: 1px;
 }
 .topbar-lv__bar {
   width: 100%;
-  height: 6px;
+  height: 5px;
   background: var(--color-panel-dark);
   border: 1px solid var(--color-border-dark);
   overflow: hidden;
@@ -2717,12 +2735,37 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   width: 100%;
   text-align: left;
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 7px;
   color: #66b8ff;
   letter-spacing: 0.5px;
 }
 
 @media (max-width: 380px) {
+  .home__topbar {
+    padding-top: calc(6px + constant(safe-area-inset-top));
+    padding-top: calc(6px + env(safe-area-inset-top));
+    padding-right: 8px;
+    padding-bottom: 6px;
+    padding-left: 8px;
+    gap: 6px;
+  }
+
+  .topbar-resource-col {
+    width: 112px;
+  }
+
+  .mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-card--story {
+    min-height: 118px;
+  }
+
+  .mode-stack {
+    grid-template-rows: auto;
+  }
+
   .core-relation-head,
   .core-relation-row {
     grid-template-columns: minmax(0, 1fr);
@@ -2755,6 +2798,13 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   gap: 14px;
   align-items: flex-start;
 }
+.equip-panel__left {
+  width: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
 .equip-panel__ship {
   flex-shrink: 0;
   display: flex;
@@ -2774,6 +2824,29 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
 }
 .equip-panel__ship:active {
   transform: translateY(1px);
+}
+.equip-power {
+  width: 100%;
+  border: 1px solid rgba(97, 180, 239, 0.45);
+  background: rgba(8, 26, 48, 0.82);
+  padding: 6px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.equip-power__label {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #88abcf;
+  letter-spacing: 0.6px;
+}
+.equip-power__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: #ffd264;
 }
 .equip-panel__right {
   flex: 1;
@@ -3030,18 +3103,13 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   min-height: 0;
 }
 
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 .topbar-notices {
   position: relative;
   background: none;
   border: 2px solid var(--color-border-dark);
   color: var(--color-text-dim);
-  width: 34px;
-  height: 34px;
+  width: 29px;
+  height: 29px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3073,8 +3141,8 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   background: none;
   border: 2px solid var(--color-border-dark);
   color: var(--color-text-dim);
-  width: 34px;
-  height: 34px;
+  width: 29px;
+  height: 29px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3459,6 +3527,18 @@ button.core-icon-card:hover { border-color: var(--color-border); transform: tran
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+.audio-toggle__fps-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 14px;
+  border: 1px solid rgba(100, 198, 255, 0.7);
+  background: rgba(14, 56, 90, 0.9);
+  color: #c9f1ff;
+  font-size: 7px;
+  letter-spacing: 0.5px;
 }
 .audio-switch {
   position: relative;

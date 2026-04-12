@@ -1,11 +1,14 @@
 import { Graphics } from 'pixi.js'
-import type { useGameStore } from '../../stores/gameStore'
+import { ALL_CARD_DEFS, type useGameStore } from '../../stores/gameStore'
 import type { GameContext } from '../context'
 import type { Enemy } from '../types'
 import { redrawHpBar } from '../utils'
 import { spawnExplosion, spawnAlphaEvolutionEffect } from './effects'
+import { calculateCombatPower, getShipPowerFactor } from './combatPower'
 
 type GameStore = ReturnType<typeof useGameStore>
+
+const CARD_TYPE_BY_ID = new Map(ALL_CARD_DEFS.map((card) => [card.id, card.type] as const))
 
 export interface ThreatProfile {
   combatPower: number
@@ -132,13 +135,6 @@ let lastEvolutionFlashAt = 0
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
-}
-
-function getShipPowerFactor(shipId: string): number {
-  if (shipId === 'star_shooter') return 1.26
-  if (shipId === 'star_holder') return 1.18
-  if (shipId === 'star_faster') return 1.16
-  return 1.0
 }
 
 function getEnemyBaseRadius(enemy: Enemy): number {
@@ -575,37 +571,73 @@ export function estimatePlayerCombatPower(game: GameStore): number {
   const cs = game.cardStats
   const artifacts = game.artifactStats
 
-  const damageCore = game.upgrades.damage
-  const spreadBonus = 1 + Math.max(0, game.upgrades.bulletCount - 1) * 0.36
-  const fireRateBonus = 1 + cs.turboFireRatePct / 100 + cs.arsenalFireRatePct / 100
-  const cardDamageBonus = 1 + cs.damageBonusPct / 100 + cs.arsenalDamagePct / 100
-  const missileBonus = 1 + cs.missileLaunchers * 0.18 + (cs.interstellarMissile ? 0.35 : 0)
-  const offensivePower = damageCore * spreadBonus * fireRateBonus * cardDamageBonus * missileBonus
-
-  const sustainCore = game.playerMaxHp * (1 + cs.armorPlatingHpPct / 100)
-  const regenFactor = 1 + cs.regenPctPerSec * 0.11
-  const mitigationFactor = 1 + artifacts.damageTakenReduction * 1.9
-  const sustainPower = sustainCore * regenFactor * mitigationFactor
-
-  const utilityPower =
-    (cs.staticField ? 190 : 0)
-    + (cs.plasmaClearsBullets ? 120 : 0)
-    + (cs.clusterBomb ? 80 : 0)
-    + cs.allyDroneCount * 55
-    + (artifacts.neutronVacuumActive ? 70 : 0)
-    + (artifacts.manaCoreActive ? 90 : 0)
-
   const cardLevelSum = Object.values(game.activeCards).reduce((sum, lv) => sum + (typeof lv === 'number' ? lv : 0), 0)
   const equippedArtifactCount = (game.equippedArtifacts[game.selectedShip] ?? []).length
   const shipUpgrades = game.shipUpgrades[game.selectedShip as keyof typeof game.shipUpgrades] ?? { hp: 0, fireRate: 0, damage: 0 }
-  const progressionPower = game.playerLevel * 26
-    + cardLevelSum * 48
-    + equippedArtifactCount * 70
-    + (shipUpgrades.hp + shipUpgrades.fireRate + shipUpgrades.damage) * 36
-  const shipPower = getShipPowerFactor(game.selectedShip)
+  const corePowerBonus = estimateCoreUpgradePower(game)
 
-  const total = (offensivePower * 2.15 + sustainPower * 1.2 + utilityPower + progressionPower) * shipPower
-  return Math.max(320, Math.round(total))
+  return calculateCombatPower({
+    damageCore: game.upgrades.damage,
+    bulletCount: game.upgrades.bulletCount,
+    turboFireRatePct: cs.turboFireRatePct,
+    arsenalFireRatePct: cs.arsenalFireRatePct,
+    damageBonusPct: cs.damageBonusPct,
+    arsenalDamagePct: cs.arsenalDamagePct,
+    missileLaunchers: cs.missileLaunchers,
+    interstellarMissile: cs.interstellarMissile,
+    playerMaxHp: game.playerMaxHp,
+    armorPlatingHpPct: cs.armorPlatingHpPct,
+    regenPctPerSec: cs.regenPctPerSec,
+    damageTakenReduction: artifacts.damageTakenReduction,
+    staticField: cs.staticField,
+    plasmaClearsBullets: cs.plasmaClearsBullets,
+    clusterBomb: cs.clusterBomb,
+    allyDroneCount: cs.allyDroneCount,
+    neutronVacuumActive: artifacts.neutronVacuumActive,
+    manaCoreActive: artifacts.manaCoreActive,
+    playerLevel: game.playerLevel,
+    cardLevelSum,
+    equippedArtifactCount,
+    shipUpgradePointSum: shipUpgrades.hp + shipUpgrades.fireRate + shipUpgrades.damage,
+    shipPowerFactor: getShipPowerFactor(game.selectedShip),
+    corePowerBonus,
+  })
+}
+
+function estimateCoreUpgradePower(game: GameStore): number {
+  const cs = game.cardStats
+  let bonus = 0
+
+  for (const [cardId, levelRaw] of Object.entries(game.activeCards)) {
+    if (typeof levelRaw !== 'number' || levelRaw <= 0) continue
+    const level = Math.max(1, Math.min(5, Math.round(levelRaw)))
+    const type = CARD_TYPE_BY_ID.get(cardId)
+
+    let perLevel = 50
+    if (type === 'attack') perLevel = 72
+    else if (type === 'support') perLevel = 58
+    else if (type === 'ultimate') perLevel = 160
+
+    if (cardId.startsWith('weapon_cache_')) perLevel += 22
+
+    bonus += level * perLevel
+    if (type === 'ultimate') bonus += 120
+  }
+
+  bonus += Math.round((cs.arsenalDamagePct + cs.damageBonusPct) * 3.2)
+  bonus += Math.round((cs.arsenalFireRatePct + cs.turboFireRatePct) * 2.6)
+  bonus += cs.arsenalBulletBonus * 105
+  bonus += cs.missileLaunchers * 90
+
+  if (cs.interstellarMissile) bonus += 180
+  if (cs.plasmaBolt) bonus += 95 + (cs.plasmaBoltCount - 1) * 80
+  if (cs.clusterBomb) bonus += 110 + (cs.clusterBombDouble ? 95 : 0)
+  if (cs.laserSweep) bonus += 105 + (cs.laserSweepDouble ? 85 : 0)
+  if (cs.staticField) bonus += 220
+
+  bonus += Math.round(cs.allyDroneCount * 75 * cs.allyDroneFireRateMult)
+
+  return Math.max(0, Math.min(5200, Math.round(bonus)))
 }
 
 export function getThreatProfile(game: GameStore): ThreatProfile {

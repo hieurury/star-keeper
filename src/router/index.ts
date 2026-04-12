@@ -4,6 +4,8 @@ import InfiniteGameView from '../views/InfiniteGameView.vue'
 import TestGameView from '../views/TestGameView.vue'
 import EnemyCodexView from '../views/EnemyCodexView.vue'
 import AuthView from '../views/AuthView.vue'
+import TechnologyView from '../views/TechnologyView.vue'
+import SettingsView from '../views/SettingsView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -19,6 +21,11 @@ const router = createRouter({
       component: InfiniteGameView,
     },
     {
+      path: '/technology',
+      name: 'technology',
+      component: TechnologyView,
+    },
+    {
       path: '/test',
       name: 'test',
       component: TestGameView,
@@ -32,6 +39,11 @@ const router = createRouter({
       path: '/auth',
       name: 'auth',
       component: AuthView,
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: SettingsView,
     },
   ],
 })

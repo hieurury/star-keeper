@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { UPDATE_NOTICES } from '../content/updateNotices'
 import type { EnemyKind } from '../game/types'
 import { audioManager, DEFAULT_AUDIO_SETTINGS, type AudioSettings } from '../game/systems/audio'
+import { calculateCombatPower, getShipPowerFactor } from '../game/systems/combatPower'
 import { queueMirrorSave, readMirrorSave } from '../game/systems/saveFileMirror'
 import { pushSave, pullSave, resolveConflict, ensureProfile } from '../lib/syncService'
 import { isOnline, onReconnect } from '../lib/networkStatus'
@@ -274,7 +275,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'armor_plating', name: 'Bọc Thép', type: 'support', icon: 'PhShieldPlus', maxLevel: 5,
+    id: 'armor_plating', name: 'Bọc Thép', type: 'support', icon: 'PhCrown', maxLevel: 5,
     levels: [
       { desc: 'Tăng 15% HP tối đa.' },
       { desc: 'Tăng thêm 15% HP tối đa (tổng +30%).' },
@@ -323,7 +324,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'weapon_cache_truy_tu_kiem', name: 'Tứ Kiếm Trận', type: 'ultimate', icon: 'PhDiamondsFour', maxLevel: 1, shipId: 'thien_ha_truy',
+    id: 'weapon_cache_truy_tu_kiem', name: 'Tứ Kiếm Trận', type: 'ultimate', icon: 'PhSnowflake', maxLevel: 1, shipId: 'thien_ha_truy',
     requiresAttackId: 'weapon_cache_truy',
     levels: [
       { desc: 'Số kiếm hồn cố định thành 4. Tốc độ và sát thương +30%. Mục tiêu dưới 10% HP sẽ bị xử trảm ngay.' },
@@ -384,7 +385,7 @@ export const ALL_CARD_DEFS: CardDef[] = [
     ],
   },
   {
-    id: 'turbo_fire_card', name: 'Xạ Thủ Nhanh', type: 'support', icon: 'PhLightning', maxLevel: 5,
+    id: 'turbo_fire_card', name: 'Xạ Thủ Nhanh', type: 'support', icon: 'PhMagicWand', maxLevel: 5,
     levels: [
       { desc: '+10% tốc độ bắn.' },
       { desc: '+10% tốc độ bắn (tổng +20%).' },
@@ -1216,6 +1217,60 @@ export const useGameStore = defineStore('game', () => {
       manaCoreActive:        equipped.includes('mana_core'),
     }
   })
+
+  function getArtifactPreviewStats(shipId: ShipId) {
+    const equipped = equippedArtifacts.value[shipId] ?? []
+    return {
+      damageTakenReduction: equipped.includes('carbon_core') ? 0.1 : 0,
+      damageBonus: equipped.includes('stardust') ? 0.1 : 0,
+      extraBullet: equipped.includes('mana_core') ? 1 : 0,
+      neutronVacuumActive: equipped.includes('neutron_star'),
+      manaCoreActive: equipped.includes('mana_core'),
+    }
+  }
+
+  function getPreBattleCombatPower(shipId: ShipId = selectedShip.value as ShipId): number {
+    const effectiveShipStats = getShipEffectiveStats(shipId)
+    const maxShipStats = getShipMaxStats(shipId)
+    const artifactPreview = getArtifactPreviewStats(shipId)
+    const bulletDef = SHIP_BULLET_COUNT[shipId] ?? { base: 1, max: 3 }
+    const shipUpgradeLevels = shipUpgrades.value[shipId] ?? { hp: 0, fireRate: 0, damage: 0 }
+
+    // Session always starts from level 1 and no picked cards.
+    const playerLevelAtStart = 1
+    const cardLevelSumAtStart = 0
+    const playerMaxHpAtStart = Math.min(maxShipStats.hp, effectiveShipStats.hp + permUpgrades.value.baseHp * 25)
+    const damageAtStart = Math.min(maxShipStats.damage, (effectiveShipStats.damage + permUpgrades.value.baseDamage * 5) * (1 + artifactPreview.damageBonus))
+    const bulletCountAtStart = Math.min(bulletDef.max, bulletDef.base + permUpgrades.value.bulletCount + artifactPreview.extraBullet)
+
+    return calculateCombatPower({
+      damageCore: damageAtStart,
+      bulletCount: bulletCountAtStart,
+      turboFireRatePct: 0,
+      arsenalFireRatePct: 0,
+      damageBonusPct: 0,
+      arsenalDamagePct: 0,
+      missileLaunchers: 0,
+      interstellarMissile: false,
+      playerMaxHp: playerMaxHpAtStart,
+      armorPlatingHpPct: 0,
+      regenPctPerSec: 0,
+      damageTakenReduction: artifactPreview.damageTakenReduction,
+      staticField: false,
+      plasmaClearsBullets: false,
+      clusterBomb: false,
+      allyDroneCount: 0,
+      neutronVacuumActive: artifactPreview.neutronVacuumActive,
+      manaCoreActive: artifactPreview.manaCoreActive,
+      playerLevel: playerLevelAtStart,
+      cardLevelSum: cardLevelSumAtStart,
+      equippedArtifactCount: (equippedArtifacts.value[shipId] ?? []).length,
+      shipUpgradePointSum: shipUpgradeLevels.hp + shipUpgradeLevels.fireRate + shipUpgradeLevels.damage,
+      shipPowerFactor: getShipPowerFactor(shipId),
+    })
+  }
+
+  const preBattleCombatPower = computed(() => getPreBattleCombatPower(selectedShip.value as ShipId))
 
   // Computed
   const expToNextLevel = computed(() => playerLevel.value * 100)
@@ -2631,6 +2686,8 @@ export const useGameStore = defineStore('game', () => {
     getShipBaseStats,
     getShipMaxStats,
     getShipEffectiveStats,
+    getPreBattleCombatPower,
+    preBattleCombatPower,
     getShipUpgradeLevel,
     getShipUpgradeCost,
     buyShipUpgrade,

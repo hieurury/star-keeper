@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/gameStore'
 import { ENEMY_CODEX, type EnemyCodexEntry } from '../content/enemyCodex'
 import type { EnemyKind } from '../game/types'
 import EnemyCodexArt from '../components/ui/EnemyCodexArt.vue'
-import { PhArrowLeft } from '@phosphor-icons/vue'
+import LobbyBottomNav from '../components/ui/LobbyBottomNav.vue'
 
-const router = useRouter()
 const game = useGameStore()
 
 const activeTab = ref<'minion' | 'boss'>('minion')
@@ -135,18 +133,11 @@ function getBarWidth(stat: keyof EnemyCodexEntry['stats'], value: number): numbe
   return width
 }
 
-function goHome() {
-  router.push('/')
-}
 </script>
 
 <template>
   <div class="codex">
     <div class="codex__header">
-      <button class="codex__back" @click="goHome">
-        <PhArrowLeft :size="16" />
-        <span>Trang Chủ</span>
-      </button>
       <div class="codex__title-wrap">
         <h1 class="codex__title">BÁCH KHOA QUÁI</h1>
         <div class="codex__subtitle">Danh sách ảnh quái. Chạm vào ảnh để mở hồ sơ chi tiết.</div>
@@ -231,6 +222,8 @@ function goHome() {
         </template>
       </article>
     </div>
+
+    <LobbyBottomNav />
   </div>
 </template>
 
@@ -240,7 +233,7 @@ function goHome() {
   width: 100%;
   max-width: 960px;
   margin: 0 auto;
-  padding: 14px 14px 24px;
+  padding: 14px 14px 92px;
   color: var(--color-text);
 }
 
@@ -249,20 +242,6 @@ function goHome() {
   flex-direction: column;
   gap: 10px;
   margin-bottom: 12px;
-}
-
-.codex__back {
-  width: fit-content;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 2px solid var(--color-border-dark);
-  background: var(--color-panel-dark);
-  color: var(--color-text);
-  padding: 6px 10px;
-  font-family: var(--font-pixel);
-  font-size: 10px;
-  cursor: pointer;
 }
 
 .codex__title {

@@ -21,7 +21,7 @@ router.beforeEach((to, _from, next) => {
 	const backToMenu = _from.path === '/game' && to.path === '/'
 	if (enteringGame || backToMenu) {
 		ui.showLoading({
-			title: 'Star Keeper',
+			title: 'STAR KEEPER',
 			subtitle: enteringGame ? 'Đang nạp chiến trường...' : 'Đang trở về trạm chỉ huy...',
 		})
 	}

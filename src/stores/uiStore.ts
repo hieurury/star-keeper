@@ -25,7 +25,7 @@ const DEFAULT_TIPS = [
 
 export const useUiStore = defineStore('ui', () => {
   const loadingVisible = ref(true)
-  const loadingTitle = ref('Star Keeper')
+  const loadingTitle = ref('STAR KEEPER')
   const loadingSubtitle = ref('Khởi động hệ thống phi hành...')
   const loadingTip = ref(DEFAULT_TIPS[0]!)
   const loadingTips = ref<string[]>([...DEFAULT_TIPS])

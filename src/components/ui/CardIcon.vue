@@ -6,6 +6,7 @@ import {
   PhDiamondsFour, PhGhost, PhShootingStar, PhTrendUp,
   PhAtom, PhSpiral, PhWind, PhTarget, PhSparkle,
   PhAirplaneTilt, PhPlanet, PhStar, PhCrosshair,
+  PhMagicWand, PhCrown, PhSnowflake, PhPlant, PhQuestion,
 } from '@phosphor-icons/vue'
 
 const ICON_MAP: Record<string, Component> = {
@@ -14,6 +15,7 @@ const ICON_MAP: Record<string, Component> = {
   PhDiamondsFour, PhGhost, PhShootingStar, PhTrendUp,
   PhAtom, PhSpiral, PhWind, PhTarget, PhSparkle,
   PhAirplaneTilt, PhPlanet, PhStar, PhCrosshair,
+  PhMagicWand, PhCrown, PhSnowflake, PhPlant,
 }
 
 const COLOR_MAP: Record<string, string> = {
@@ -45,12 +47,17 @@ const COLOR_MAP: Record<string, string> = {
   PhAirplaneTilt:   '#74b9ff',
   PhPlanet:         '#a29bfe',
   PhStar:           '#ffd700',
+  // Extended set
+  PhMagicWand:      '#8dc6ff',
+  PhCrown:          '#f6cf67',
+  PhSnowflake:      '#8fe6ff',
+  PhPlant:          '#87d7a3',
 }
 
 const props = defineProps<{
   name: string
   size?: number
-  weight?: string
+  weight?: 'thin' | 'light' | 'regular' | 'bold' | 'fill' | 'duotone'
   color?: string
 }>()
 </script>
@@ -62,5 +69,11 @@ const props = defineProps<{
     :size="props.size ?? 28"
     :weight="props.weight ?? 'fill'"
     :color="props.color ?? COLOR_MAP[name] ?? 'currentColor'"
+  />
+  <PhQuestion
+    v-else
+    :size="props.size ?? 28"
+    :weight="props.weight ?? 'fill'"
+    :color="props.color ?? '#9fb4d1'"
   />
 </template>
