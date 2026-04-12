@@ -67,10 +67,27 @@ jobs:
       - name: Verify keystore and alias
         shell: bash
         run: |
+          set +e
           keytool -list \
             -keystore android/app/release-keystore.jks \
             -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
-            -alias "${{ secrets.ANDROID_KEY_ALIAS }}" > /tmp/keystore-check.txt
+            > /tmp/keystore-list.txt 2>&1
+          status=$?
+          set -e
+
+          if [ "$status" -ne 0 ]; then
+            echo "Failed to open keystore. ANDROID_KEYSTORE_PASSWORD or ANDROID_KEYSTORE_BASE64 is likely incorrect."
+            cat /tmp/keystore-list.txt
+            exit 1
+          fi
+
+          if ! grep -qi "${{ secrets.ANDROID_KEY_ALIAS }}" /tmp/keystore-list.txt; then
+            echo "Alias not found in keystore. Please check ANDROID_KEY_ALIAS secret."
+            echo "Detected aliases from keystore:"
+            awk -F, 'NR>1 && $0 ~ /,/{gsub(/^ +| +$/, "", $1); print "- " $1}' /tmp/keystore-list.txt || true
+            exit 1
+          fi
+
           echo "Keystore + alias validated successfully"
 
       - name: Prepare gradlew on Linux runner
