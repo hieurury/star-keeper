@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-release-apk:
     runs-on: ubuntu-latest
@@ -19,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Setup Java
@@ -39,6 +42,12 @@ jobs:
             exit 1
           fi
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/release-keystore.jks
+
+      - name: Prepare gradlew on Linux runner
+        shell: bash
+        run: |
+          sed -i 's/\r$//' android/gradlew
+          chmod +x android/gradlew
 
       - name: Build signed release APK
         shell: bash
