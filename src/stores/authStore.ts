@@ -2,6 +2,13 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
+import { App as CapacitorApp } from '@capacitor/app'
+import { Browser } from '@capacitor/browser'
+
+const NATIVE_OAUTH_SCHEME = (import.meta.env.VITE_NATIVE_OAUTH_SCHEME as string | undefined)?.trim() || 'com.vibe.banmaybay'
+const NATIVE_OAUTH_HOST = 'auth'
+const NATIVE_OAUTH_PATH = '/callback'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
@@ -9,6 +16,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoading = ref(false)
   const authError = ref<string | null>(null)
   let authStateSubscription: { unsubscribe: () => void } | null = null
+  let nativeAppUrlOpenSubscription: PluginListenerHandle | null = null
   let cloudSyncInFlight: Promise<void> | null = null
 
   // System states for guest mode
@@ -79,6 +87,67 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function getNativeRedirectUrl(): string {
+    return `${NATIVE_OAUTH_SCHEME}://${NATIVE_OAUTH_HOST}${NATIVE_OAUTH_PATH}`
+  }
+
+  function isNativeOAuthCallback(url: string): boolean {
+    try {
+      const parsed = new URL(url)
+      const scheme = parsed.protocol.replace(':', '')
+      return scheme === NATIVE_OAUTH_SCHEME
+        && parsed.host === NATIVE_OAUTH_HOST
+        && parsed.pathname === NATIVE_OAUTH_PATH
+    } catch {
+      return false
+    }
+  }
+
+  async function handleNativeOAuthCallback(url: string): Promise<void> {
+    if (!ensureConfigured('OAuth callback')) return
+
+    try {
+      const parsed = new URL(url)
+      const code = parsed.searchParams.get('code')
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code)
+        if (error) {
+          authError.value = error.message
+        }
+        return
+      }
+
+      const hash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash
+      const hashParams = new URLSearchParams(hash)
+      const accessToken = hashParams.get('access_token')
+      const refreshToken = hashParams.get('refresh_token')
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+        if (error) {
+          authError.value = error.message
+        }
+      }
+    } catch (error) {
+      console.warn('[Auth] Xu ly callback native that bai:', error)
+      authError.value = 'Khong the xu ly callback dang nhap. Vui long thu lai.'
+    }
+  }
+
+  async function ensureNativeOAuthListener(): Promise<void> {
+    if (!Capacitor.isNativePlatform()) return
+    if (nativeAppUrlOpenSubscription) return
+
+    nativeAppUrlOpenSubscription = await CapacitorApp.addListener('appUrlOpen', async ({ url }) => {
+      if (!url || !isNativeOAuthCallback(url)) return
+
+      await Browser.close().catch(() => undefined)
+      await handleNativeOAuthCallback(url)
+    })
+  }
+
   async function runCloudSync(preferMerge: boolean): Promise<void> {
     if (cloudSyncInFlight) {
       await cloudSyncInFlight
@@ -112,6 +181,7 @@ export const useAuthStore = defineStore('auth', () => {
   // ─── Khôi phục phiên đăng nhập ────────────────────────────────────────────
   async function restoreSession(): Promise<void> {
     if (!isSupabaseConfigured()) return
+    await ensureNativeOAuthListener()
     let wasGuestFromRestore = false
     try {
       const { data } = await supabase.auth.getSession()
@@ -178,6 +248,32 @@ export const useAuthStore = defineStore('auth', () => {
     isLoading.value = true
     authError.value = null
     try {
+      if (Capacitor.isNativePlatform()) {
+        await ensureNativeOAuthListener()
+
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: getNativeRedirectUrl(),
+            skipBrowserRedirect: true,
+          },
+        })
+
+        if (error) {
+          authError.value = error.message
+          return
+        }
+
+        const authUrl = data?.url
+        if (!authUrl) {
+          authError.value = 'Khong tao duoc URL dang nhap Google.'
+          return
+        }
+
+        await Browser.open({ url: authUrl })
+        return
+      }
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
