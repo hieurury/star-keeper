@@ -7,7 +7,7 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
   version?: string
 }
 
-const appVersion = pkg.version ?? '0.0.0'
+const appVersion = process.env.APP_BUILD_VERSION?.trim() || pkg.version || '0.0.0'
 
 // https://vite.dev/config/
 export default defineConfig({

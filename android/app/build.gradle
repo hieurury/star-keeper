@@ -1,13 +1,19 @@
 apply plugin: 'com.android.application'
 
 def packageJsonFile = rootProject.file('../package.json')
-def packageVersion = '1.0.0'
+def packageJsonVersion = '1.0.0'
 
 if (packageJsonFile.exists()) {
     def matcher = (packageJsonFile.text =~ /"version"\s*:\s*"([^"]+)"/)
     if (matcher.find()) {
-        packageVersion = matcher.group(1)
+        packageJsonVersion = matcher.group(1)
     }
+}
+
+def buildVersionOverride = project.findProperty('APP_BUILD_VERSION') ?: System.getenv('APP_BUILD_VERSION')
+def packageVersion = (buildVersionOverride ?: packageJsonVersion).toString()
+if (packageVersion.startsWith('v')) {
+    packageVersion = packageVersion.substring(1)
 }
 
 def versionCore = packageVersion.tokenize('-')[0]

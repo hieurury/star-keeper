@@ -54,10 +54,10 @@ Luu y:
 ## Cai de phien ban moi (khong can xoa game cu)
 
 - Android se cai de duoc neu giu cung `applicationId` va ky cung keystore.
-- Du an da tu dong map version tu `package.json` vao `android/app/build.gradle`:
-	- `versionName` = `package.json.version`
+- Du an da tu dong map version vao `android/app/build.gradle`:
+	- `versionName` = `APP_BUILD_VERSION` (neu co), neu khong thi fallback `package.json.version`
 	- `versionCode` = `major * 10000 + minor * 100 + patch`
-- Vi vay, moi lan tang version trong `package.json`, APK moi co the update len ban cu ma khong can go cai dat.
+- Vi vay, APK moi co the update len ban cu ma khong can go cai dat.
 
 ## Tu thong bao update dua tren ma nguon
 
@@ -97,10 +97,10 @@ Neu can check update tu server rieng (dac biet cho ban native), dat bien moi tru
 VITE_UPDATE_MANIFEST_URL=https://your-domain.com/version.json
 ```
 
-Khi release, cap nhat 2 thu:
+Khi release, cap nhat `public/version.json` (version + downloadUrl).
 
-1. Tang `package.json.version`
-2. Cap nhat `public/version.json` (version + downloadUrl)
+Neu ban release bang GitHub tag `vX.Y.Z`, workflow se tu dong set `APP_BUILD_VERSION=X.Y.Z`.
+Luc do version hien trong game va version APK se theo tag release.
 
 ## Tu dong build APK len GitHub Releases
 
@@ -113,6 +113,8 @@ Workflow nay se chay khi ban push tag `v*` (vi du: `v2.1.0`):
 1. Build web + sync Capacitor Android
 2. Build APK release da ky
 3. Upload len GitHub Release voi ten file co dinh `star-keeper.apk`
+
+Them nua: workflow tu dong parse tag va set `APP_BUILD_VERSION` (vd `v2.0.4` -> `2.0.4`) de game version + APK versionName/versionCode dong bo theo release.
 
 ### A) Chuan bi keystore (1 lan)
 
